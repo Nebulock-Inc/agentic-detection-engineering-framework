@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-detection-engineering-framework"
+version = "0.1.0"
+description = "Agentic Detection Engineering Framework — FORGE lifecycle, journal memory, and agent orchestration for detection engineers."
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Sydney Marrone", email = "adef@nebulock.io"}
+]
+keywords = [
+    "detection-engineering",
+    "security",
+    "cybersecurity",
+    "mitre-attack",
+    "blue-team",
+    "agentic-ai",
+    "forge",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Topic :: Security",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+dependencies = [
+    "click>=8.0.0",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "jinja2>=3.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+mcp = [
+    "mcp[cli]>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework"
+Documentation = "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/tree/main/docs"
+Repository = "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework"
+Issues = "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/issues"
+
+[project.scripts]
+adef = "adef.cli:main"
+adef-mcp = "adef.mcp.server:cli"
+
+# Built-in commands register against our own entry-point group so plugin_system
+# can discover them with the same code path it uses for third-party plugins.
+[project.entry-points."adef.commands"]
+detection = "adef.commands.detection:detection"
+init = "adef.commands.init:init"
+hunt-promote = "adef.commands.hunt_promote:hunt_promote"
+backfill = "adef.commands.backfill:backfill"
+
+[project.entry-points."adef.mcp_tools"]
+adef-builtin = "adef.mcp.register:register_mcp_tools"
+
+[tool.setuptools]
+packages = [
+    "adef",
+    "adef.agents",
+    "adef.agents.wrappers",
+    "adef.commands",
+    "adef.core",
+    "adef.data",
+    "adef.mcp",
+    "adef.mcp.tools",
+    "adef.orchestration",
+]
+
+[tool.setuptools.package-data]
+"adef.data" = [
+    "templates/*.md",
+    "prompts/*.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (slower, requires installed siblings)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
