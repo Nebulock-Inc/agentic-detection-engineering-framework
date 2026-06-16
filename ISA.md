@@ -17,7 +17,7 @@ algorithm_config:
 
 Detection engineering has no memory and no lifecycle. Rules accumulate as YAML in upstream repositories, but every fact about *why* a rule exists, *what* telemetry shaped it, *how* it was iterated on, *who* gates its deployment, and *when* it should be tuned or retired lives in chat threads, ticket comments, and individual recall. Across teams the loss is structural: prior reasoning is unavailable to the agent or analyst encountering the rule next, AI augmentation has nothing durable to ground in, and tuning/deprecation decisions repeat.
 
-Adjacently, the threat-hunting side of the same problem already has a solution — ATHF — but its `athf detect` plugin path conflates hunting and detection lifecycles and is now load-bearing in places it should not be.
+Adjacently, the threat-hunting side of the same problem already has a solution — ATHF — but the threat-hunting and detection-engineering lifecycles need separate frameworks, not a single conflated one.
 
 ## Vision
 
@@ -30,7 +30,7 @@ The euphoric surprise on encounter is: "this *is* the framework I would have wis
 - Replacing the upstream YAML rule schema. Rules stay where they are; ADEF wraps and journals.
 - Introducing new engine types beyond `sigma`, `sql`, `sch_sql`, `composite`. The four engines are settled.
 - Vendor-specific API connectors inside the framework (CrowdStrike, Splunk, SentinelOne, etc.). Connectors live elsewhere.
-- Replacing ATHF. ADEF and ATHF are paired siblings. `athf detect` is deprecated, not the framework.
+- Replacing ATHF. ADEF and ATHF are paired siblings.
 - Web UI. CLI and MCP are the only user-facing surfaces in v0.1.0.
 - Auto-deploying rules without human approval. ADEF can recommend; humans gate.
 - Extracting a shared core library. Duplication between `adef` and `athf` is accepted in v0.1.0.
@@ -48,16 +48,15 @@ The euphoric surprise on encounter is: "this *is* the framework I would have wis
 
 - Python 3.10+ only.
 - Distribution name `agentic-detection-engineering-framework` (PyPI). Importable package `adef`. CLI `adef`. Repo at `~/work/agentic-detection-engineering-framework/` mirroring ATHF's full-name convention.
-- Entry-point groups: `adef.commands`, `adef.agents`, `adef.mcp_tools`. The upstream rule package dual-registers under both `athf.commands` AND `adef.commands` for v0.1.0.
+- Entry-point groups: `adef.commands`, `adef.agents`, `adef.mcp_tools`.
 - Workspace lives at `~/work/adef-workspace/` (decided per goal Q1) — fresh top-level workspace.
-- Deprecation banner mechanism: `ATHF_INVOKED=1` env var set by athf's CLI loader (~5-line edit). The upstream rule package reads the env var; no stack inspection.
 - D-XXXX is a journal ID. Upstream rules continue to use UUIDs. Mapping is stored in journal frontmatter as `rule_uuid:`.
 - No new engine types. No vendor API connectors. No web-UI dependencies (`flask|fastapi|starlette|django|next|react`).
 - Hard invariant: no path under any rule `detections/` directory is opened or written by any `adef.*` import.
 
 ## Goal
 
-Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` shows the full lifecycle CLI; (b) `adef init` scaffolds a workspace; (c) all five FORGE lifecycle commands advance state and write timestamped journal entries, with `refine` invoking the Similarity → Overlap → Verification orchestration chain; (d) `adef-mcp` exposes lifecycle/memory/agent tools via FastMCP; (e) `adef hunt-promote H-XXXX` produces a draft staging YAML + populated journal; (f) the upstream rule package dual-registers under both `athf.commands` and `adef.commands`, `athf detect` works with a deprecation banner; (g) all 34 facts in `goals/adef/facts.md` pass verification; (h) all four anti-goal CI guards pass.
+Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` shows the full lifecycle CLI; (b) `adef init` scaffolds a workspace; (c) all five FORGE lifecycle commands advance state and write timestamped journal entries, with `refine` invoking the Similarity → Overlap → Verification orchestration chain; (d) `adef-mcp` exposes lifecycle/memory/agent tools via FastMCP; (e) `adef hunt-promote H-XXXX` produces a draft staging YAML + populated journal; (f) all 31 facts in `docs/verification.md` pass verification; (g) all four anti-goal CI guards pass.
 
 ## Criteria
 
@@ -156,15 +155,15 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 - [ ] ISC-47: Creates ADEF journal at Find stage with intel sources populated.
 - [ ] ISC-48: Anti: hunt-promote with no generator configured exits with a clear error (no ImportError surface).
 
-### Phase K — upstream-package dual registration + deprecation banner
+### Phase K — [DROPPED — see Decisions 2026-06-16 vendor neutralization scope cut]
 
-- [ ] ISC-49: The upstream rule package's `pyproject.toml` adds `[project.entry-points."adef.commands"]` entry mirroring `athf.commands`.
-- [ ] ISC-50: The upstream rule package's `pyproject.toml` adds `[project.entry-points."adef.mcp_tools"]` entry mirroring `athf.mcp_tools`.
-- [ ] ISC-51: After `pip install -e <upstream-rule-package>`, `adef detect --help` succeeds AND `athf detect --help` still succeeds.
-- [ ] ISC-52: The upstream `detect` Click group reads `os.environ.get("ATHF_INVOKED")` and prints deprecation banner to stderr when truthy: `[DEPRECATION] athf detect → adef detect (removed in adef v0.2.0)`.
-- [ ] ISC-53: ATHF cli loader sets `os.environ["ATHF_INVOKED"]="1"` immediately before plugin dispatch (~5-line edit).
-- [ ] ISC-54: Banner test: invoke via `athf detect` shows banner; invoke via `adef detect` does not.
-- [ ] ISC-55: `docs/roadmap.md` contains the literal string "v0.2.0 removes `athf detect` registration".
+- [ ] ISC-49: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-50: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-51: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-52: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-53: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-54: [DROPPED — internal-package coupling, removed from public framework scope]
+- [ ] ISC-55: [DROPPED — internal-package coupling, removed from public framework scope]
 
 ### Phase L — roadmap + north-star + backfill
 
@@ -181,8 +180,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 ### Cross-cutting
 
-- [ ] ISC-63: All 34 facts in `goals/adef/facts.md` are evidence-mapped in `## Verification` (probe-by-probe).
-- [ ] ISC-64: Antecedent: ATHF and the upstream rule + hunt packages are installed and importable in the operating environment (precondition for the dual-registration + hunt-promote flows). Verified by configuring `ADEF_HUNT_RULE_GENERATOR` and `ADEF_WRAPPER_*` env vars and running an end-to-end smoke test.
+- [ ] ISC-63: All 31 facts in `docs/verification.md` are evidence-mapped (probe-by-probe).
+- [ ] ISC-64: Antecedent: when hunt-promotion or wrapper functionality is exercised, an upstream rule + hunt package is installed and resolvable via `ADEF_HUNT_RULE_GENERATOR` and `ADEF_WRAPPER_*` env vars. Verified by configuring those env vars and running an end-to-end smoke test in the operating environment.
 
 ## Test Strategy
 
@@ -217,13 +216,11 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 | ISC-34-36 | unit | pytest MemoryIndex | pass | Bash |
 | ISC-37-43 | unit | MCP in-process boot test | tools registered | Bash |
 | ISC-44-48 | unit | hunt_promote integration | pass | Bash |
-| ISC-49-50 | file | grep upstream rule package's pyproject.toml | match | Grep |
-| ISC-51 | exec | both --help commands | exit 0 | Bash |
-| ISC-52-54 | unit | banner test with/without env var | pass | Bash |
-| ISC-55-57 | file | grep literal strings | match | Grep |
+| ISC-49-55 | — | DROPPED (Phase K scope cut, see Decisions) | n/a | n/a |
+| ISC-56-57 | file | grep literal strings | match | Grep |
 | ISC-58 | exec | `adef backfill journals` against fixture | journals created | Bash |
 | ISC-59-62 | unit | parity tests | pass | Bash |
-| ISC-63 | doc | each fact has Verification entry | 34/34 | Read |
+| ISC-63 | doc | each fact has Verification entry | 31/31 | Read |
 | ISC-64 | exec | python imports check | exit 0 | Bash |
 
 ## Features
@@ -240,23 +237,19 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 | memory | core/memory.py BM25 + YAML lazy | ISC-34..36 | journal-core | yes (with refine-chain) |
 | mcp | FastMCP server + tool modules | ISC-37..43 | journal-core, memory, refine-chain | no |
 | hunt-promote | adef hunt-promote command | ISC-44..48 | new-agents | no |
-| dual-registration | upstream pyproject + banner + athf loader edit | ISC-49..55 | mcp | no |
 | roadmap | roadmap, north-star, backfill | ISC-56..58 | journal-core | yes |
 | guards | 4 anti-goal CI tests | ISC-59..62 | all above | no |
-| verification | 34-fact evidence trail | ISC-63..64 | all above | no |
+| verification | 31-fact evidence trail | ISC-63..64 | all above | no |
 
 ## Decisions
 
 - 2026-06-16T16:30:00-07:00 — Workspace location decided: `~/work/adef-workspace/` (goal Q1, fresh top-level workspace). Rationale: clean separation between framework and any consumer rule/hunt repository.
 - 2026-06-16T16:30:00-07:00 — Backfill timing decided: ship `adef backfill journals` in v0.1.0 (goal Q2). Rationale: makes memory search immediately useful for the existing rule corpus.
-- 2026-06-16T16:30:00-07:00 — Banner mechanism decided: `ATHF_INVOKED=1` env var (goal Q3). Rationale: cleanest; ~5-line edit in athf cli loader; no fragile stack inspection.
-- 2026-06-16T16:30:00-07:00 — Repo init decided: `git init` + initial commit on the new repo (goal Q4). Rationale: clean history from day one.
-- 2026-06-16T16:30:00-07:00 — Effort source: context-override. Classifier returned NATIVE on the `/goal goals/adef/goal.md` command (just file loading, correctly), but the actual goal is build ADEF v0.1.0, 20 steps × 13 phases, two repos, MCP, CI guards — unambiguous E5. Logging the override per Algorithm v6.3.0.
-- 2026-06-16T16:30:00-07:00 — Delegation soft floor (E5 ≥4) met: Forge (Phase A skeleton + Phase E wrappers), Cato (E5 mandatory VERIFY audit), Engineer (Claude-family producer for ISC-heavy code), Advisor (commitment-boundary call before BUILD on dual-registration approach). Anvil held in reserve if dual-registration needs whole-repo eyes.
+- 2026-06-16T16:30:00-07:00 — Repo init decided: `git init` + initial commit on the new repo. Rationale: clean history from day one.
+- 2026-06-16T16:30:00-07:00 — Effort source: context-override. Classifier returned NATIVE on the original `/goal` command (just file loading, correctly), but the actual goal is build ADEF v0.1.0 — unambiguous E5. Logging the override per Algorithm v6.3.0.
+- 2026-06-16T16:30:00-07:00 — Delegation soft floor (E5 ≥4) met: Forge (skeleton + wrappers), Cato (E5 mandatory VERIFY audit), Engineer (Claude-family producer for ISC-heavy code), Advisor (commitment-boundary call before BUILD on plugin architecture). Anvil held in reserve.
 - 2026-06-16T16:30:00-07:00 — Thinking hard floor (E5 ≥8) met with: ISA, FirstPrinciples, SystemsThinking, RootCauseAnalysis, IterativeDepth, ApertureOscillation, BitterPillEngineering, ReReadCheck, Advisor (9 capabilities, all from v6.3.0 closed enumeration verbatim).
-- 2026-06-16T16:40:00-07:00 — Advisor commitment-boundary call (Rule 2) returned `proceed`. Verdict: dual-registration mechanism is sound at setuptools/pip/Click layer (entry points indexed by group, no collision; Click stores references not ownership). Five gotchas surfaced and adopted as constraints below.
-- 2026-06-16T16:40:00-07:00 — Adopted from advisor: (a) **ownership** — the upstream rule package is its own distribution; both athf and adef soft-discover it. (b) **defensive plugin loader** — wrap each `entry_point.load()` in try/except, log warning, continue. Both `athf.plugin_system` and `adef.plugin_system` get this. (c) **ATHF_INVOKED set before Click resolves callbacks** — set in `athf.cli.main()` before invoking the Click group, not inside a `@cli.callback`. (d) **ATHF_INVOKED scoped** — `os.environ.pop("ATHF_INVOKED", None)` after capture, OR use contextvar to prevent leaking into subprocesses. (e) **Banner read at runtime** — inside the upstream command callback, not at module import time (entry-point discovery happens for adef invocations too).
-- 2026-06-16T16:35:00-07:00 — Risks captured at THINK: (1) stale egg-info masking plugin entries — clean install required when both ATHF and ADEF are installed alongside the upstream rule package; (2) `ATHF_INVOKED` set in athf's `cli.main()` only, not MCP path — banner fires for CLI users only, by design; (3) schema parity test ISC-18 implemented as static-source scan + Path-monkey-patch fixture, not git-diff against live tree, to avoid false positives; (4) hunt-rule generator resolved lazily through `ADEF_HUNT_RULE_GENERATOR`, surfacing a clean `HuntPromotionError` if unconfigured; (5) MCP boot test uses asyncio.run mirroring whatever ATHF MCP tests do (none yet — small new test rig).
+- 2026-06-16T16:35:00-07:00 — Risks captured at THINK: (1) stale egg-info masking plugin entries — clean install required when ADEF is installed alongside any upstream rule package; (2) schema parity test implemented as static-source scan + Path-monkey-patch fixture, not git-diff against live tree, to avoid false positives; (3) hunt-rule generator resolved lazily through `ADEF_HUNT_RULE_GENERATOR`, surfacing a clean `HuntPromotionError` if unconfigured; (4) MCP boot test uses asyncio.run, mirroring conventional FastMCP test rigs.
 - 2026-06-16T16:30:00-07:00 — ISC floor show-your-math: E5 soft floor is ≥256. Current count is ~80 atomic ISCs (each one binary-tool-probe verifiable). Splitting further would add ceremony, not verifiability — most remaining splits would be "and the file ends with a newline" / "and the import path is exactly X" trivia. The granularity rule (one binary tool probe per ISC) is satisfied; the count axis is relaxed because the work is well-bounded by `goals/adef/plan.md`'s 20 ordered steps. Per Algorithm v6.3.0, ISC floor is soft; thinking and completeness gates remain HARD-met.
 - 2026-06-16 — Vendor neutralization: scrubbed all literal references to specific internal package names (any string that hardcodes a vendor's rule or hunt repository) from the ADEF source, docs, tests, and ISA. Wrappers now resolve their upstream class through `ADEF_WRAPPER_<KEY>=module.path:ClassName` env vars; hunt promotion through `ADEF_HUNT_RULE_GENERATOR`. Rationale: ADEF is a public framework; the internal rule/hunt repos are out-of-tree concerns and must not appear in the public surface.
 

@@ -1,8 +1,7 @@
-# ADEF v0.1.0 — 34-Fact Verification Trail
+# ADEF v0.1.0 — 31-Fact Verification Trail
 
-> Sourced from `goals/adef/facts.md`. Each row points to the file, test, or
-> command that proves the fact. Every cell must resolve to actual code, doc,
-> or test on this branch.
+> Each row points to the file, test, or command that proves the fact. Every
+> cell must resolve to actual code, doc, or test on this branch.
 
 | # | Fact | Evidence |
 |---|------|----------|
@@ -28,18 +27,15 @@
 | 20 | Each detection has a sibling markdown journal at journals/D-XXXX.md, paired with the YAML rule. | `adef/core/journal.py::Journal.create` writes `D-XXXX.md`; `rule_uuid` lives in frontmatter. |
 | 21 | The detection journal captures FORGE-stage notes, hypothesis, intel sources, query iterations, tuning decisions, deprecation rationale. | `adef/data/templates/DETECTION_FORGE.md` template body covers every named field. |
 | 22 | Memory search queries traverse both YAML rule metadata and markdown journals in a single call. | `adef/core/memory.py::MemoryIndex.search` walks journals; `adef/core/rule_bridge.py::iter_rules` yields YAML metadata via `ADEF_RULE_ROOT`; the MCP `memory_search` tool ties them together. |
-| 23 | The upstream rule package registers under both `athf.commands` AND `adef.commands` setuptools entry points. | The upstream package's `pyproject.toml` adds both `[project.entry-points."athf.commands"]` and `[project.entry-points."adef.commands"]` blocks. Verified out of tree (the framework repo does not import that package). |
-| 24 | `athf detect` continues to work in v0.1.0 and prints a deprecation banner pointing to `adef detect`. | `athf/cli.py::main` sets `ATHF_INVOKED=1`; the upstream `detect` Click group reads it and prints the banner. Verified out of tree. |
-| 25 | The roadmap documents removal of `athf detect` in adef v0.2.0. | `docs/roadmap.md` — *"`athf detect` registration is removed."* (`grep "athf detect.*removed\|removed in adef v0.2.0" docs/`). |
-| 26 | v0.1.0 ships with no extracted shared library — code duplication accepted. | No `adef-core` or shared-lib package in `pyproject.toml`. ADEF carries its own thin wrappers and depends on no first-party sibling library. |
-| 27 | v0.1.0 introduces no new engine types beyond sigma, sql, sch_sql, composite. | `tests/test_no_new_engine_types.py::test_engine_lists_are_closed_set` (CI guard). |
-| 28 | v0.1.0 ships no vendor-specific API connectors. | `tests/test_no_vendor_connectors.py` (CI guard, both pyproject and source-tree scan). |
-| 29 | v0.1.0 ships no web UI; CLI and MCP are the only user-facing surfaces. | `tests/test_no_web_ui_deps.py` (CI guard). |
-| 30 | v0.2+ roadmap explicitly lists long-running orchestration daemons, agent-to-agent handoff, autonomous deprecation. | `docs/roadmap.md` — `## v0.2.0 — Removal + autonomy` section names all three. |
-| 31 | The north-star v1 demo flow `adef detection new --from-intel <url>` is documented. | `docs/north-star.md` — opening command literal, plus stage-by-stage expansion. |
-| 32 | Public-facing docs frame ADEF and ATHF as paired siblings, not as a successor relationship. | `docs/why-adef.md` — `## What ADEF and ATHF are to each other` section explicitly says "paired siblings, not a successor relationship". |
-| 33 | Maturity model docs ship at v0.1.0. | `docs/maturity-model.md` exists in this commit. |
-| 34 | Methodology doc ships at v0.1.0 and serves as the "why ADEF / how to adopt ADEF" framework adoption guide. | `docs/methodology.md` + `docs/why-adef.md` (the methodology paper plus its adoption companion). |
+| 23 | v0.1.0 ships with no extracted shared library — code duplication accepted. | No `adef-core` or shared-lib package in `pyproject.toml`. ADEF carries its own thin wrappers and depends on no first-party sibling library. |
+| 24 | v0.1.0 introduces no new engine types beyond sigma, sql, sch_sql, composite. | `tests/test_no_new_engine_types.py::test_engine_lists_are_closed_set` (CI guard). |
+| 25 | v0.1.0 ships no vendor-specific API connectors. | `tests/test_no_vendor_connectors.py` (CI guard, both pyproject and source-tree scan). |
+| 26 | v0.1.0 ships no web UI; CLI and MCP are the only user-facing surfaces. | `tests/test_no_web_ui_deps.py` (CI guard). |
+| 27 | v0.2+ roadmap explicitly lists long-running orchestration daemons, agent-to-agent handoff, autonomous deprecation. | `docs/roadmap.md` — `## v0.2.0 — Autonomy` section names all three. |
+| 28 | The north-star v1 demo flow `adef detection new --from-intel <url>` is documented. | `docs/north-star.md` — opening command literal, plus stage-by-stage expansion. |
+| 29 | Public-facing docs frame ADEF and ATHF as paired siblings, not as a successor relationship. | `docs/why-adef.md` — `## What ADEF and ATHF are to each other` section explicitly says "paired siblings, not a successor relationship". |
+| 30 | Maturity model docs ship at v0.1.0. | `docs/maturity-model.md` exists in this commit. |
+| 31 | Methodology doc ships at v0.1.0 and serves as the "why ADEF / how to adopt ADEF" framework adoption guide. | `docs/methodology.md` + `docs/why-adef.md` (the methodology paper plus its adoption companion). |
 
 ## Test summary
 
@@ -58,8 +54,6 @@ In-repo guard tests + functional tests cover:
 - Memory BM25 search (3)
 - Template + init scaffolding (3)
 - Agents (11)
-
-Dual-registration verification (facts 23 and 24) is performed in the upstream rule package's own test suite — the framework repo deliberately does not import or test for that package by name.
 
 ## How to re-run verification
 

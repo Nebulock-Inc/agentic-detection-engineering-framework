@@ -4,23 +4,21 @@
 
 ## v0.1.0 — Foundations (this release)
 
-The minimum viable framework: FORGE methodology, journal memory, twelve wrapped agents, four new agents, MCP surface, dual registration with `athf detect`.
+The minimum viable framework: FORGE methodology, journal memory, twelve wrapped agents, four new agents, MCP surface.
 
 - FORGE lifecycle CLI: `adef detection {new, observe, refine, govern, evolve}`.
 - Journal memory: per-detection markdown at `journals/D-XXXX.md`, idempotent stage advance, atomic writes.
 - Refine-stage orchestration chain: RuleSimilarity → RuleOverlap → Verification.
 - Four new agents: `HypothesisFromIntel`, `TuneRecommender`, `DeprecationRecommender`, `HuntPromotion`.
-- `adef hunt-promote` — convert ATHF hunt to draft ADEF detection.
+- `adef hunt-promote` — convert an ATHF hunt to a draft ADEF detection.
 - `adef backfill journals` — scaffold journals for an existing upstream rule corpus.
 - MCP server (`adef-mcp`) exposing lifecycle, memory, and agent tools.
-- Dual registration: the upstream rule package loads under both `athf.commands` and `adef.commands`. `athf detect` continues to work and prints a deprecation banner pointing at `adef detect`.
 - Public docs frame ADEF and ATHF as paired siblings.
 
-## v0.2.0 — Removal + autonomy
+## v0.2.0 — Autonomy
 
-The first deliberate break in the dual-registration bridge, and the first autonomous agent loops.
+The first autonomous agent loops.
 
-- **`athf detect` registration is removed.** Users must migrate to `adef detect`. The deprecation banner has been live the entire v0.1.x cycle to give a runway.
 - Long-running orchestration daemon: `adef-daemon` watches detection health (FP ratio, signal volume, days-since-true-positive) and emits proposals.
 - Agent-to-agent handoff workflows: `HypothesisFromIntel → DraftRule → RuleSimilarity → RuleOverlap → Verification → DeploymentGate` as a single orchestrated DAG.
 - Autonomous deprecation recommendations: the `DeprecationRecommender` can open PRs against the configured upstream rule repository when its verdict is `deprecate` and confidence exceeds a configured floor. Humans review and approve.

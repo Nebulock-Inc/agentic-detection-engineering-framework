@@ -33,8 +33,6 @@ adef detection evolve  D-0001
 
 ADEF and ATHF are *paired siblings*. ATHF owns the threat-hunting lifecycle (LOCK pattern, hunts repo). ADEF owns the detection-engineering lifecycle (FORGE pattern, journals repo). Hunts that earn detections cross the bridge via `adef hunt-promote H-XXXX`. Both frameworks share the same Click + entry-point + FastMCP shape, so analysts and agents that learn one recognize the other immediately.
 
-In v0.1.0, any existing `athf detect` plugin keeps working but prints a deprecation banner pointing at `adef detect`. Removed cleanly in v0.2.0 — see [`docs/roadmap.md`](docs/roadmap.md).
-
 ## Maturity Model
 
 | Level | Name | What you get |
