@@ -12,17 +12,28 @@ This directory contains the planning and design documents for ADEF v1. These wer
    - Visual/conceptual, not implementation details
    - ~15 minute read
 
-2. **[2026-07-01-meeting-summary-open-questions.md](2026-07-01-meeting-summary-open-questions.md)**
-   - What we've locked (6 core decisions)
+2. **[2026-07-09-design-decisions-from-meeting.md](2026-07-09-design-decisions-from-meeting.md)** ← LATEST
+   - Team meeting notes (July 9)
+   - 6 locked design decisions (rule storage, cataloging, schema, syncing, CLI/skills, priorities)
+   - 7 open questions for team input (reconciliation, auto-tagging, schema structure, etc.)
+   - Directly actionable for implementation
+
+3. **[2026-07-09-implementation-stories.md](2026-07-09-implementation-stories.md)**
+   - 9 stories for 3-week sprint (Epic 6996)
+   - Full acceptance criteria, effort estimates, dependencies
+   - Ready to copy into Shortcut/Jira/Linear
+
+4. **[2026-07-01-meeting-summary-open-questions.md](2026-07-01-meeting-summary-open-questions.md)**
+   - What we've locked (6 core decisions from July 1)
    - What was open after the July 1 meeting (5 questions with options)
    - Team decisions are now resolved — see "Resolved" section below
 
-3. **[2026-06-26-adef-day-in-the-life.md](2026-06-26-adef-day-in-the-life.md)**
+5. **[2026-06-26-adef-day-in-the-life.md](2026-06-26-adef-day-in-the-life.md)**
    - End-to-end user experience walkthrough
    - Day 0 (backfill), authoring flow, drift detection, tuning
    - Shows what it *feels* like to use ADEF day-to-day
 
-4. **[2026-06-26-adef-repo-design.md](2026-06-26-adef-repo-design.md)** (optional deep-dive)
+6. **[2026-06-26-adef-repo-design.md](2026-06-26-adef-repo-design.md)** (optional deep-dive)
    - Detailed design (11 sections)
    - Three-layer architecture, three artifacts, skills catalog, CLI surface
    - Read if you need implementation-level detail
@@ -77,6 +88,7 @@ See the architecture doc for the 7-chunk build plan:
 - **2026-07-01:** Team meeting → scope tightening, 5 open questions surfaced
 - **2026-07-07:** Team decisions resolved → architecture doc written
 - **2026-07-08:** Consolidation for review
+- **2026-07-09:** Team meeting notes → design decisions + implementation stories added. Epic 6996 created (6 stories, 28 points). 7 open questions for next discussion.
 
 ## Other Context Docs
 
