@@ -75,6 +75,7 @@ detection = "adef.commands.detection:detection"
 init = "adef.commands.init:init"
 hunt-promote = "adef.commands.hunt_promote:hunt_promote"
 backfill = "adef.commands.backfill:backfill"
+schema = "adef.commands.schema:schema"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"
