@@ -104,12 +104,14 @@ def init(path: Path | None, force: bool) -> None:
     journals = workspace / "journals"
     config_dir = workspace / "config"
     templates_dir = workspace / "templates"
+    schema_dir = workspace / "schema"
     agents_md = workspace / "AGENTS.md"
     config_file = config_dir / ".adefconfig.yaml"
 
     journals.mkdir(exist_ok=True)
     config_dir.mkdir(exist_ok=True)
     templates_dir.mkdir(exist_ok=True)
+    schema_dir.mkdir(exist_ok=True)
 
     if not config_file.exists() or force:
         config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
@@ -122,6 +124,7 @@ def init(path: Path | None, force: bool) -> None:
     console.print(f"  journals/    → {journals}")
     console.print(f"  config/      → {config_file}")
     console.print(f"  templates/   → {template_path}")
+    console.print(f"  schema/      → {schema_dir}")
     console.print(f"  AGENTS.md    → {agents_md}")
     console.print()
     console.print("Next: [bold]adef detection new TITLE[/bold] to create your first journal.")
