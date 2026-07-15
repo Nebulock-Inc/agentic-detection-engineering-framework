@@ -47,6 +47,28 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 
 If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
 
+## Schema Storage
+
+ADEF's schema storage tracks what fields exist in rules vs. actual data. Located at `<workspace>/schema/<source>.yml`.
+
+**Commands:**
+- `adef schema init <source>` — create schema (rule parsing + data sampling)
+- `adef schema update <source> --results -` — re-sample data for drift detection
+- `adef schema rescan <source>` — re-parse rules after adding detections
+- `adef schema show <source>` — display schema
+
+**Key modules:**
+- `adef/core/schema.py` — Schema dataclass, YAML I/O
+- `adef/core/rule_parser.py` — SQL (sqlglot AST), SPL/CQL/KQL (regex)
+- `adef/core/data_sampler.py` — JSON/CSV parsing, type inference
+- `adef/core/llm_client.py` — Field description generation (Claude/OpenAI)
+
+**LLM configuration:**
+```bash
+export ADEF_LLM_PROVIDER=claude  # or openai
+export ANTHROPIC_API_KEY=...     # or OPENAI_API_KEY
+```
+
 ## ISA Discipline
 
 `ISA.md` at the repo root is the system of record for the project (Algorithm v6.3.0). Every meaningful decision lands in `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.

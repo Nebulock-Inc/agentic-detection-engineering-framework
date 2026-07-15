@@ -61,6 +61,14 @@ adef backfill journals              # Create journals for existing upstream rule
 adef backfill journals --rule-root /path/to/rules
 ```
 
+### Schema Management
+```bash
+adef schema init edr_process            # Create schema (interactive wizard)
+adef schema show edr_process            # Display schema
+adef schema update edr_process --results -  # Re-sample data (drift detection)
+adef schema rescan edr_process          # Re-parse rules
+```
+
 ### MCP Server
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
