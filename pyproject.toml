@@ -53,6 +53,10 @@ dev = [
 mcp = [
     "mcp[cli]>=1.0.0",
 ]
+llm = [
+    "anthropic>=0.25.0",
+    "openai>=1.30.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework"
