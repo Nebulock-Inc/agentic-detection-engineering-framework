@@ -47,9 +47,32 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 
 If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
 
+## Cataloging
+
+`adef catalog <rule-root>` walks an existing detection repo (read-only), sniffs
+each rule's format, and writes an enrichment record to
+`<workspace>/catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
+`rule_ref`. It also generates `catalog/INDEX.yml` and a paired skeleton journal
+per rule. Ambiguous rules are flagged `needs_review: true` (infer-and-flag,
+never block). See `docs/plans/2026-07-15-catalog-design.md`.
+
+**Key modules:**
+- `adef/core/rule_discovery.py` — shared repo walk (`discover_rules`,
+  `sniff_format`, `scan_rule_fields`). Consumed by both catalog and schema.
+- `adef/core/catalog.py` — `CatalogRecord`, `Catalog`, INDEX generation.
+- `adef/commands/catalog.py` — the `adef catalog` command.
+
+**`engine` vs `format`:** catalog `engine` stays in the internal four-value
+taxonomy (guarded by `test_no_new_engine_types.py`); `format`/`query_language`
+carry the true source language (sigma/spl/kql/cql/sql) losslessly.
+
 ## Schema Storage
 
 ADEF's schema storage tracks what fields exist in rules vs. actual data. Located at `<workspace>/schema/<source>.yml`.
+
+> Rule field scanning (`adef schema init --rule-root`) is wired to
+> `adef.core.rule_discovery.scan_rule_fields` — the same walk cataloging uses.
+> (Previously a documented stub.)
 
 **Commands:**
 - `adef schema init <source>` — create schema (rule parsing + data sampling)

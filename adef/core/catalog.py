@@ -1,0 +1,230 @@
+"""The catalog artifact — ADEF's enrichment record over a user's rule repo.
+
+A *catalog record* lives at ``<workspace>/catalog/<platform>/D-XXXX-<slug>.yml``.
+It **references** a rule in the user's repository (``rule_ref`` + absolute
+``original_path``) and layers ADEF's value-add on top: platform, MITRE, kind,
+lifecycle status/stage, and slim-ADS strategy fields. The user's repo stays the
+source of truth for the query logic; ADEF never writes to it.
+
+A generated ``<workspace>/catalog/INDEX.yml`` gives O(1) lookup by ID plus
+reverse maps (by_platform / by_tactic / by_engine / by_status).
+
+Hard invariant (CI-enforced by ``tests/test_schema_parity.py``): no path this
+module writes ever contains a ``detections/`` segment. Catalog output is always
+under ``catalog/``.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field as dataclass_field
+from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
+
+from adef.core.journal import _atomic_write, _check_not_under_detections
+from adef.core.rule_discovery import DiscoveredRule
+
+_DETECTION_ID_RE = re.compile(r"^D-(\d{4,})$")
+_SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
+
+# Platform used when discovery can't infer one — the "multi-platform" escape
+# hatch from the repo-design doc (platform is the one single-valued axis, but
+# unknown is still possible for raw SQL/CQL).
+_UNKNOWN_PLATFORM = "multi-platform"
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _slugify(title: str, fallback: str) -> str:
+    slug = _SLUG_STRIP_RE.sub("-", title.lower()).strip("-")
+    return slug or fallback
+
+
+def catalog_dir(workspace: Path) -> Path:
+    """Return the catalog directory for ``workspace`` (``<workspace>/catalog``)."""
+    return Path(workspace).expanduser().resolve() / "catalog"
+
+
+@dataclass
+class CatalogRecord:
+    """One ADEF catalog record — the enrichment layer over a source rule.
+
+    ``engine`` is ADEF's internal four-value taxonomy; ``format`` preserves the
+    true source language losslessly (see ``rule_discovery``).
+    """
+
+    id: str
+    title: str
+    rule_ref: str          # pointer to the source file, relative to the workspace
+    original_path: str     # absolute path to the source file (provenance)
+    platform: str
+    kind: str              # atomic | correlation | composite
+    engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
+    format: str            # sigma | spl | kql | cql | sql (true source format)
+    mitre: list[str] = dataclass_field(default_factory=list)
+    status: str = "draft"  # draft | ready | tuning | deprecated
+    stage: str = "find"    # find | observe | refine | govern | evolve
+    owner: str = ""
+    needs_review: bool = False
+    created: str = ""
+    updated: str = ""
+
+    def to_yaml_dict(self) -> dict:
+        """Serialize to the on-disk catalog YAML shape (ordered, no None noise)."""
+        ts = _now_iso()
+        return {
+            "id": self.id,
+            "title": self.title,
+            "rule_ref": self.rule_ref,
+            "original_path": self.original_path,
+            "platform": self.platform,
+            "kind": self.kind,
+            "engine": self.engine,
+            "format": self.format,
+            "mitre": list(self.mitre),
+            "status": self.status,
+            "stage": self.stage,
+            "owner": self.owner,
+            "needs_review": self.needs_review,
+            "created": self.created or ts,
+            "updated": self.updated or ts,
+        }
+
+
+def record_from_discovered(
+    detection_id: str,
+    disc: DiscoveredRule,
+    workspace: Path,
+) -> CatalogRecord:
+    """Build a ``CatalogRecord`` from a ``DiscoveredRule``.
+
+    Applies the infer-and-flag rule: an unknown platform falls back to the
+    ``multi-platform`` escape hatch and preserves ``needs_review``.
+    """
+    ws = Path(workspace).expanduser().resolve()
+    abs_path = disc.path.expanduser().resolve()
+    try:
+        rule_ref = str(abs_path.relative_to(ws.parent))
+    except ValueError:
+        # Source repo lives outside the workspace parent — use a relative walk.
+        import os
+
+        rule_ref = os.path.relpath(abs_path, ws)
+
+    platform = disc.platform or _UNKNOWN_PLATFORM
+    title = disc.title or abs_path.stem
+    return CatalogRecord(
+        id=detection_id,
+        title=title,
+        rule_ref=rule_ref,
+        original_path=str(abs_path),
+        platform=platform,
+        kind=disc.kind,
+        engine=disc.engine,
+        format=disc.format,
+        mitre=list(disc.mitre),
+        needs_review=disc.needs_review or disc.platform is None,
+    )
+
+
+class Catalog:
+    """File-system-backed catalog writer + INDEX generator for a workspace."""
+
+    def __init__(self, workspace: Path) -> None:
+        self._ws = Path(workspace).expanduser().resolve()
+        self._dir = self._ws / "catalog"
+        _check_not_under_detections(self._dir)
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def directory(self) -> Path:
+        return self._dir
+
+    def _path_for(self, rec: CatalogRecord) -> Path:
+        slug = _slugify(rec.title, rec.id.lower())
+        candidate = self._dir / rec.platform / f"{rec.id}-{slug}.yml"
+        _check_not_under_detections(candidate)
+        return candidate
+
+    def write(self, rec: CatalogRecord) -> Path:
+        """Write a catalog record to ``catalog/<platform>/D-XXXX-<slug>.yml``."""
+        path = self._path_for(rec)
+        content = yaml.safe_dump(rec.to_yaml_dict(), sort_keys=False, allow_unicode=True)
+        _atomic_write(path, content)
+        return path
+
+    def iter_records(self):
+        """Yield ``(detection_id, path, data)`` for every catalog YAML on disk."""
+        for path in sorted(self._dir.rglob("D-*.yml")):
+            if path.name == "INDEX.yml":
+                continue
+            try:
+                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except yaml.YAMLError:
+                continue
+            det_id = data.get("id") or path.stem.split("-")[0]
+            yield det_id, path, data
+
+    def max_index(self) -> int:
+        """Highest ``D-XXXX`` index present in the catalog, or 0.
+
+        Filenames are ``D-XXXX-<slug>.yml``, so the ID is the leading token.
+        """
+        max_idx = 0
+        for path in self._dir.rglob("D-*.yml"):
+            lead = re.match(r"(D-\d{4,})", path.stem)
+            if lead:
+                max_idx = max(max_idx, int(lead.group(1)[2:]))
+        return max_idx
+
+    def _journals_max_index(self) -> int:
+        journals = self._ws / "journals"
+        if not journals.is_dir():
+            return 0
+        max_idx = 0
+        for child in journals.rglob("D-*.md"):
+            m = _DETECTION_ID_RE.match(child.stem)
+            if m:
+                max_idx = max(max_idx, int(m.group(1)))
+        return max_idx
+
+    def next_id(self) -> str:
+        """Next ``D-XXXX`` clearing both catalog and journal IDs (shared space)."""
+        nxt = max(self.max_index(), self._journals_max_index()) + 1
+        return f"D-{nxt:04d}"
+
+    def rebuild_index(self) -> Path:
+        """Regenerate ``catalog/INDEX.yml`` from every catalog record on disk."""
+        detections: dict[str, str] = {}
+        by_platform: dict[str, list[str]] = {}
+        by_tactic: dict[str, list[str]] = {}
+        by_engine: dict[str, list[str]] = {}
+        by_status: dict[str, list[str]] = {}
+
+        for det_id, path, data in self.iter_records():
+            rel = str(path.relative_to(self._dir))
+            detections[det_id] = rel
+            by_platform.setdefault(data.get("platform", _UNKNOWN_PLATFORM), []).append(det_id)
+            by_engine.setdefault(data.get("engine", ""), []).append(det_id)
+            by_status.setdefault(data.get("status", "draft"), []).append(det_id)
+            for technique in data.get("mitre") or []:
+                by_tactic.setdefault(technique, []).append(det_id)
+
+        index = {
+            "generated": True,
+            "detections": dict(sorted(detections.items())),
+            "by_platform": {k: sorted(v) for k, v in sorted(by_platform.items())},
+            "by_tactic": {k: sorted(v) for k, v in sorted(by_tactic.items())},
+            "by_engine": {k: sorted(v) for k, v in sorted(by_engine.items())},
+            "by_status": {k: sorted(v) for k, v in sorted(by_status.items())},
+        }
+        index_path = self._dir / "INDEX.yml"
+        _atomic_write(index_path, yaml.safe_dump(index, sort_keys=False, allow_unicode=True))
+        return index_path
+
+
+__all__ = ["Catalog", "CatalogRecord", "catalog_dir", "record_from_discovered"]

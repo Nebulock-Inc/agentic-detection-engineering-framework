@@ -1,0 +1,196 @@
+"""Tests for the catalog artifact — ADEF's enrichment record + INDEX.
+
+The catalog is ``<workspace>/catalog/<platform>/D-XXXX-<slug>.yml`` plus a
+generated ``<workspace>/catalog/INDEX.yml``. A catalog record *references* a
+rule in the user's repo (``rule_ref``); it never copies the repo or writes to
+it. See ISA.md 2026-07-15 catalog decision.
+"""
+
+from __future__ import annotations
+
+import textwrap
+
+import pytest
+import yaml
+
+from adef.core.catalog import (
+    Catalog,
+    CatalogRecord,
+    catalog_dir,
+    record_from_discovered,
+)
+from adef.core.rule_discovery import DiscoveredRule
+from pathlib import Path
+
+
+# --------------------------------------------------------------------------- #
+# Fixtures
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def workspace(tmp_path):
+    ws = tmp_path / "adef-workspace"
+    (ws / "catalog").mkdir(parents=True)
+    (ws / "journals").mkdir(parents=True)
+    return ws
+
+
+@pytest.fixture
+def rule_repo(tmp_path):
+    root = tmp_path / "their-detections" / "windows"
+    root.mkdir(parents=True)
+    (root / "mshta.yml").write_text(
+        textwrap.dedent(
+            """\
+            title: Suspicious mshta.exe child process
+            id: 03cc0c25-389f-4bf8-b48d-11878079f1ca
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            tags:
+                - attack.t1218.005
+            """
+        ),
+        encoding="utf-8",
+    )
+    return tmp_path / "their-detections"
+
+
+# --------------------------------------------------------------------------- #
+# record_from_discovered — mapping discovery → catalog record
+# --------------------------------------------------------------------------- #
+def test_record_from_discovered_maps_fields(rule_repo, workspace):
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered("D-0001", disc, workspace=workspace)
+
+    assert rec.id == "D-0001"
+    assert rec.title == "Suspicious mshta.exe child process"
+    assert rec.platform == "windows"
+    assert rec.engine == "sigma"
+    assert rec.format == "sigma"
+    assert rec.kind == "atomic"
+    assert rec.mitre == ["T1218.005"]
+    assert rec.status == "draft"
+    assert rec.stage == "find"
+    assert rec.needs_review is False
+
+
+def test_record_rule_ref_is_relative_to_workspace(rule_repo, workspace):
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered("D-0001", disc, workspace=workspace)
+
+    # rule_ref points at the source file; original_path is absolute provenance.
+    assert rec.rule_ref.endswith("their-detections/windows/mshta.yml")
+    assert Path(rec.original_path).is_absolute()
+
+
+def test_record_missing_platform_defaults_and_flags(workspace):
+    disc = DiscoveredRule(
+        path=Path("/tmp/x/raw.sql"),
+        format="sql",
+        query_text="SELECT a FROM t",
+        needs_review=True,
+    )
+    rec = record_from_discovered("D-0007", disc, workspace=workspace)
+    assert rec.platform == "multi-platform"  # escape hatch when unknown
+    assert rec.needs_review is True
+
+
+# --------------------------------------------------------------------------- #
+# Catalog.write — the YAML on disk
+# --------------------------------------------------------------------------- #
+def test_write_creates_platform_scoped_yaml(workspace):
+    cat = Catalog(workspace)
+    rec = CatalogRecord(
+        id="D-0001",
+        title="Suspicious mshta.exe child process",
+        rule_ref="../their/windows/mshta.yml",
+        original_path="/abs/their/windows/mshta.yml",
+        platform="windows",
+        kind="atomic",
+        engine="sigma",
+        format="sigma",
+        mitre=["T1218.005"],
+    )
+    path = cat.write(rec)
+
+    assert path == workspace / "catalog" / "windows" / "D-0001-suspicious-mshta-exe-child-process.yml"
+    assert path.exists()
+    data = yaml.safe_load(path.read_text())
+    assert data["id"] == "D-0001"
+    assert data["rule_ref"] == "../their/windows/mshta.yml"
+    assert data["engine"] == "sigma"
+    assert data["format"] == "sigma"
+    assert data["mitre"] == ["T1218.005"]
+
+
+def test_write_never_touches_a_detections_path(workspace):
+    """Catalog writes land under catalog/, never a repo detections/ tree."""
+    cat = Catalog(workspace)
+    rec = CatalogRecord(
+        id="D-0001", title="x", rule_ref="r", original_path="/a",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+    )
+    path = cat.write(rec)
+    assert "detections" not in path.parts
+
+
+# --------------------------------------------------------------------------- #
+# INDEX.yml — generated reverse maps
+# --------------------------------------------------------------------------- #
+def test_index_has_reverse_maps(workspace):
+    cat = Catalog(workspace)
+    cat.write(CatalogRecord(
+        id="D-0001", title="mshta", rule_ref="a", original_path="/a",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+        mitre=["T1218.005"], status="ready",
+    ))
+    cat.write(CatalogRecord(
+        id="D-0002", title="iam backdoor", rule_ref="b", original_path="/b",
+        platform="cloud-aws", kind="atomic", engine="sql", format="sql",
+        mitre=[], status="draft",
+    ))
+    index_path = cat.rebuild_index()
+
+    idx = yaml.safe_load(index_path.read_text())
+    assert idx["detections"]["D-0001"].endswith("D-0001-mshta.yml")
+    assert set(idx["by_platform"]["windows"]) == {"D-0001"}
+    assert set(idx["by_platform"]["cloud-aws"]) == {"D-0002"}
+    assert set(idx["by_engine"]["sigma"]) == {"D-0001"}
+    assert set(idx["by_status"]["ready"]) == {"D-0001"}
+    assert set(idx["by_status"]["draft"]) == {"D-0002"}
+    # by_tactic is keyed by MITRE technique when tactics aren't resolved.
+    assert "D-0001" in idx["by_tactic"]["T1218.005"]
+
+
+def test_index_is_generated_marker(workspace):
+    cat = Catalog(workspace)
+    cat.write(CatalogRecord(
+        id="D-0001", title="x", rule_ref="a", original_path="/a",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+    ))
+    idx = yaml.safe_load(cat.rebuild_index().read_text())
+    assert idx.get("generated") is True
+
+
+# --------------------------------------------------------------------------- #
+# Shared ID space with journals
+# --------------------------------------------------------------------------- #
+def test_next_id_accounts_for_both_catalog_and_journals(workspace):
+    # A journal already claims D-0001.
+    (workspace / "journals" / "D-0001.md").write_text("---\nid: D-0001\n---\n")
+    cat = Catalog(workspace)
+    cat.write(CatalogRecord(
+        id="D-0002", title="x", rule_ref="a", original_path="/a",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+    ))
+    # Next ID must clear both the journal (D-0001) and the catalog (D-0002).
+    assert cat.next_id() == "D-0003"
+
+
+def test_catalog_dir_resolves_under_workspace(workspace):
+    assert catalog_dir(workspace) == workspace / "catalog"

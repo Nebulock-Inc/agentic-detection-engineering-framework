@@ -102,6 +102,7 @@ def init(path: Path | None, force: bool) -> None:
     workspace.mkdir(parents=True, exist_ok=True)
 
     journals = workspace / "journals"
+    catalog = workspace / "catalog"
     config_dir = workspace / "config"
     templates_dir = workspace / "templates"
     schema_dir = workspace / "schema"
@@ -109,6 +110,7 @@ def init(path: Path | None, force: bool) -> None:
     config_file = config_dir / ".adefconfig.yaml"
 
     journals.mkdir(exist_ok=True)
+    catalog.mkdir(exist_ok=True)
     config_dir.mkdir(exist_ok=True)
     templates_dir.mkdir(exist_ok=True)
     schema_dir.mkdir(exist_ok=True)
@@ -122,6 +124,7 @@ def init(path: Path | None, force: bool) -> None:
 
     console.print(f"[green]ADEF workspace initialized at[/green] {workspace}")
     console.print(f"  journals/    → {journals}")
+    console.print(f"  catalog/     → {catalog}")
     console.print(f"  config/      → {config_file}")
     console.print(f"  templates/   → {template_path}")
     console.print(f"  schema/      → {schema_dir}")

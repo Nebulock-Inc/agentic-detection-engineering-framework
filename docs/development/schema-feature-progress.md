@@ -27,7 +27,7 @@ Last updated: 2026-07-15 (v1 implementation complete)
   - [x] SPL field extraction (enhanced regex, ~95% coverage)
   - [x] CQL field extraction (enhanced regex, ~95% coverage)
   - [x] KQL field extraction (enhanced regex, ~95% coverage)
-  - [ ] File scanner (walk rule_root, extract fields per language) — **v1 gap: stubbed**
+  - [x] File scanner (walk rule_root, extract fields per language) — **closed 2026-07-15** via `adef.core.rule_discovery.scan_rule_fields` (shared with cataloging); wired into `adef schema init`
   - [x] Add `sqlglot` to dependencies
   
 - [x] Data sampler (`adef/core/data_sampler.py`)

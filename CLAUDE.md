@@ -55,6 +55,17 @@ adef detection observe D-0001 --note "Checked 30d of process_create events"
 adef hunt-promote H-0042            # Promote ATHF hunt to draft detection
 ```
 
+### Cataloging Existing Rules
+```bash
+adef catalog /path/to/rules             # Walk a rule repo → catalog/ + INDEX.yml + skeleton journals
+adef catalog /path/to/rules --dry-run   # Preview what would be catalogued (nothing written)
+```
+Cataloging is read-only on the source repo. It sniffs each file's format
+(Sigma YAML, Splunk `.conf`, `.kql`, `.sql`, `.cql`), writes an enrichment
+record to `catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
+`rule_ref`, and flags rules whose platform/MITRE couldn't be inferred with
+`needs_review: true`. See `docs/plans/2026-07-15-catalog-design.md` for the spec.
+
 ### Backfilling
 ```bash
 adef backfill journals              # Create journals for existing upstream rules

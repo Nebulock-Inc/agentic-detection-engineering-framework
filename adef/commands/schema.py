@@ -62,8 +62,9 @@ def init(source: str, rule_root: Path | None, stdin: bool, skip_rules: bool, ski
                 rule_root = click.prompt("Path to rules directory", type=Path)
 
             console.print(f"Scanning rules in {rule_root}...")
-            # ponytail: stub for now, implement file scanner later
-            rule_fields = set()
+            from adef.core.rule_discovery import scan_rule_fields
+
+            rule_fields = scan_rule_fields(rule_root, query_language)
             last_rule_scan = _now_iso()
             console.print(f"Found {len(rule_fields)} fields in rules")
 

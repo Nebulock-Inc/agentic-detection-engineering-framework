@@ -76,6 +76,7 @@ init = "adef.commands.init:init"
 hunt-promote = "adef.commands.hunt_promote:hunt_promote"
 backfill = "adef.commands.backfill:backfill"
 schema = "adef.commands.schema:schema"
+catalog = "adef.commands.catalog:catalog"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"

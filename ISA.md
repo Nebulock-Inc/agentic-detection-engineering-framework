@@ -253,6 +253,22 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 - 2026-06-16T16:30:00-07:00 — ISC floor show-your-math: E5 soft floor is ≥256. Current count is ~80 atomic ISCs (each one binary-tool-probe verifiable). Splitting further would add ceremony, not verifiability — most remaining splits would be "and the file ends with a newline" / "and the import path is exactly X" trivia. The granularity rule (one binary tool probe per ISC) is satisfied; the count axis is relaxed because the work is well-bounded by `goals/adef/plan.md`'s 20 ordered steps. Per Algorithm v6.3.0, ISC floor is soft; thinking and completeness gates remain HARD-met.
 - 2026-06-16 — Vendor neutralization: scrubbed all literal references to specific internal package names (any string that hardcodes a vendor's rule or hunt repository) from the ADEF source, docs, tests, and ISA. Wrappers now resolve their upstream class through `ADEF_WRAPPER_<KEY>=module.path:ClassName` env vars; hunt promotion through `ADEF_HUNT_RULE_GENERATOR`. Rationale: ADEF is a public framework; the internal rule/hunt repos are out-of-tree concerns and must not appear in the public surface.
 - 2026-07-15 — Schema Storage: SQL uses sqlglot AST parsing for 99%+ coverage (high-fidelity). SPL/CQL/KQL use enhanced regex (~95% coverage, upgradeable later). LLM provider-agnostic via Protocol pattern (Claude/OpenAI built-in). Results-in seam: user pipes data, ADEF infers types/populations. No vendor connectors (Splunk API, CrowdStrike API, etc.).
+- 2026-07-15 — Catalog layer (Shortcut Epic 6996 / stories 7387, 7388, 7389, 7393). Cataloging turns an existing detection repo into ADEF's catalog artifact. Decisions:
+  - **Two ingestion paths, one built now.** (a) *point-at-a-repo* — walk a rules repo and catalog what's there — is v1. (b) *export-from-a-tool* is a future seam reusing the same results-in contract; designed around, not built.
+  - **Catalog folder is `catalog/`, never `detections/`.** The `detections/` name in the 2026-06-26 repo-design doc is superseded — CLAUDE.md's CI-enforced hard rule (`test_schema_parity.py`) forbids any ADEF write path containing `detections/`. Catalog records live at `catalog/<platform>/D-XXXX-<slug>.yml`.
+  - **Catalog record references, never copies-authoritative.** Each record carries `rule_ref` (relative pointer to the source file in the user's repo) + `original_path` (absolute, for provenance). Source repo stays source of truth for rule logic; ADEF never writes to it.
+  - **Multi-format sniff + extract (v1).** Discovery sniffs file type by extension+content: Sigma `.yml`/`.yaml` (full auto-extract: title, logsource→platform, tags→MITRE, engine=sigma, kind=atomic), Splunk `.conf` savedsearches (heuristic), `.kql` (heuristic, table→platform), `.sql` (heuristic). Reuses `adef.core.rule_parser` field extractors.
+  - **Infer-and-flag, never block (Q5=B).** Cataloging never prompts mid-run. Ambiguous fields left null; record tagged `needs_review: true`. Reviewed later via CLI/skill.
+  - **6 required fields (Q4):** `id`, `title`, `platform`, `kind`, `engine`, plus `rule_ref` or inline `query`. MITRE/owner/slim-ADS optional, enriched through FORGE.
+  - **INDEX.yml is generated, never hand-edited.** `detections` (ID→path) + reverse maps `by_platform`/`by_tactic`/`by_engine`/`by_status`. Rebuilt by catalog + `adef reindex`.
+  - **Shared ID space.** Catalog `D-XXXX` IDs allocate above the max of BOTH catalog and journals so catalog+journal+INDEX stay tied by ID. Cataloging a rule also creates its skeleton journal.
+  - **Capture:** this session ships code + ISA.md; Shortcut stories updated in a later pass.
+- 2026-07-16 — Schema-from-catalog mapping (Epic 6996; resolves the catalog↔schema overlap open thread). Design agreed, **not yet implemented**. Hybrid of three options weighed (A group-by-language, B capture-data_source-at-catalog-time, C named-per-source):
+  - **Capture `data_source` on `CatalogRecord`** (mechanism from B), inferred during discovery from the **raw table/index/logsource literal, verbatim — no normalization**: Sigma `logsource` value, KQL lead table, SQL `FROM` table, SPL `index=`. Unresolvable → `data_source` empty + existing `needs_review: true`.
+  - **New command `adef schema from-catalog`** reads catalog/INDEX and writes one `schema/<data_source>.yml` per confident `(data_source, query_language)` group. Rules with no inferred source **fall back to pool-by-language** (`schema/sql.yml`, …) — option A as catch-all so no fields are lost.
+  - **Rationale:** serves both drift detection (fields captured regardless of source) and authoring grounding (per-source accuracy where confident); un-inferrable tail degrades to coarse pooling, never a false-confident per-source schema.
+  - **Accepted tradeoff:** raw-literal source names can fragment one logical source across inconsistent naming (`cloudtrail` vs `aws_cloudtrail`). Chosen over inference to avoid guessing; normalization/alias map is a later upgrade if it proves messy.
+  - **Coordination:** changing `CatalogRecord` affects the schema feature (shared surface) — co-worker sign-off before building. Command choice: standalone `adef schema from-catalog`, not a flag on `init`.
 
 ## Changelog
 
@@ -261,3 +277,12 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 ## Verification
 
 (populated at VERIFY — evidence per ISC)
+
+- 2026-07-15 — Catalog layer (Epic 6996 / stories 7387, 7388, 7389). Evidence:
+  - `adef/core/rule_discovery.py` — shared read-only repo walk; 14 tests (`tests/test_rule_discovery.py`) + 4 field-scan tests (`tests/test_rule_field_scan.py`) pass.
+  - `adef/core/catalog.py` — `CatalogRecord`/`Catalog`/INDEX; 9 tests (`tests/test_catalog.py`) pass.
+  - `adef/commands/catalog.py` — `adef catalog` command; 6 tests (`tests/test_catalog_command.py`) pass; discovered in `adef --help`.
+  - Schema v1 gap closed: `adef schema init --rule-root` now calls `scan_rule_fields` (was stubbed). Wired without breaking the 73 pre-existing tests.
+  - Full suite: **106 passed** (73 original + 33 new). Anti-goal guards green: `test_schema_parity` (no `detections/` writes), `test_no_new_engine_types` (engine stays 4-value; true format in `format` field).
+  - End-to-end CLI verified: catalogs a Sigma + raw-SQL repo → `catalog/<platform>/D-XXXX.yml` + INDEX.yml + skeleton journals; source repo untouched; raw SQL flagged `needs_review`.
+  - Deferred (not this session): `adef detection list/show` + `adef coverage` browsing (story 7393); reconciliation/`adef sync`; export-from-tool ingestion.
