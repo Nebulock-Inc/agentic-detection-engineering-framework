@@ -111,7 +111,17 @@ formats. If you extend the walker, keep both callers working.
 
 ## Open threads (decide before building)
 
-### 1. Generate schema *from the catalog* (ACTIVE — needs the two of you to align)
+### 1. Generate schema *from the catalog* (✅ IMPLEMENTED 2026-07-16)
+Built as designed. `data_source` is now inferred at catalog time (raw literal)
+and carried on `CatalogRecord`; `adef schema from-catalog` groups by
+`(data_source, query_language)` into `schema/<source>.yml`, un-inferred rules
+pool by language. 119 tests pass. See ISA.md for the verification entry.
+Remaining follow-ups from this thread: (a) `adef schema update`/`rescan` are
+still stubs — from-catalog writes rules-only schemas (`in_data: false`), so
+piping data to populate types/populations depends on `update` being finished;
+(b) raw-literal fragmentation watch (below) if source naming proves inconsistent.
+
+<details><summary>Original decision (kept for context)</summary>
 Today `adef schema init` re-walks the raw repo and makes you pick one
 `query_language`. The catalog already inventoried those rules. The ask: drive
 schema generation from the catalog instead of a second raw walk.
@@ -149,6 +159,8 @@ building: add `data_source` to `CatalogRecord` + inference in `rule_discovery`,
 then the `from-catalog` command, TDD. Coordinate with co-worker before changing
 `CatalogRecord` since schema consumes it.
 
+</details>
+
 ### 2. Deferred catalog work (not started)
 - `adef detection list/show` + `adef coverage` browsing (story 7393).
 - Reconciliation / `adef sync` when the source repo changes externally.
@@ -163,6 +175,15 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 ---
 
 ## Session log
+
+### 2026-07-16 (later) — Schema-from-catalog implemented (Jarrett + Claude)
+- Built the agreed design TDD: `data_source` inference in `rule_discovery`,
+  carried onto `CatalogRecord` (+ `by_data_source` in INDEX), new
+  `adef schema from-catalog` command (group by source, pool-by-language fallback,
+  Sigma excluded).
+- Full suite **119 passed** (was 106). Guards green. End-to-end verified.
+- Follow-up: `adef schema update`/`rescan` still stubs → from-catalog writes
+  rules-only schemas until `update` populates data fields.
 
 ### 2026-07-16 — Schema-from-catalog design agreed (Jarrett + Claude)
 - Resolved open thread #1. Hybrid design (capture raw-literal `data_source` at

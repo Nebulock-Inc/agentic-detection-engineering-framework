@@ -269,6 +269,11 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **Rationale:** serves both drift detection (fields captured regardless of source) and authoring grounding (per-source accuracy where confident); un-inferrable tail degrades to coarse pooling, never a false-confident per-source schema.
   - **Accepted tradeoff:** raw-literal source names can fragment one logical source across inconsistent naming (`cloudtrail` vs `aws_cloudtrail`). Chosen over inference to avoid guessing; normalization/alias map is a later upgrade if it proves messy.
   - **Coordination:** changing `CatalogRecord` affects the schema feature (shared surface) — co-worker sign-off before building. Command choice: standalone `adef schema from-catalog`, not a flag on `init`.
+- 2026-07-16 — Schema-from-catalog IMPLEMENTED (the above design, built TDD). Evidence:
+  - `data_source` inference in `rule_discovery` (raw literal: Sigma logsource category→service→product, KQL lead table verbatim, SQL `FROM`, SPL `index=`; empty when unresolvable). 5 new tests in `tests/test_rule_discovery.py`.
+  - `data_source` on `CatalogRecord` + YAML + `by_data_source` reverse map in INDEX. 2 new tests in `tests/test_catalog.py`.
+  - `adef schema from-catalog` groups catalogued rules by `(data_source, query_language)` → `schema/<source>.yml`; un-inferred sources pool by language (`schema/<lang>.yml`); Sigma excluded. 6 tests in `tests/test_schema_from_catalog.py`.
+  - Full suite **119 passed**. Anti-goal guards green. End-to-end verified: two SQL rules on `cloudtrail` merge into one schema; KQL→`DeviceProcessEvents.yml`; `SELECT 1` pools into `sql.yml` fallback.
 
 ## Changelog
 

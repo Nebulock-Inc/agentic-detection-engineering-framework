@@ -65,6 +65,7 @@ class CatalogRecord:
     kind: str              # atomic | correlation | composite
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
     format: str            # sigma | spl | kql | cql | sql (true source format)
+    data_source: str = ""  # raw table/index/logsource literal (schema-from-catalog grouping key)
     mitre: list[str] = dataclass_field(default_factory=list)
     status: str = "draft"  # draft | ready | tuning | deprecated
     stage: str = "find"    # find | observe | refine | govern | evolve
@@ -85,6 +86,7 @@ class CatalogRecord:
             "kind": self.kind,
             "engine": self.engine,
             "format": self.format,
+            "data_source": self.data_source,
             "mitre": list(self.mitre),
             "status": self.status,
             "stage": self.stage,
@@ -126,6 +128,7 @@ def record_from_discovered(
         kind=disc.kind,
         engine=disc.engine,
         format=disc.format,
+        data_source=disc.data_source,
         mitre=list(disc.mitre),
         needs_review=disc.needs_review or disc.platform is None,
     )
@@ -204,6 +207,7 @@ class Catalog:
         by_tactic: dict[str, list[str]] = {}
         by_engine: dict[str, list[str]] = {}
         by_status: dict[str, list[str]] = {}
+        by_data_source: dict[str, list[str]] = {}
 
         for det_id, path, data in self.iter_records():
             rel = str(path.relative_to(self._dir))
@@ -213,6 +217,9 @@ class Catalog:
             by_status.setdefault(data.get("status", "draft"), []).append(det_id)
             for technique in data.get("mitre") or []:
                 by_tactic.setdefault(technique, []).append(det_id)
+            src = data.get("data_source") or ""
+            if src:
+                by_data_source.setdefault(src, []).append(det_id)
 
         index = {
             "generated": True,
@@ -221,6 +228,7 @@ class Catalog:
             "by_tactic": {k: sorted(v) for k, v in sorted(by_tactic.items())},
             "by_engine": {k: sorted(v) for k, v in sorted(by_engine.items())},
             "by_status": {k: sorted(v) for k, v in sorted(by_status.items())},
+            "by_data_source": {k: sorted(v) for k, v in sorted(by_data_source.items())},
         }
         index_path = self._dir / "INDEX.yml"
         _atomic_write(index_path, yaml.safe_dump(index, sort_keys=False, allow_unicode=True))

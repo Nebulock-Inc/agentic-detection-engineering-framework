@@ -43,6 +43,11 @@ _FORMAT_TO_ENGINE = {
 
 _MITRE_TECHNIQUE_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
 
+# Raw source-literal extractors: the table/index the rule reads from, verbatim.
+_SQL_FROM_RE = re.compile(r"\bfrom\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+_SPL_INDEX_RE = re.compile(r"\bindex\s*=\s*\"?([A-Za-z_][\w.-]*)\"?", re.IGNORECASE)
+_KQL_LEAD_TABLE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)")
+
 # KQL table name → platform. Best-effort; unknowns leave platform unset.
 _KQL_TABLE_PLATFORM = {
     "deviceprocessevents": "windows",
@@ -74,6 +79,10 @@ class DiscoveredRule:
     mitre: tuple[str, ...] = ()
     kind: str = "atomic"
     rule_uuid: str = ""
+    # The raw table/index/logsource literal the rule queries, verbatim (no
+    # normalisation). Empty when unresolvable. Drives schema-from-catalog
+    # grouping; see ISA.md 2026-07-16.
+    data_source: str = ""
     needs_review: bool = False
 
     @property
@@ -151,9 +160,16 @@ def _extract_sigma(text: str) -> DiscoveredRule:
     if not isinstance(data, dict):
         data = {}
     logsource = data.get("logsource") or {}
+    if not isinstance(logsource, dict):
+        logsource = {}
     tags = data.get("tags") or []
     mitre = _normalise_mitre(str(t) for t in tags) if isinstance(tags, list) else ()
-    platform = _sigma_platform(logsource) if isinstance(logsource, dict) else None
+    platform = _sigma_platform(logsource)
+    # data_source: Sigma's table-equivalent is its logsource category
+    # (else service, else product), verbatim.
+    data_source = str(
+        logsource.get("category") or logsource.get("service") or logsource.get("product") or ""
+    ).strip()
     return DiscoveredRule(
         path=Path("."),  # filled by caller
         format="sigma",
@@ -163,6 +179,7 @@ def _extract_sigma(text: str) -> DiscoveredRule:
         mitre=mitre,
         kind="atomic",
         rule_uuid=str(data.get("id") or "").strip(),
+        data_source=data_source,
         needs_review=not (platform and mitre),
     )
 
@@ -175,6 +192,7 @@ def _extract_spl_conf(text: str) -> DiscoveredRule:
     body = re.search(r"^\s*search\s*=\s*(.+)", text, re.MULTILINE | re.DOTALL)
     query = body.group(1).strip() if body else text.strip()
     mitre = _normalise_mitre([text])
+    idx = _SPL_INDEX_RE.search(query)
     return DiscoveredRule(
         path=Path("."),
         format="spl",
@@ -183,16 +201,19 @@ def _extract_spl_conf(text: str) -> DiscoveredRule:
         platform=None,
         mitre=mitre,
         kind="atomic",
+        data_source=idx.group(1) if idx else "",
         needs_review=True,  # raw SPL: platform unknown until reviewed
     )
 
 
 def _extract_kql(text: str) -> DiscoveredRule:
     """Best-effort platform inference for a KQL query from its lead table."""
-    lead_table = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)", text)
+    lead_table = _KQL_LEAD_TABLE_RE.match(text)
     platform = None
+    data_source = ""
     if lead_table:
-        platform = _KQL_TABLE_PLATFORM.get(lead_table.group(1).lower())
+        data_source = lead_table.group(1)  # verbatim, no case normalisation
+        platform = _KQL_TABLE_PLATFORM.get(data_source.lower())
     mitre = _normalise_mitre([text])
     return DiscoveredRule(
         path=Path("."),
@@ -201,12 +222,21 @@ def _extract_kql(text: str) -> DiscoveredRule:
         platform=platform,
         mitre=mitre,
         kind="atomic",
+        data_source=data_source,
         needs_review=not (platform and mitre),
     )
 
 
 def _extract_generic(text: str, fmt: Format) -> DiscoveredRule:
-    """Fallback for raw SQL / CQL: no reliable metadata → flag for review."""
+    """Fallback for raw SQL / CQL: no reliable metadata → flag for review.
+
+    SQL still yields a data_source from its ``FROM`` clause; CQL has no reliable
+    table literal, so it stays empty.
+    """
+    data_source = ""
+    if fmt == "sql":
+        m = _SQL_FROM_RE.search(text)
+        data_source = m.group(1) if m else ""
     return DiscoveredRule(
         path=Path("."),
         format=fmt,
@@ -214,6 +244,7 @@ def _extract_generic(text: str, fmt: Format) -> DiscoveredRule:
         platform=None,
         mitre=_normalise_mitre([text]),
         kind="atomic",
+        data_source=data_source,
         needs_review=True,
     )
 

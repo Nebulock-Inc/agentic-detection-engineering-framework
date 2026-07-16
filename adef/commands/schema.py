@@ -179,3 +179,89 @@ def rescan(source: str):
     """Re-parse rules to refresh in_rules flags for SOURCE."""
     console.print(f"[bold]Rescanning rules: {source}[/bold]")
     # Implementation will go here
+
+
+# Query-language field extractors, keyed by the catalog record's ``format``.
+# Sigma is excluded on purpose — it's structured YAML, not a query language.
+_FIELD_EXTRACTORS = {
+    "sql": extract_sql_fields,
+    "spl": extract_spl_fields,
+    "cql": extract_cql_fields,
+    "kql": extract_kql_fields,
+}
+
+
+@schema.command(name="from-catalog")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
+)
+def from_catalog(workspace: Path | None):
+    """Generate data schemas from the catalog.
+
+    Groups catalogued rules by (data_source, query_language) and writes one
+    ``schema/<data_source>.yml`` per group. Rules whose data source could not be
+    inferred pool by language into ``schema/<language>.yml`` (the fallback
+    bucket). Sigma rules are skipped — they aren't a query language.
+    """
+    from adef.core.catalog import Catalog
+
+    ws = Path(
+        workspace or os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace")
+    ).expanduser().resolve()
+    cat = Catalog(ws)
+    schema_dir = ws / "schema"
+
+    # Group query text by the schema key: the data_source when known, else the
+    # language (the pool-by-language fallback). Each group tracks its language.
+    groups: dict[tuple[str, str], list[str]] = {}  # (schema_name, language) -> queries
+    for _det_id, _path, data in cat.iter_records():
+        fmt = data.get("format", "")
+        extractor = _FIELD_EXTRACTORS.get(fmt)
+        if extractor is None:
+            continue  # skips sigma and anything without a query-language extractor
+        source = (data.get("data_source") or "").strip()
+        schema_name = source or fmt  # fall back to language bucket
+        original = data.get("original_path")
+        if not original or not Path(original).is_file():
+            continue
+        try:
+            query = Path(original).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        groups.setdefault((schema_name, fmt), []).append(query)
+
+    if not groups:
+        console.print("[yellow]No query-language rules in the catalog[/yellow] — nothing to generate.")
+        return
+
+    written = []
+    fallback = []
+    ts = _now_iso()
+    for (schema_name, language), queries in sorted(groups.items()):
+        extractor = _FIELD_EXTRACTORS[language]
+        rule_fields: set[str] = set()
+        for q in queries:
+            rule_fields |= extractor(q)
+        merged = merge_fields(rule_fields, {})  # rules-only; data filled later via `schema update`
+        schema_obj = Schema(
+            source=schema_name,
+            query_language=language,
+            last_rule_scan=ts,
+            last_data_sample=None,
+            sample_window=None,
+            sample_size=None,
+            fields=merged,
+        )
+        write_schema(schema_obj, schema_dir / f"{schema_name}.yml")
+        written.append((schema_name, language, len(merged)))
+        if schema_name == language:  # this group is the pooled-by-language fallback
+            fallback.append(schema_name)
+
+    console.print(f"[green]Generated {len(written)} schema(s) from the catalog:[/green]")
+    for name, language, n_fields in written:
+        tag = " [yellow](language fallback — un-inferred sources)[/yellow]" if name in fallback else ""
+        console.print(f"  schema/{name}.yml  ({language}, {n_fields} fields){tag}")
+    console.print("\nNext: pipe data to fill types/populations — `adef schema update <source> --results -`")

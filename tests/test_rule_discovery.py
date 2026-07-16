@@ -177,6 +177,42 @@ def test_sigma_not_flagged_needs_review(rule_repo):
     assert rules["sigma"].needs_review is False
 
 
+# --------------------------------------------------------------------------- #
+# data_source — the raw table/index/logsource literal (verbatim, no normalise)
+# --------------------------------------------------------------------------- #
+def test_sigma_data_source_from_logsource(rule_repo):
+    """Sigma data_source is its logsource category (the table-equivalent)."""
+    rules = {r.format: r for r in discover_rules(rule_repo)}
+    assert rules["sigma"].data_source == "process_creation"
+
+
+def test_sql_data_source_from_from_clause(rule_repo):
+    rules = {r.format: r for r in discover_rules(rule_repo)}
+    assert rules["sql"].data_source == "cloudtrail"
+
+
+def test_kql_data_source_from_lead_table(rule_repo):
+    """KQL data_source is the lead table verbatim — no case normalisation."""
+    rules = {r.format: r for r in discover_rules(rule_repo)}
+    assert rules["kql"].data_source == "DeviceProcessEvents"
+
+
+def test_spl_data_source_from_index(rule_repo):
+    rules = {r.format: r for r in discover_rules(rule_repo)}
+    assert rules["spl"].data_source == "edr"
+
+
+def test_data_source_empty_when_unresolvable(tmp_path):
+    """A SQL query with no FROM clause yields an empty data_source."""
+    from adef.core.rule_discovery import discover_rules as _dr
+
+    root = tmp_path / "rules"
+    root.mkdir()
+    (root / "weird.sql").write_text("SELECT 1", encoding="utf-8")
+    rule = next(iter(_dr(root)))
+    assert rule.data_source == ""
+
+
 def test_discover_missing_root_returns_empty(tmp_path):
     assert list(discover_rules(tmp_path / "nope")) == []
 

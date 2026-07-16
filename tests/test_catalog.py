@@ -77,6 +77,27 @@ def test_record_from_discovered_maps_fields(rule_repo, workspace):
     assert rec.needs_review is False
 
 
+def test_record_carries_data_source(rule_repo, workspace):
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered("D-0001", disc, workspace=workspace)
+    # This fixture's Sigma logsource has product but no category → product used.
+    assert rec.data_source == "windows"
+
+
+def test_written_yaml_includes_data_source(workspace):
+    cat = Catalog(workspace)
+    rec = CatalogRecord(
+        id="D-0001", title="x", rule_ref="r", original_path="/a",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+        data_source="process_creation",
+    )
+    path = cat.write(rec)
+    data = yaml.safe_load(path.read_text())
+    assert data["data_source"] == "process_creation"
+
+
 def test_record_rule_ref_is_relative_to_workspace(rule_repo, workspace):
     from adef.core.rule_discovery import discover_rules
 
