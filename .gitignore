@@ -25,6 +25,9 @@ coverage.xml
 # OS
 .DS_Store
 
+# Third-party rule corpora for local testing of catalog/schema (not ours to commit)
+/test-rules/
+
 # Local workspace artifacts users may create at the root (root-anchored only)
 /journals/
 /config/
