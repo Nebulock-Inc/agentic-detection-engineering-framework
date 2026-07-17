@@ -280,6 +280,7 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **New formats:** Splunk ESCU (`search:`+`type:` → full extract, SPL query, `mitre_attack_id`/`data_source`) and Panther (`AnalysisType`+`RuleID` → metadata-only, `recognized_unsupported`; logic in sibling `.py` deferred). Splunk *stories* and Panther *packs* correctly resolve to `not_a_rule` (no query). osquery dropped from scope.
   - **Auto-detect only** — no user format prompt (init stays non-interactive).
   - Full suite **139 passed** (+20). Guards green, ruff clean. **End-to-end on real corpora: Splunk `detections/` 0→2124, Panther `rules/` 0→877.** Known follow-up: platform inference for Splunk ESCU is weak (most flag `needs_review`) — Phase 2 refinement.
+- 2026-07-17 — Catalog record now stores the query inline. Bug: the record captured metadata but not the detection logic (discovery extracted `query_text`, `record_from_discovered`/`to_yaml_dict` dropped it). Fix: `query` field on `CatalogRecord` + YAML, populated from `DiscoveredRule.query_text` (empty when logic is external, e.g. Panther `.py`). Kept `rule_ref`/`original_path` → records are self-contained *and* traceable, matching the 2026-07-07 architecture-doc record shape. Multi-line queries render as literal block scalars via a catalog-scoped YAML dumper (readability), not affecting other modules' YAML. Full suite **141 passed** (+2). Guards green, ruff clean.
 
 ## Changelog
 

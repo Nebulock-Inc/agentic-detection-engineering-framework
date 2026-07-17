@@ -86,6 +86,28 @@ def test_record_carries_data_source(rule_repo, workspace):
     assert rec.data_source == "windows"
 
 
+def test_record_captures_query_from_discovered(rule_repo, workspace):
+    """The extracted query text lands in the catalog record (self-contained)."""
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered("D-0001", disc, workspace=workspace)
+    assert "detection:" in rec.query  # sigma fixture's query text
+    assert rec.query == disc.query_text
+
+
+def test_written_yaml_includes_query(workspace):
+    cat = Catalog(workspace)
+    rec = CatalogRecord(
+        id="D-0001", title="x", rule_ref="r", original_path="/a",
+        platform="windows", kind="atomic", engine="sql", format="splunk-escu",
+        query="| tstats count from datamodel=Web by Web.url",
+    )
+    path = cat.write(rec)
+    data = yaml.safe_load(path.read_text())
+    assert data["query"] == "| tstats count from datamodel=Web by Web.url"
+
+
 def test_record_carries_support_from_discovered(workspace):
     from adef.core.rule_discovery import DiscoveredRule, RECOGNIZED_UNSUPPORTED
 

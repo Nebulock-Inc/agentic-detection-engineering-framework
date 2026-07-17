@@ -41,6 +41,8 @@ id: D-0002
 title: Suspicious mshta.exe child process
 rule_ref: their-detections/windows/mshta.yml   # pointer to source (relative)
 original_path: /abs/.../their-detections/windows/mshta.yml  # provenance
+query: |                                        # detection logic, verbatim (block scalar)
+  <the rule's query / SPL / SQL / Sigma body>   # empty when logic is external (Panther .py)
 platform: windows
 kind: atomic                 # atomic | correlation | composite
 engine: sigma                # INTERNAL 4-value taxonomy (sigma|sql|sch_sql|composite)

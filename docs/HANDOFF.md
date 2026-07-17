@@ -41,6 +41,66 @@ YAML shape, because each is consumed by the other's feature.
 
 ---
 
+## Using the test corpora (catalog + schema)
+
+Three open-source rule repos live under `test-rules/` (gitignored — not ours to
+commit). They're **samples for exercising the tool, not the spec.** If they're
+missing, re-clone:
+
+```bash
+mkdir -p test-rules && cd test-rules
+git clone --depth 1 https://github.com/splunk/security_content.git
+git clone --depth 1 https://github.com/panther-labs/panther-analysis.git
+# (osquery-configuration was dropped — not a good detection-repo example)
+```
+
+**Where the real rules live** (point `adef catalog` here, not at the repo root):
+- Splunk: `test-rules/security_content/detections/` — 2,124 ESCU detections
+  (`.yml` with a `search:` SPL query + metadata). `detections/deprecated/` exists.
+- Panther: `test-rules/panther-analysis/rules/` — 877 rules (`.yml` metadata +
+  sibling `.py` logic; catalogued as `recognized_unsupported`, query deferred).
+
+**Catalog a corpus** (workspace is any dir; use a scratch one outside the repo):
+
+```bash
+export ADEF_WORKSPACE=~/work/adef-catalog-demo
+mkdir -p "$ADEF_WORKSPACE/journals"
+
+# Dry-run first to see counts/formats without writing:
+.venv/bin/adef catalog test-rules/security_content/detections --dry-run
+
+# Real run → writes catalog/<platform>/D-XXXX-*.yml + INDEX.yml + journals:
+.venv/bin/adef catalog test-rules/security_content/detections
+.venv/bin/adef catalog test-rules/panther-analysis/rules
+```
+
+Expected: Splunk → 2,124 records (`format: splunk-escu`, inline `query:` SPL);
+Panther → 877 records (`format: panther`, `support: recognized_unsupported`,
+empty `query`). **Both flag `needs_review` heavily** — platform/MITRE inference is
+weak on these formats (Phase 2 work). Inspect a record:
+`cat "$ADEF_WORKSPACE"/catalog/*/D-0001-*.yml` and the reverse maps in
+`catalog/INDEX.yml` (`by_data_source`, `by_engine`, `by_status`).
+
+**Schema from the cataloged rules:**
+
+```bash
+# Rules-only schemas grouped by (data_source, query_language); Sigma/Panther
+# excluded from field extraction (no single query language we parse yet):
+.venv/bin/adef schema from-catalog
+ls "$ADEF_WORKSPACE"/schema/     # e.g. one per Splunk data_source
+```
+
+Note: schema-from-catalog produces **rules-only** schemas (`in_data: false`);
+populating data-side fields needs `adef schema update`, still a stub. Also expect
+`data_source` fragmentation on Splunk (free-text values like `AWS CloudTrail`
+vs `AWS CloudTrail ConsoleLogin` → many near-duplicate schemas) — the raw-literal
+tradeoff, now visible on real data.
+
+The `~/work/adef-catalog-demo/` workspace is scratch (outside the repo, not
+committed); delete anytime with `rm -rf ~/work/adef-catalog-demo`.
+
+---
+
 ## Current state (as of 2026-07-15)
 
 **Everything from the cataloging session is UNCOMMITTED** (working tree only).
@@ -74,22 +134,37 @@ Anti-goal guards green: `test_schema_parity` (no `detections/` writes),
 
 ## What `adef catalog` does
 
-`adef catalog /path/to/rules` walks a detection repo read-only, sniffs each
-rule's format (Sigma `.yml`, Splunk `.conf`, `.kql`, `.sql`, `.cql`), and writes:
+`adef catalog /path/to/rules` walks a detection repo read-only, recognizes each
+file's format by **content signature** (not just extension), and writes:
 - `catalog/<platform>/D-XXXX-<slug>.yml` — enrichment record referencing the
-  source via `rule_ref` (+ absolute `original_path`). Never modifies the source.
+  source via `rule_ref` (+ absolute `original_path`), with the detection logic
+  captured **inline** in `query` (block scalar; empty when logic is external like
+  Panther `.py`). Never modifies the source.
 - `catalog/INDEX.yml` — generated lookup: `detections` + `by_platform`/`by_tactic`
-  /`by_engine`/`by_status`.
+  /`by_engine`/`by_status`/`by_data_source`.
 - a paired skeleton journal per rule (shared `D-XXXX` ID space with journals).
 
-Rules whose platform/MITRE can't be inferred get `needs_review: true` (we never
-prompt mid-run — "infer and flag"). `--dry-run` previews without writing.
+**Formats recognized (as of Phase 1):** Sigma, Splunk ESCU YAML, Panther,
+raw `.sql`/`.kql`/`.cql`, Splunk `savedsearches.conf`. Recognition is
+general-shape-first ("has a query/logic + detection metadata"); vendor signatures
+are hints, not a closed list. Every file resolves to one of three outcomes via
+the `support` field: `supported` (parsed) · `recognized_unsupported` (format
+known, extractor pending, e.g. Panther) · `not_a_rule` (config/docs/pack/story —
+skipped, never silently dropped from the *rule* set).
 
-**`engine` vs `format` — remember this.** Catalog `engine` stays in ADEF's
-internal 4-value taxonomy (`sigma|sql|sch_sql|composite`) so
-`test_no_new_engine_types.py` keeps guarding it. The *true* source format lives
-in a separate `format` field (`sigma|spl|kql|cql|sql`), lossless. Jarrett
-confirmed the 4 engines are an internal convention, not a limit on a user's repo.
+Rules whose platform/MITRE can't be inferred get `needs_review: true` (we never
+prompt mid-run — "infer and flag"; auto-detect only, no format question).
+`--dry-run` previews without writing.
+
+**Record fields worth knowing:**
+- `engine` vs `format` — `engine` stays in ADEF's internal 4-value taxonomy
+  (`sigma|sql|sch_sql|composite`) so `test_no_new_engine_types.py` keeps guarding
+  it; `format` carries the true source (`sigma|splunk-escu|panther|spl|kql|cql|sql`),
+  lossless. The 4 engines are an internal convention, not a limit on a user's repo.
+- `query` — the detection logic verbatim (added end of 2026-07-17).
+- `data_source` — raw table/index/logsource literal, verbatim (schema-from-catalog
+  grouping key).
+- `support` — the three-outcome enum above.
 
 ---
 
@@ -361,6 +436,23 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 ---
 
 ## Session log
+
+### 2026-07-17 (end of day) — Inline query field + readable YAML (Jarrett + Claude)
+- Jarrett spotted the catalog record had **no query** — discovery extracted it,
+  but `record_from_discovered`/`to_yaml_dict` dropped it. Real gap.
+- Added `query` to `CatalogRecord` + YAML, populated from `DiscoveredRule.query_text`
+  (empty for external logic like Panther `.py`). Records are now self-contained
+  *and* traceable (kept `rule_ref`/`original_path`). Matches the architecture-doc
+  record shape.
+- Multi-line queries render as literal block scalars (`query: |`) via a
+  catalog-scoped YAML dumper — SPL reads like SPL. Scoped so it doesn't touch the
+  schema feature's YAML.
+- 141 tests pass (+2). Guards green, ruff clean.
+- **STOPPING POINT for this session** — uncommitted work to commit + push:
+  inline-query change (`catalog.py`, `test_catalog.py`), doc updates (this file,
+  `docs/plans/2026-07-15-catalog-design.md`, ISA.md). Next up (Phase 2 candidates):
+  platform inference (everything's `multi-platform`/`needs_review`) and
+  `data_source` normalization (fragmentation on Splunk).
 
 ### 2026-07-17 (later still) — Format-detection Phase 1 built (Jarrett + Claude)
 - Implemented the recognizer registry + three-outcome `support` model + Splunk

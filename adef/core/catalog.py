@@ -26,6 +26,27 @@ import yaml
 from adef.core.journal import _atomic_write, _check_not_under_detections
 from adef.core.rule_discovery import DiscoveredRule
 
+
+class _CatalogDumper(yaml.SafeDumper):
+    """SafeDumper that renders multi-line strings as literal block scalars.
+
+    A detection ``query`` is the field humans most want to read; block style
+    (``query: |``) keeps it legible instead of an escaped one-line string. Scoped
+    to catalog writes so it never affects other modules' YAML output.
+    """
+
+
+def _represent_str(dumper: yaml.Dumper, data: str):
+    style = "|" if "\n" in data else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
+_CatalogDumper.add_representer(str, _represent_str)
+
+
+def _dump_catalog_yaml(data: dict) -> str:
+    return yaml.dump(data, Dumper=_CatalogDumper, sort_keys=False, allow_unicode=True)
+
 _DETECTION_ID_RE = re.compile(r"^D-(\d{4,})$")
 _SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
 
@@ -65,6 +86,7 @@ class CatalogRecord:
     kind: str              # atomic | correlation | composite
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
     format: str            # sigma | spl | kql | cql | sql (true source format)
+    query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema-from-catalog grouping key)
     support: str = "supported"  # supported | recognized_unsupported (how well we parse the format)
     mitre: list[str] = dataclass_field(default_factory=list)
@@ -83,6 +105,7 @@ class CatalogRecord:
             "title": self.title,
             "rule_ref": self.rule_ref,
             "original_path": self.original_path,
+            "query": self.query,
             "platform": self.platform,
             "kind": self.kind,
             "engine": self.engine,
@@ -126,6 +149,7 @@ def record_from_discovered(
         title=title,
         rule_ref=rule_ref,
         original_path=str(abs_path),
+        query=disc.query_text,
         platform=platform,
         kind=disc.kind,
         engine=disc.engine,
@@ -159,7 +183,7 @@ class Catalog:
     def write(self, rec: CatalogRecord) -> Path:
         """Write a catalog record to ``catalog/<platform>/D-XXXX-<slug>.yml``."""
         path = self._path_for(rec)
-        content = yaml.safe_dump(rec.to_yaml_dict(), sort_keys=False, allow_unicode=True)
+        content = _dump_catalog_yaml(rec.to_yaml_dict())
         _atomic_write(path, content)
         return path
 
