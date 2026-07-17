@@ -28,7 +28,12 @@ import yaml
 
 # Query languages we recognise. This is the *source-format* axis, NOT the
 # four-value engine taxonomy — keep the two separate on purpose.
-Format = str  # one of: "sigma", "spl", "kql", "cql", "sql"
+Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther"
+
+# Support outcome: how well ADEF can handle a recognized file.
+SUPPORTED = "supported"                            # recognized AND metadata/query extractable
+RECOGNIZED_UNSUPPORTED = "recognized_unsupported"  # format known, extractor pending
+NOT_A_RULE = "not_a_rule"                          # config, docs, pack, story, data model…
 
 # Fold a source format into ADEF's internal engine taxonomy. Sigma is its own
 # engine; SQL is sql; everything else is a query engine we treat as sql-shaped
@@ -39,6 +44,16 @@ _FORMAT_TO_ENGINE = {
     "spl": "sql",
     "kql": "sql",
     "cql": "sql",
+    "splunk-escu": "sql",  # SPL query engine
+    "panther": "sql",      # Python-defined detection; folds to sql internally
+}
+
+# Map a source format to the query language its ``query_text`` is written in, for
+# schema field extraction. Splunk ESCU rules carry SPL. Formats without a single
+# extractable query language (sigma structure, panther python) map to themselves
+# and are simply skipped by the field scanner.
+_FORMAT_TO_QUERY_LANGUAGE = {
+    "splunk-escu": "spl",
 }
 
 _MITRE_TECHNIQUE_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
@@ -83,12 +98,20 @@ class DiscoveredRule:
     # normalisation). Empty when unresolvable. Drives schema-from-catalog
     # grouping; see ISA.md 2026-07-16.
     data_source: str = ""
+    # How well ADEF handles this format: SUPPORTED (parsed) or
+    # RECOGNIZED_UNSUPPORTED (format known, extractor pending, e.g. Panther .py).
+    support: str = SUPPORTED
     needs_review: bool = False
 
     @property
     def query_language(self) -> Format:
-        """The source query language (alias of ``format``, for schema callers)."""
-        return self.format
+        """The source query language for schema field extraction.
+
+        Usually the same as ``format``; vendor packagings map to their underlying
+        query language (Splunk ESCU rules are SPL). Panther has no single query
+        language we extract in v1.
+        """
+        return _FORMAT_TO_QUERY_LANGUAGE.get(self.format, self.format)
 
     @property
     def engine(self) -> str:
@@ -97,35 +120,136 @@ class DiscoveredRule:
 
 
 # --------------------------------------------------------------------------- #
-# Format sniffing
+# Format recognition — content-signature registry (general-shape-first)
 # --------------------------------------------------------------------------- #
-def sniff_format(filename: str, text: str) -> Optional[Format]:
-    """Classify a rule file by extension + content. ``None`` if not a rule.
+@dataclass(frozen=True)
+class Recognition:
+    """The outcome of classifying one file: its format + how well we support it."""
 
-    Extension decides the obvious cases; YAML needs a content sniff because a
-    ``.yml`` file is only a Sigma rule if it has ``detection:`` and
-    ``logsource:`` (otherwise it's config, a workflow, docs, etc.).
-    """
-    name = filename.lower()
-    if name.endswith(".sql"):
-        return "sql"
-    if name.endswith(".kql"):
-        return "kql"
-    if name.endswith(".cql"):
-        return "cql"
-    if name.endswith(".conf"):
-        # Splunk savedsearches.conf-style: a stanza with a ``search =`` line.
-        if "search" in text and "[" in text:
-            return "spl"
+    format: Optional[Format]  # None only when support is NOT_A_RULE
+    support: str              # one of SUPPORTED / RECOGNIZED_UNSUPPORTED / NOT_A_RULE
+
+
+def _load_yaml(text: str) -> Optional[dict]:
+    """Parse ``text`` as a YAML mapping, or return ``None`` if it isn't one."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
         return None
-    if name.endswith((".yml", ".yaml")):
-        # Sigma is YAML with both a logsource and a detection block.
-        if re.search(r"^\s*detection\s*:", text, re.MULTILINE) and re.search(
-            r"^\s*logsource\s*:", text, re.MULTILINE
-        ):
-            return "sigma"
+    return data if isinstance(data, dict) else None
+
+
+# Each recognizer takes (name, text, parsed-yaml-or-None) and returns a
+# ``Recognition`` if it claims the file, else ``None``. Order matters: the first
+# claim wins. Recognizers key on *content signature* — the presence of a
+# query/logic field plus detection metadata — not on file extension. Extension
+# only gates the raw-query recognizers (a ``.sql`` file is SQL by extension).
+
+
+def _recognize_sigma(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    if doc is None:
         return None
+    # Sigma's signature: a detection block + a logsource block.
+    if isinstance(doc.get("detection"), dict) and "logsource" in doc:
+        return Recognition("sigma", SUPPORTED)
     return None
+
+
+def _recognize_splunk_escu(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    if doc is None:
+        return None
+    # Splunk ESCU detection: has a `search` (the SPL query) + a `type`. A *story*
+    # or *data model* has neither → falls through to not-a-rule. This is the
+    # general-shape test (query field present), not a filename check.
+    if doc.get("search") and doc.get("type"):
+        return Recognition("splunk-escu", SUPPORTED)
+    return None
+
+
+def _recognize_panther(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    if doc is None:
+        return None
+    analysis = str(doc.get("AnalysisType", "")).lower()
+    # A Panther *pack* has AnalysisType: pack (+ PackID) and no rule logic → not a
+    # rule. A rule/scheduled_rule/correlation_rule carries RuleID and points at
+    # its logic via Filename (a sibling .py we don't parse in v1) → recognized,
+    # not-yet-supported for query extraction.
+    if analysis == "pack" or "PackID" in doc:
+        return None  # let it fall through to NOT_A_RULE
+    if doc.get("RuleID") and analysis:
+        return Recognition("panther", RECOGNIZED_UNSUPPORTED)
+    return None
+
+
+def _recognize_raw_query(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    """Raw single-query files, gated by extension (they carry no metadata block)."""
+    lower = name.lower()
+    if lower.endswith(".sql"):
+        return Recognition("sql", SUPPORTED)
+    if lower.endswith(".kql"):
+        return Recognition("kql", SUPPORTED)
+    if lower.endswith(".cql"):
+        return Recognition("cql", SUPPORTED)
+    return None
+
+
+def _recognize_spl_conf(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    """Splunk ``savedsearches.conf``: a stanza with a real ``search = <SPL>`` line.
+
+    Tighter than the old ``[`` + ``search`` guess so osquery/app ``.conf`` files
+    don't false-positive.
+    """
+    if not name.lower().endswith(".conf"):
+        return None
+    if re.search(r"^\[.+\]\s*$", text, re.MULTILINE) and re.search(
+        r"^\s*search\s*=", text, re.MULTILINE
+    ):
+        return Recognition("spl", SUPPORTED)
+    return None
+
+
+_RECOGNIZERS = (
+    _recognize_sigma,
+    _recognize_splunk_escu,
+    _recognize_panther,
+    _recognize_spl_conf,
+    _recognize_raw_query,
+)
+
+
+def recognize(filename: str, text: str) -> Recognition:
+    """Classify a file: its detection format and how well ADEF supports it.
+
+    Content-signature driven (general-shape-first): a file is a *rule* when it
+    carries a query/logic field plus detection metadata. Vendor signatures locate
+    those; they are not a closed list. Anything no recognizer claims — configs,
+    docs, packs, stories, data models — is ``NOT_A_RULE``.
+    """
+    doc = _load_yaml(text) if _looks_like_yaml(filename, text) else None
+    for recognizer in _RECOGNIZERS:
+        result = recognizer(filename, text, doc)
+        if result is not None:
+            return result
+    return Recognition(None, NOT_A_RULE)
+
+
+def _looks_like_yaml(filename: str, text: str) -> bool:
+    """Cheap gate: only attempt YAML parse for plausibly-YAML files."""
+    if filename.lower().endswith((".yml", ".yaml")):
+        return True
+    # Some rule files are YAML without the extension; a leading mapping key is a
+    # good-enough hint without paying the parse cost on every .sql/.conf.
+    return bool(re.match(r"^\s*[A-Za-z_][\w-]*\s*:", text))
+
+
+def sniff_format(filename: str, text: str) -> Optional[Format]:
+    """Back-compat: return the recognized format string, or ``None`` if not a rule.
+
+    Thin wrapper over :func:`recognize`; prefer ``recognize`` for new code so you
+    get the support outcome too.
+    """
+    result = recognize(filename, text)
+    return result.format if result.support != NOT_A_RULE else None
 
 
 # --------------------------------------------------------------------------- #
@@ -249,12 +373,85 @@ def _extract_generic(text: str, fmt: Format) -> DiscoveredRule:
     )
 
 
+def _extract_splunk_escu(text: str) -> DiscoveredRule:
+    """Full extraction for a Splunk ESCU detection YAML.
+
+    The SPL query is the ``search`` field; metadata is inline
+    (``name``/``mitre_attack_id``/``data_source``).
+    """
+    doc = _load_yaml(text) or {}
+    query = str(doc.get("search") or "").strip()
+    title = str(doc.get("name") or "").strip()
+
+    mitre_raw = doc.get("mitre_attack_id") or []
+    mitre = _normalise_mitre(str(t) for t in mitre_raw) if isinstance(mitre_raw, list) else ()
+
+    # data_source may be a list (ESCU) — take the first, verbatim.
+    ds_raw = doc.get("data_source") or doc.get("datamodel") or ""
+    if isinstance(ds_raw, list):
+        data_source = str(ds_raw[0]).strip() if ds_raw else ""
+    else:
+        data_source = str(ds_raw).strip()
+
+    return DiscoveredRule(
+        path=Path("."),
+        format="splunk-escu",
+        query_text=query,
+        title=title,
+        platform=None,  # ESCU doesn't carry a clean OS platform; inferred later
+        mitre=mitre,
+        kind="atomic",
+        data_source=data_source,
+        support=SUPPORTED,
+        needs_review=not mitre,
+    )
+
+
+def _extract_panther(text: str) -> DiscoveredRule:
+    """Metadata-only extraction for a Panther rule.
+
+    The detection logic lives in a sibling ``.py`` (``Filename:``) which we do
+    not parse in v1 → ``query_text`` stays empty, ``support`` is
+    RECOGNIZED_UNSUPPORTED. Metadata (title, MITRE via ``Reports``, data source
+    via ``LogTypes``) still comes from the YAML.
+    """
+    doc = _load_yaml(text) or {}
+    title = str(doc.get("DisplayName") or doc.get("RuleID") or "").strip()
+
+    # MITRE lives under Reports -> "MITRE ATT&CK" -> ["TA0001:T1078", ...].
+    reports = doc.get("Reports") or {}
+    mitre_tokens: list[str] = []
+    if isinstance(reports, dict):
+        for vals in reports.values():
+            if isinstance(vals, list):
+                mitre_tokens.extend(str(v) for v in vals)
+    mitre = _normalise_mitre(mitre_tokens)
+
+    logtypes = doc.get("LogTypes") or []
+    data_source = str(logtypes[0]).strip() if isinstance(logtypes, list) and logtypes else ""
+
+    return DiscoveredRule(
+        path=Path("."),
+        format="panther",
+        query_text="",  # logic is in the sibling .py — deferred (ISA 2026-07-17)
+        title=title,
+        platform=None,
+        mitre=mitre,
+        kind="atomic",
+        data_source=data_source,
+        support=RECOGNIZED_UNSUPPORTED,
+        needs_review=True,
+    )
+
+
 _EXTRACTORS = {
     "sigma": lambda text: _extract_sigma(text),
     "spl": lambda text: _extract_spl_conf(text),
     "kql": lambda text: _extract_kql(text),
     "sql": lambda text: _extract_generic(text, "sql"),
     "cql": lambda text: _extract_generic(text, "cql"),
+    "splunk-escu": lambda text: _extract_splunk_escu(text),
+    "panther": lambda text: _extract_panther(text),
 }
 
 
@@ -262,11 +459,14 @@ _EXTRACTORS = {
 # The walk
 # --------------------------------------------------------------------------- #
 def discover_rules(rule_root: Path) -> Iterator[DiscoveredRule]:
-    """Yield a ``DiscoveredRule`` for every rule file under ``rule_root``.
+    """Yield a ``DiscoveredRule`` for every *rule* file under ``rule_root``.
 
-    Read-only. Files that don't sniff to a known format are skipped silently
-    (a repo has READMEs, configs, CI files). Unreadable/malformed files are
-    skipped too — discovery never aborts the whole walk on one bad file.
+    Read-only. Every file is classified by :func:`recognize`. ``NOT_A_RULE``
+    files (READMEs, configs, packs, stories, data models) are skipped. Recognized
+    files are yielded — including ``RECOGNIZED_UNSUPPORTED`` formats (e.g. Panther,
+    whose logic is external) so the catalog reports honest coverage instead of
+    silently dropping them. Unreadable files are skipped; a malformed rule of a
+    known format is still yielded (needs_review) rather than vanishing.
     """
     root = Path(rule_root).expanduser()
     if not root.is_dir():
@@ -278,18 +478,31 @@ def discover_rules(rule_root: Path) -> Iterator[DiscoveredRule]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        fmt = sniff_format(path.name, text)
-        if fmt is None:
+        rec = recognize(path.name, text)
+        if rec.support == NOT_A_RULE or rec.format is None:
+            continue
+        extractor = _EXTRACTORS.get(rec.format)
+        if extractor is None:
+            # Recognized format with no extractor yet — still surface it.
+            rule = DiscoveredRule(
+                path=path,
+                format=rec.format,
+                query_text="",
+                support=rec.support,
+                needs_review=True,
+            )
+            yield rule
             continue
         try:
-            rule = _EXTRACTORS[fmt](text)
+            rule = _EXTRACTORS[rec.format](text)
         except Exception:
             # A malformed rule of a known format still gets catalogued as
             # needs_review rather than vanishing.
             rule = DiscoveredRule(
                 path=path,
-                format=fmt,
+                format=rec.format,
                 query_text=text.strip(),
+                support=rec.support,
                 needs_review=True,
             )
             yield rule
@@ -333,4 +546,14 @@ def scan_rule_fields(rule_root: Path, query_language: Format) -> set[str]:
     return fields
 
 
-__all__ = ["DiscoveredRule", "discover_rules", "scan_rule_fields", "sniff_format"]
+__all__ = [
+    "DiscoveredRule",
+    "Recognition",
+    "SUPPORTED",
+    "RECOGNIZED_UNSUPPORTED",
+    "NOT_A_RULE",
+    "discover_rules",
+    "recognize",
+    "scan_rule_fields",
+    "sniff_format",
+]

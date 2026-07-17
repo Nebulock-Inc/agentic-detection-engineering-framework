@@ -274,6 +274,12 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `data_source` on `CatalogRecord` + YAML + `by_data_source` reverse map in INDEX. 2 new tests in `tests/test_catalog.py`.
   - `adef schema from-catalog` groups catalogued rules by `(data_source, query_language)` → `schema/<source>.yml`; un-inferred sources pool by language (`schema/<lang>.yml`); Sigma excluded. 6 tests in `tests/test_schema_from_catalog.py`.
   - Full suite **119 passed**. Anti-goal guards green. End-to-end verified: two SQL rules on `cloudtrail` merge into one schema; KQL→`DeviceProcessEvents.yml`; `SELECT 1` pools into `sql.yml` fallback.
+- 2026-07-17 — Format-detection Phase 1 IMPLEMENTED (plan: `docs/plans/2026-07-17-format-detection-plan.md`). Corrects the Sigma-YAML-only bias found by testing against real corpora. Decisions + evidence:
+  - **Content-signature recognizer registry** in `rule_discovery` (general-shape-first: has query/logic + detection metadata; vendor signatures are hints, not a closed list). `recognize()` returns `Recognition(format, support)`; `sniff_format` kept as a thin back-compat wrapper.
+  - **Three-outcome `support` model:** `supported | recognized_unsupported | not_a_rule`, distinct from `needs_review`. On `DiscoveredRule` + `CatalogRecord` + catalog YAML. `discover_rules` yields recognized-unsupported rules (no silent drops); only `not_a_rule` skipped.
+  - **New formats:** Splunk ESCU (`search:`+`type:` → full extract, SPL query, `mitre_attack_id`/`data_source`) and Panther (`AnalysisType`+`RuleID` → metadata-only, `recognized_unsupported`; logic in sibling `.py` deferred). Splunk *stories* and Panther *packs* correctly resolve to `not_a_rule` (no query). osquery dropped from scope.
+  - **Auto-detect only** — no user format prompt (init stays non-interactive).
+  - Full suite **139 passed** (+20). Guards green, ruff clean. **End-to-end on real corpora: Splunk `detections/` 0→2124, Panther `rules/` 0→877.** Known follow-up: platform inference for Splunk ESCU is weak (most flag `needs_review`) — Phase 2 refinement.
 
 ## Changelog
 

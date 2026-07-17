@@ -66,6 +66,7 @@ class CatalogRecord:
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
     format: str            # sigma | spl | kql | cql | sql (true source format)
     data_source: str = ""  # raw table/index/logsource literal (schema-from-catalog grouping key)
+    support: str = "supported"  # supported | recognized_unsupported (how well we parse the format)
     mitre: list[str] = dataclass_field(default_factory=list)
     status: str = "draft"  # draft | ready | tuning | deprecated
     stage: str = "find"    # find | observe | refine | govern | evolve
@@ -87,6 +88,7 @@ class CatalogRecord:
             "engine": self.engine,
             "format": self.format,
             "data_source": self.data_source,
+            "support": self.support,
             "mitre": list(self.mitre),
             "status": self.status,
             "stage": self.stage,
@@ -129,6 +131,7 @@ def record_from_discovered(
         engine=disc.engine,
         format=disc.format,
         data_source=disc.data_source,
+        support=disc.support,
         mitre=list(disc.mitre),
         needs_review=disc.needs_review or disc.platform is None,
     )

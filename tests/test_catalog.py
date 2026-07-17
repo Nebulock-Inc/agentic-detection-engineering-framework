@@ -86,6 +86,33 @@ def test_record_carries_data_source(rule_repo, workspace):
     assert rec.data_source == "windows"
 
 
+def test_record_carries_support_from_discovered(workspace):
+    from adef.core.rule_discovery import DiscoveredRule, RECOGNIZED_UNSUPPORTED
+
+    disc = DiscoveredRule(
+        path=Path("/tmp/x/panther_rule.yml"),
+        format="panther",
+        query_text="",
+        title="AWS Test",
+        support=RECOGNIZED_UNSUPPORTED,
+        needs_review=True,
+    )
+    rec = record_from_discovered("D-0009", disc, workspace=workspace)
+    assert rec.support == RECOGNIZED_UNSUPPORTED
+
+
+def test_written_yaml_includes_support(workspace):
+    cat = Catalog(workspace)
+    rec = CatalogRecord(
+        id="D-0001", title="x", rule_ref="r", original_path="/a",
+        platform="windows", kind="atomic", engine="sql", format="panther",
+        support="recognized_unsupported",
+    )
+    path = cat.write(rec)
+    data = yaml.safe_load(path.read_text())
+    assert data["support"] == "recognized_unsupported"
+
+
 def test_written_yaml_includes_data_source(workspace):
     cat = Catalog(workspace)
     rec = CatalogRecord(

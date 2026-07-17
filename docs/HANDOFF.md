@@ -362,6 +362,16 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 
 ## Session log
 
+### 2026-07-17 (later still) — Format-detection Phase 1 built (Jarrett + Claude)
+- Implemented the recognizer registry + three-outcome `support` model + Splunk
+  ESCU and Panther recognizers/extractors. `discover_rules` now uses `recognize()`
+  and no longer silently drops recognized-but-unsupported rules.
+- **Real-corpus result: Splunk `detections/` 0→2124, Panther `rules/` 0→877.**
+- Full suite **139 passed** (+20). Guards green, ruff clean. `support` on
+  `CatalogRecord` + YAML.
+- Follow-up for Phase 2: Splunk platform inference is weak (most rules flag
+  `needs_review` — no OS platform on a tstats query). Metadata-extraction polish.
+
 ### 2026-07-17 (later) — Test corpora + format-detection plan (Jarrett + Claude)
 - Cloned 3 open-source rule repos into `test-rules/` (gitignored). `adef catalog`
   found ~0 in Splunk/Panther and false-positived on osquery → confirmed the
