@@ -1,185 +1,45 @@
-"""``adef schema`` — schema storage commands."""
+"""``adef schema`` — declaration-driven data schemas.
+
+Users provide a **data-source declaration** (``adef-sources.yml``: sources +
+fields, produced from artifacts they already have — Splunk ``| fieldsummary``,
+KQL ``| getschema``, Elastic mappings). ``ingest`` builds one
+``schema/<source>.yml`` (``schema_version: 2``) per source with
+``declared | corrected`` field provenance; re-ingest preserves human
+corrections and reports drift. ``check`` cross-references the fields
+catalogued rules actually use against the declared schemas.
+
+The former rules-derived model (interactive ``init`` wizard, ``from-catalog``
+field derivation, ``update``/``rescan`` stubs) was removed pre-release — see
+``docs/plans/2026-07-20-schema-declaration-design.md`` and ISA 2026-07-20.
+"""
 
 from __future__ import annotations
+
 import json
 import os
 import sys
 from pathlib import Path
-from datetime import datetime, timezone
 
 import click
+import yaml
 from rich.console import Console
 
-from adef.core.schema import Schema, merge_fields, write_schema, read_schema
-from adef.core.rule_parser import extract_sql_fields, extract_spl_fields, extract_cql_fields, extract_kql_fields
-from adef.core.data_sampler import sample_data_from_json, sample_data_from_csv
-from adef.core.llm_client import generate_field_descriptions
+from adef.core.declaration import (
+    DeclarationError,
+    ingest_source,
+    known_field_names,
+    lint_declaration_dict,
+    load_declaration,
+    read_schema_v2,
+)
+from adef.core.rule_parser import (
+    extract_cql_fields,
+    extract_kql_fields,
+    extract_spl_fields,
+    extract_sql_fields,
+)
 
 console = Console()
-
-
-def _now_iso() -> str:
-    """Return current timestamp in ISO 8601 format."""
-    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-
-
-def _get_workspace_schema_dir() -> Path:
-    """Get workspace schema directory from env or default."""
-    workspace = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-    return workspace / "schema"
-
-
-@click.group()
-def schema():
-    """Manage data schemas (field inventory + types + populations)."""
-    pass
-
-
-@schema.command()
-@click.argument("source")
-@click.option("--rule-root", type=Path, help="Path to rules directory")
-@click.option("--stdin", is_flag=True, help="Read data sample from stdin")
-@click.option("--skip-rules", is_flag=True, help="Only sample data, skip rule parsing")
-@click.option("--skip-data", is_flag=True, help="Only parse rules, skip data sampling")
-def init(source: str, rule_root: Path | None, stdin: bool, skip_rules: bool, skip_data: bool):
-    """Initialize a data schema for SOURCE (interactive wizard)."""
-    console.print(f"[bold]Initializing schema for {source}[/bold]\n")
-
-    # 1. Get query language
-    query_language = click.prompt(
-        "Which query language does this source use?",
-        type=click.Choice(["sql", "spl", "cql", "kql"], case_sensitive=False)
-    ).lower()
-
-    rule_fields = set()
-    last_rule_scan = None
-
-    # 2. Parse rules (if not skipped)
-    if not skip_rules:
-        scan_rules = click.confirm("Do you have existing rules to scan?", default=True)
-        if scan_rules:
-            if not rule_root:
-                rule_root = click.prompt("Path to rules directory", type=Path)
-
-            console.print(f"Scanning rules in {rule_root}...")
-            from adef.core.rule_discovery import scan_rule_fields
-
-            rule_fields = scan_rule_fields(rule_root, query_language)
-            last_rule_scan = _now_iso()
-            console.print(f"Found {len(rule_fields)} fields in rules")
-
-    data_fields = {}
-    last_data_sample = None
-    sample_window = None
-    sample_size = None
-
-    # 3. Sample data (if not skipped)
-    if not skip_data:
-        sample_now = click.confirm("Sample data now to discover field types?", default=True)
-        if sample_now:
-            if stdin:
-                console.print("Reading data from stdin...")
-                data_input = sys.stdin.read()
-            else:
-                console.print("Paste JSON or CSV data (Ctrl+D when done):")
-                data_input = sys.stdin.read()
-
-            # Detect format and parse
-            try:
-                data_fields = sample_data_from_json(data_input)
-                last_data_sample = _now_iso()
-                sample_size = len(json.loads(data_input))
-            except json.JSONDecodeError:
-                data_fields = sample_data_from_csv(data_input)
-                last_data_sample = _now_iso()
-                sample_size = len(data_input.strip().split("\n")) - 1  # minus header
-
-            console.print(f"Sampled {sample_size} rows, found {len(data_fields)} fields")
-
-    # 4. Merge fields
-    merged_fields = merge_fields(rule_fields, data_fields)
-
-    # 5. Generate descriptions (if fields exist)
-    if merged_fields:
-        try:
-            console.print("Generating field descriptions...")
-            descriptions = generate_field_descriptions(merged_fields, query_language, source)
-            for field in merged_fields:
-                field.description = descriptions.get(field.name, "")
-        except RuntimeError as e:
-            console.print(f"[yellow]Warning: {e}[/yellow]")
-            console.print("Descriptions set to empty (edit schema YAML manually)")
-
-    # 6. Write schema
-    schema_obj = Schema(
-        source=source,
-        query_language=query_language,
-        last_rule_scan=last_rule_scan,
-        last_data_sample=last_data_sample,
-        sample_window=sample_window,
-        sample_size=sample_size,
-        fields=merged_fields
-    )
-
-    schema_dir = _get_workspace_schema_dir()
-    schema_path = schema_dir / f"{source}.yml"
-    write_schema(schema_obj, schema_path)
-
-    # 7. Output summary
-    console.print(f"\n[green]Schema initialized:[/green] schema/{source}.yml")
-    console.print(f"  Fields from rules: {sum(1 for f in merged_fields if f.in_rules)}")
-    console.print(f"  Fields from data: {sum(1 for f in merged_fields if f.in_data)}")
-    console.print(f"  Overlap: {sum(1 for f in merged_fields if f.in_rules and f.in_data)}")
-
-    rules_only = [f.name for f in merged_fields if f.in_rules and not f.in_data]
-    if rules_only:
-        console.print(f"  [yellow]⚠️  Rules-only (missing in data): {len(rules_only)}[/yellow]")
-
-    console.print(f"\nNext steps:")
-    console.print(f"  - Review: adef schema show {source}")
-    console.print(f"  - Edit descriptions: schema/{source}.yml")
-
-
-@schema.command()
-@click.argument("source")
-def show(source: str):
-    """Display schema for SOURCE."""
-    schema_path = _get_workspace_schema_dir() / f"{source}.yml"
-    if not schema_path.exists():
-        console.print(f"[red]Error:[/red] Schema not found: {source}")
-        sys.exit(1)
-
-    schema_obj = read_schema(schema_path)
-
-    console.print(f"[bold]{schema_obj.source}[/bold]")
-    console.print(f"Query language: {schema_obj.query_language}")
-    console.print(f"Last rule scan: {schema_obj.last_rule_scan or 'Never'}")
-    console.print(f"Last data sample: {schema_obj.last_data_sample or 'Never'}")
-    console.print(f"\nFields ({len(schema_obj.fields)} total):")
-
-    for field in schema_obj.fields:
-        icon = "✓" if field.in_rules and field.in_data else "⚠" if field.in_rules else "ℹ"
-        console.print(f"  {icon} {field.name} ({field.type}, {int(field.population * 100)}% populated)")
-        console.print(f"    In rules: {'yes' if field.in_rules else 'NO'} | In data: {'yes' if field.in_data else 'NO'}")
-        if field.description:
-            console.print(f"    \"{field.description}\"")
-
-
-@schema.command()
-@click.argument("source")
-def update(source: str):
-    """Re-sample data to detect drift for SOURCE."""
-    console.print(f"[bold]Updating schema: {source}[/bold]")
-    # Implementation will go here
-
-
-@schema.command()
-@click.argument("source")
-def rescan(source: str):
-    """Re-parse rules to refresh in_rules flags for SOURCE."""
-    console.print(f"[bold]Rescanning rules: {source}[/bold]")
-    # Implementation will go here
-
 
 # Query-language field extractors, keyed by the catalog record's ``format``.
 # Sigma is excluded on purpose — it's structured YAML, not a query language.
@@ -191,77 +51,238 @@ _FIELD_EXTRACTORS = {
 }
 
 
-@schema.command(name="from-catalog")
+def _get_workspace_schema_dir() -> Path:
+    """Get workspace schema directory from env or default."""
+    workspace = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
+    return workspace / "schema"
+
+
+@click.group()
+def schema():
+    """Manage data schemas (declared sources + fields for rule authoring)."""
+    pass
+
+
+@schema.command()
+@click.argument(
+    "declaration_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
 @click.option(
     "--workspace",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
     help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
 )
-def from_catalog(workspace: Path | None):
-    """Generate data schemas from the catalog.
+def ingest(declaration_file: Path, workspace: Path | None):
+    """Build schemas from a data-source declaration (adef-sources.yml).
 
-    Groups catalogued rules by (data_source, query_language) and writes one
-    ``schema/<data_source>.yml`` per group. Rules whose data source could not be
-    inferred pool by language into ``schema/<language>.yml`` (the fallback
-    bucket). Sigma rules are skipped — they aren't a query language.
+    Writes one ``schema/<source>.yml`` (schema_version 2) per declared source.
+    Re-ingest replaces declared fields, preserves human ``corrected`` fields,
+    and reports drift.
+    """
+    schema_dir = (
+        Path(workspace).expanduser().resolve() / "schema"
+        if workspace
+        else _get_workspace_schema_dir()
+    )
+    try:
+        sources = load_declaration(declaration_file)
+    except DeclarationError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    _, lint_warnings = lint_declaration_dict(
+        yaml.safe_load(declaration_file.read_text(encoding="utf-8"))
+    )
+    for warning in lint_warnings:
+        console.print(f"  [yellow]warning:[/yellow] {warning}")
+
+    for src in sources:
+        path, drift = ingest_source(src, schema_dir)
+        console.print(
+            f"[green]Ingested[/green] {src.name} → schema/{path.name} "
+            f"({len(src.fields)} declared fields)"
+        )
+        if drift.corrected_kept:
+            console.print(
+                f"  kept {len(drift.corrected_kept)} corrected field(s): "
+                + ", ".join(drift.corrected_kept)
+            )
+        if drift.any:
+            if drift.added:
+                console.print(f"  [cyan]drift:[/cyan] added: {', '.join(drift.added)}")
+            if drift.removed:
+                console.print(f"  [cyan]drift:[/cyan] removed: {', '.join(drift.removed)}")
+            if drift.type_changed:
+                console.print(
+                    f"  [cyan]drift:[/cyan] type changed: {', '.join(drift.type_changed)}"
+                )
+
+
+@schema.command(name="lint")
+@click.argument(
+    "declaration_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+def lint_cmd(declaration_file: Path):
+    """Validate a data-source declaration (exit 1 on errors)."""
+    try:
+        data = yaml.safe_load(declaration_file.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise click.ClickException(f"{declaration_file}: not parseable as YAML: {exc}") from exc
+
+    errors, warnings = lint_declaration_dict(data)
+    for warning in warnings:
+        console.print(f"  [yellow]warning:[/yellow] {warning}")
+    if errors:
+        for err in errors:
+            console.print(f"  [red]✗[/red] {err}")
+        raise click.ClickException(f"{declaration_file}: {len(errors)} problem(s)")
+    console.print(f"[green]OK[/green] {declaration_file}")
+
+
+@schema.command()
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
+)
+@click.option(
+    "--report",
+    "report_format",
+    type=click.Choice(["json"]),
+    default=None,
+    help="Emit a machine-readable findings report.",
+)
+def check(workspace: Path | None, report_format: str | None):
+    """Cross-reference rule field usage against declared schemas.
+
+    For every catalogued rule whose ``data_source`` has a schema_version-2
+    schema, extract the fields the rule references and compare against the
+    schema (field names + aliases). Findings are advisory, never blocking:
+
+    - rule references a field the schema doesn't know (broken rule,
+      undeclared alias, or a macro worth documenting);
+    - schema fields no rule uses (unexploited detection surface).
     """
     from adef.core.catalog import Catalog
 
     ws = Path(
         workspace or os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace")
     ).expanduser().resolve()
-    cat = Catalog(ws)
     schema_dir = ws / "schema"
+    cat = Catalog(ws)
 
-    # Group query text by the schema key: the data_source when known, else the
-    # language (the pool-by-language fallback). Each group tracks its language.
-    groups: dict[tuple[str, str], list[str]] = {}  # (schema_name, language) -> queries
-    for _det_id, _path, data in cat.iter_records():
-        fmt = data.get("format", "")
-        extractor = _FIELD_EXTRACTORS.get(fmt)
-        if extractor is None:
-            continue  # skips sigma and anything without a query-language extractor
+    # source -> (known names, declared field names)
+    schemas: dict[str, set[str]] = {}
+    declared_fields: dict[str, set[str]] = {}
+    for path in sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []:
+        data = read_schema_v2(path)
+        if data:
+            schemas[data["source"]] = known_field_names(data)
+            declared_fields[data["source"]] = {
+                str(f.get("name", "")) for f in data.get("fields", [])
+            }
+
+    missing: dict[str, dict[str, list[str]]] = {}  # source -> field -> [rule ids]
+    used: dict[str, set[str]] = {s: set() for s in schemas}
+    rules_checked = 0
+    for det_id, _path, data in cat.iter_records():
         source = (data.get("data_source") or "").strip()
-        schema_name = source or fmt  # fall back to language bucket
-        original = data.get("original_path")
-        if not original or not Path(original).is_file():
+        extractor = _FIELD_EXTRACTORS.get(data.get("format", ""))
+        if source not in schemas or extractor is None:
             continue
-        try:
-            query = Path(original).read_text(encoding="utf-8")
-        except OSError:
+        query = data.get("query") or ""
+        if not query:
             continue
-        groups.setdefault((schema_name, fmt), []).append(query)
+        rules_checked += 1
+        fields = extractor(query)
+        for f in fields:
+            if f in schemas[source]:
+                used[source].add(f)
+            else:
+                missing.setdefault(source, {}).setdefault(f, []).append(det_id)
 
-    if not groups:
-        console.print("[yellow]No query-language rules in the catalog[/yellow] — nothing to generate.")
+    unused = {
+        source: sorted(declared_fields[source] - used[source])
+        for source in schemas
+        if declared_fields[source] - used[source]
+    }
+
+    if report_format == "json":
+        click.echo(
+            json.dumps(
+                {
+                    "rules_checked": rules_checked,
+                    "sources_with_schemas": sorted(schemas),
+                    "missing_from_schema": {
+                        s: {f: ids for f, ids in sorted(fields.items())}
+                        for s, fields in sorted(missing.items())
+                    },
+                    "unused_by_rules": unused,
+                },
+                indent=2,
+            )
+        )
         return
 
-    written = []
-    fallback = []
-    ts = _now_iso()
-    for (schema_name, language), queries in sorted(groups.items()):
-        extractor = _FIELD_EXTRACTORS[language]
-        rule_fields: set[str] = set()
-        for q in queries:
-            rule_fields |= extractor(q)
-        merged = merge_fields(rule_fields, {})  # rules-only; data filled later via `schema update`
-        schema_obj = Schema(
-            source=schema_name,
-            query_language=language,
-            last_rule_scan=ts,
-            last_data_sample=None,
-            sample_window=None,
-            sample_size=None,
-            fields=merged,
+    if not schemas:
+        console.print(
+            "[yellow]No schema_version-2 schemas found[/yellow] — run "
+            "`adef schema ingest <declaration.yml>` first."
         )
-        write_schema(schema_obj, schema_dir / f"{schema_name}.yml")
-        written.append((schema_name, language, len(merged)))
-        if schema_name == language:  # this group is the pooled-by-language fallback
-            fallback.append(schema_name)
+        return
+    console.print(
+        f"Checked [bold]{rules_checked}[/bold] rules against "
+        f"{len(schemas)} schema(s).\n"
+    )
+    if not missing and not unused:
+        console.print("[green]No findings.[/green]")
+        return
+    for source, fields in sorted(missing.items()):
+        console.print(f"[bold]{source}[/bold] — rule fields missing from schema:")
+        for fname, ids in sorted(fields.items()):
+            console.print(f"  [yellow]?[/yellow] {fname}  (used by {', '.join(sorted(ids))})")
+    for source, fields in sorted(unused.items()):
+        console.print(f"[bold]{source}[/bold] — declared fields no rule uses:")
+        for fname in fields:
+            console.print(f"  [cyan]·[/cyan] {fname}")
 
-    console.print(f"[green]Generated {len(written)} schema(s) from the catalog:[/green]")
-    for name, language, n_fields in written:
-        tag = " [yellow](language fallback — un-inferred sources)[/yellow]" if name in fallback else ""
-        console.print(f"  schema/{name}.yml  ({language}, {n_fields} fields){tag}")
-    console.print("\nNext: pipe data to fill types/populations — `adef schema update <source> --results -`")
+
+@schema.command()
+@click.argument("source")
+def show(source: str):
+    """Display schema for SOURCE."""
+    schema_path = _get_workspace_schema_dir() / f"{source}.yml"
+    if not schema_path.exists():
+        console.print(f"[red]Error:[/red] Schema not found: {source}")
+        sys.exit(1)
+
+    v2 = read_schema_v2(schema_path)
+    if v2 is None:
+        console.print(
+            f"[red]Error:[/red] {schema_path.name} is not a schema_version-2 file — "
+            "re-create it with `adef schema ingest <declaration.yml>`."
+        )
+        sys.exit(1)
+
+    console.print(f"[bold]{v2['source']}[/bold]  (schema v2)")
+    if v2.get("platform"):
+        console.print(f"Platform: {v2['platform']}")
+    console.print(f"Query language: {v2.get('query_language') or 'unspecified'}")
+    console.print(f"Declared: {v2.get('declared', 'unknown')}")
+    if v2.get("description"):
+        console.print(v2["description"])
+    fields = v2.get("fields", [])
+    console.print(f"\nFields ({len(fields)} total):")
+    for fld in fields:
+        marker = "✎" if fld.get("provenance") == "corrected" else " "
+        line = f"  {marker} {fld['name']} ({fld.get('type', 'string')})"
+        if fld.get("aliases"):
+            line += f"  aliases: {', '.join(fld['aliases'])}"
+        console.print(line)
+        if fld.get("description"):
+            console.print(f"      \"{fld['description']}\"")
+        if fld.get("values"):
+            console.print(f"      values: {fld['values']}")

@@ -87,7 +87,7 @@ class CatalogRecord:
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
     format: str            # sigma | spl | kql | cql | sql (true source format)
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
-    data_source: str = ""  # raw table/index/logsource literal (schema-from-catalog grouping key)
+    data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
     support: str = "supported"  # supported | recognized_unsupported (how well we parse the format)
     mitre: list[str] = dataclass_field(default_factory=list)
     status: str = "draft"  # draft | ready | tuning | deprecated

@@ -182,70 +182,52 @@ Would you like me to:
 
 **Purpose:** Help discover and validate data source schemas
 
+> **Updated 2026-07-20:** connector-based discovery was dropped (anti-goal).
+> This skill is now the **declaration-author** — profile-author's twin: the
+> user pastes whatever field inventory they have, the skill reshapes it into
+> a declaration, lints it, and ingests on approval.
+
 **Triggers:**
-- "Discover schema for Splunk security logs"
+- "Here's my fieldsummary output for Splunk security logs"
 - "What fields are available in my EDR?"
-- "Check if process_name exists in splunk-security"
-- "Validate D-0042 against discovered schema"
+- "Check if process_name exists in wineventlog"
+- "Set up the schema for my Sentinel tables"
 
 **What it does:**
-1. Guides user through connector setup
-2. Runs `adef schema discover`
-3. Summarizes available fields
-4. Validates detection rules against schema
-5. Suggests field alternatives when missing
+1. Asks the user for a field inventory (Splunk `| fieldsummary`, KQL
+   `| getschema`, Elastic `_mapping`, a vendor data dictionary — any shape)
+2. Reshapes it into a data-source declaration (`adef-sources.yml`)
+3. Validates with `adef schema lint`; user approves
+4. Runs `adef schema ingest`; summarizes fields per source
+5. Runs `adef schema check` to cross-reference existing rules
 
 **Example conversation:**
 ```
-User: Discover schema for Splunk security logs
+User: [pastes | fieldsummary output for WinEventLog:Security]
 
-Skill: I'll discover the schema from your Splunk security logs.
+Skill: That's 47 fields. Drafting a declaration...
 
-First, I need to know:
-- Splunk connector configured? [Checks: adef connector test splunk]
-- Which sourcetype? (e.g., WinEventLog:Security)
+  - EventCode (int) — values look enum-ish, keeping top 10
+  - CommandLine, user (+ aliases User/user_name spotted in your rules)
+  ...
 
-User: WinEventLog:Security
+[Writes adef-sources.yml; runs: adef schema lint adef-sources.yml → OK]
 
-Skill: Running schema discovery...
+Approve ingest? [User: yes]
 
-[Runs: adef schema discover --connector splunk --source security-logs --time-window 30d]
+[Runs: adef schema ingest adef-sources.yml]
+[Runs: adef schema check]
 
-**Schema Discovery Complete (splunk-security)**
-
-Discovered 47 fields from 1.2M events (30 day window):
-
-**High population (>95%):**
-- EventCode (100%) - integer
-- Computer (100%) - string
-- TimeCreated (100%) - timestamp
-- process_name (98%) - string
-- user (97%) - string
-
-**Medium population (50-95%):**
-- command_line (68%) - string ⚠️
-- parent_process (72%) - string
-- parent_image (88%) - string
-
-**Low population (<50%):**
-- hash_sha256 (12%) - string ⚠️
-- parent_command_line (45%) - string ⚠️
-
-Recommendation: Avoid relying on hash_sha256 or parent_command_line (low population).
-
-Would you like me to:
-- Validate a detection against this schema?
-- Show fields matching "process"?
-- Export schema for documentation?
+**wineventlog ingested (47 fields).** schema check: your rules reference
+2 fields not in the declaration (`proc_name`, `cmdline`) — likely aliases.
+Add them to the declaration, or fix the rules?
 ```
 
 **CLI commands used:**
-- `adef schema discover`
-- `adef schema list`
+- `adef schema ingest`
+- `adef schema lint`
+- `adef schema check`
 - `adef schema show`
-- `adef schema fields`
-- `adef schema validate`
-- `adef connector test`
 
 ---
 
@@ -599,12 +581,13 @@ Next steps: Review research docs via `adef research show R-XXXX`
 
 **Trigger:** Weekly schedule
 
-**What it does:**
-1. Runs `adef schema discover` for all configured sources
-2. Compares to previous week's schema
-3. Identifies new/removed/changed fields
-4. Flags detections that may break
-5. Generates schema drift report
+**What it does:** *(updated 2026-07-20 — declaration-driven)*
+1. Prompts for (or is handed) a fresh field inventory per source; reshapes it
+   into a declaration
+2. Runs `adef schema ingest` — drift (added/removed/type-changed fields) is
+   reported by ingest itself, with human `corrected` fields preserved
+3. Runs `adef schema check` to flag detections referencing changed fields
+4. Generates schema drift report
 
 **Output:**
 ```
@@ -626,7 +609,8 @@ Recommendation: Review and update impacted detections
 ```
 
 **CLI commands used:**
-- `adef schema discover`
+- `adef schema ingest` (drift reported on re-ingest)
+- `adef schema check`
 - `adef schema show`
 - `adef detection list --format json` (to find impacted)
 
@@ -676,7 +660,7 @@ Next steps: Run `adef detection evolve D-XXXX` to document tuning
 ### Phase 1: Essential Skills (P0)
 1. ✅ Detection Explorer Skill
 2. ✅ Coverage Analyst Skill
-3. ✅ Schema Discovery Assistant Skill
+3. ✅ Declaration Author Skill (formerly Schema Discovery Assistant — declaration-driven since 2026-07-20)
 
 **Timeline:** 2 weeks (parallel with P0 CLI commands)
 

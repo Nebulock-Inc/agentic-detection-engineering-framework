@@ -126,7 +126,7 @@ Already at observe — appended note only.
 - ❌ Doesn't validate field availability
 - ❌ Doesn't run sample queries
 
-**This is where schema discovery will integrate** (future: `adef detection observe D-0001 --discover-schema`)
+**This is where declared schemas integrate** — `adef schema ingest` (shipped) captures the fields per data source; a future `adef detection observe D-0001 --check-schema` can validate the hypothesis's required fields against them.
 
 **Next step:** Manually query data sources, document findings in journal, then advance to Refine
 

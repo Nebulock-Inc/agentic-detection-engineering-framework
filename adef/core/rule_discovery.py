@@ -22,18 +22,26 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
+from typing import Iterable, Iterator, Optional, Sequence
 
 import yaml
 
+from adef.core import profiles as profiles_mod
+from adef.core.profiles import Profile
+
 # Query languages we recognise. This is the *source-format* axis, NOT the
 # four-value engine taxonomy — keep the two separate on purpose.
+# User extraction profiles add their own format names (the profile ``name``).
 Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther"
 
 # Support outcome: how well ADEF can handle a recognized file.
 SUPPORTED = "supported"                            # recognized AND metadata/query extractable
 RECOGNIZED_UNSUPPORTED = "recognized_unsupported"  # format known, extractor pending
 NOT_A_RULE = "not_a_rule"                          # config, docs, pack, story, data model…
+# Reporting-only outcome (never on DiscoveredRule): a structured file no
+# profile or recognizer claimed. This is the clustering input for the
+# catalog-onboarding skill (ISA 2026-07-20).
+UNCLAIMED = "unclaimed"
 
 # Fold a source format into ADEF's internal engine taxonomy. Sigma is its own
 # engine; SQL is sql; everything else is a query engine we treat as sql-shaped
@@ -95,13 +103,16 @@ class DiscoveredRule:
     kind: str = "atomic"
     rule_uuid: str = ""
     # The raw table/index/logsource literal the rule queries, verbatim (no
-    # normalisation). Empty when unresolvable. Drives schema-from-catalog
-    # grouping; see ISA.md 2026-07-16.
+    # normalisation). Empty when unresolvable. Keys schema prioritization and
+    # `adef schema check`; see ISA.md 2026-07-16 + 2026-07-20.
     data_source: str = ""
     # How well ADEF handles this format: SUPPORTED (parsed) or
     # RECOGNIZED_UNSUPPORTED (format known, extractor pending, e.g. Panther .py).
     support: str = SUPPORTED
     needs_review: bool = False
+    # Set by profile-based extraction, where the query language comes from the
+    # profile document rather than the static format map.
+    query_language_hint: str = ""
 
     @property
     def query_language(self) -> Format:
@@ -109,8 +120,11 @@ class DiscoveredRule:
 
         Usually the same as ``format``; vendor packagings map to their underlying
         query language (Splunk ESCU rules are SPL). Panther has no single query
-        language we extract in v1.
+        language we extract in v1. Profile-discovered rules carry the profile's
+        declared ``query_language`` as a hint.
         """
+        if self.query_language_hint:
+            return self.query_language_hint
         return _FORMAT_TO_QUERY_LANGUAGE.get(self.format, self.format)
 
     @property
@@ -456,17 +470,74 @@ _EXTRACTORS = {
 
 
 # --------------------------------------------------------------------------- #
-# The walk
+# Profile-based extraction (user profiles claim files before built-ins)
 # --------------------------------------------------------------------------- #
-def discover_rules(rule_root: Path) -> Iterator[DiscoveredRule]:
-    """Yield a ``DiscoveredRule`` for every *rule* file under ``rule_root``.
+def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
+    """Build a ``DiscoveredRule`` from one profile-claimed document."""
+    fields = profiles_mod.extract_fields(profile, doc)
+    mitre = _normalise_mitre(fields.get("mitre") or [])
+    platform = fields.get("platform") or None
+    return DiscoveredRule(
+        path=Path("."),  # filled by caller
+        format=profile.name,
+        query_text=fields.get("query", ""),
+        title=fields.get("title", ""),
+        platform=platform,
+        mitre=mitre,
+        kind="atomic",
+        rule_uuid=fields.get("uuid", ""),
+        data_source=fields.get("data_source", ""),
+        support=SUPPORTED,
+        needs_review=not (platform and mitre),
+        query_language_hint=(
+            profile.query_language if profile.query_language != "none" else ""
+        ),
+    )
 
-    Read-only. Every file is classified by :func:`recognize`. ``NOT_A_RULE``
-    files (READMEs, configs, packs, stories, data models) are skipped. Recognized
-    files are yielded — including ``RECOGNIZED_UNSUPPORTED`` formats (e.g. Panther,
-    whose logic is external) so the catalog reports honest coverage instead of
-    silently dropping them. Unreadable files are skipped; a malformed rule of a
-    known format is still yielded (needs_review) rather than vanishing.
+
+def _profile_claim(
+    profiles: Sequence[Profile], filename: str, text: str
+) -> Optional[tuple[Profile, list[dict]]]:
+    """First profile whose signature claims the file, with its documents."""
+    parsed: dict[str, list[dict]] = {}
+    for profile in profiles:
+        if profile.container not in parsed:
+            parsed[profile.container] = profiles_mod.parse_container(profile.container, text)
+        docs = [d for d in parsed[profile.container] if profiles_mod.matches(profile, filename, d)]
+        if docs:
+            return profile, docs
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# The walk — ONE walker, shared by discovery, catalog, and reporting
+# --------------------------------------------------------------------------- #
+@dataclass
+class FileOutcome:
+    """Per-file classification result, for reporting (``adef catalog --report``).
+
+    ``outcome`` is SUPPORTED / RECOGNIZED_UNSUPPORTED / UNCLAIMED / NOT_A_RULE.
+    ``rules`` is non-empty only for the first two. UNCLAIMED = the file parses
+    as a structured mapping but nothing claimed it — the clustering input for
+    profile authoring. NOT_A_RULE = everything else (docs, raw config, data).
+    """
+
+    path: Path
+    outcome: str
+    format: Optional[Format] = None
+    rules: tuple[DiscoveredRule, ...] = ()
+    top_level_keys: tuple[str, ...] = ()
+
+
+def walk_outcomes(
+    rule_root: Path, profiles: Sequence[Profile] = ()
+) -> Iterator[FileOutcome]:
+    """Classify every file under ``rule_root``; yield one ``FileOutcome`` each.
+
+    Read-only. User ``profiles`` are checked **before** built-in recognizers
+    (ISA 2026-07-20: an org can override how its own format is read). A profile
+    may claim multiple documents per file (multi-doc contract; v1 containers
+    yield one). Unreadable files are skipped entirely.
     """
     root = Path(rule_root).expanduser()
     if not root.is_dir():
@@ -478,12 +549,37 @@ def discover_rules(rule_root: Path) -> Iterator[DiscoveredRule]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+
+        # 1. User profiles first.
+        claim = _profile_claim(profiles, path.name, text)
+        if claim is not None:
+            profile, docs = claim
+            rules = []
+            for doc in docs:
+                rule = _extract_via_profile(profile, doc)
+                rule.path = path
+                rules.append(rule)
+            yield FileOutcome(
+                path=path, outcome=SUPPORTED, format=profile.name, rules=tuple(rules)
+            )
+            continue
+
+        # 2. Built-in recognizers.
         rec = recognize(path.name, text)
         if rec.support == NOT_A_RULE or rec.format is None:
+            doc = _load_yaml(text) if _looks_like_yaml(path.name, text) else None
+            if isinstance(doc, dict) and doc:
+                yield FileOutcome(
+                    path=path,
+                    outcome=UNCLAIMED,
+                    top_level_keys=tuple(sorted(str(k) for k in doc)),
+                )
+            else:
+                yield FileOutcome(path=path, outcome=NOT_A_RULE)
             continue
+
         extractor = _EXTRACTORS.get(rec.format)
         if extractor is None:
-            # Recognized format with no extractor yet — still surface it.
             rule = DiscoveredRule(
                 path=path,
                 format=rec.format,
@@ -491,69 +587,50 @@ def discover_rules(rule_root: Path) -> Iterator[DiscoveredRule]:
                 support=rec.support,
                 needs_review=True,
             )
-            yield rule
-            continue
-        try:
-            rule = _EXTRACTORS[rec.format](text)
-        except Exception:
-            # A malformed rule of a known format still gets catalogued as
-            # needs_review rather than vanishing.
-            rule = DiscoveredRule(
-                path=path,
-                format=rec.format,
-                query_text=text.strip(),
-                support=rec.support,
-                needs_review=True,
-            )
-            yield rule
-            continue
-        rule.path = path
-        yield rule
+        else:
+            try:
+                rule = extractor(text)
+            except Exception:
+                # A malformed rule of a known format still gets catalogued as
+                # needs_review rather than vanishing.
+                rule = DiscoveredRule(
+                    path=path,
+                    format=rec.format,
+                    query_text=text.strip(),
+                    support=rec.support,
+                    needs_review=True,
+                )
+            rule.path = path
+        yield FileOutcome(
+            path=path, outcome=rule.support, format=rec.format, rules=(rule,)
+        )
 
 
-def scan_rule_fields(rule_root: Path, query_language: Format) -> set[str]:
-    """Return the set of field names referenced by all ``query_language`` rules.
+def discover_rules(
+    rule_root: Path, profiles: Sequence[Profile] = ()
+) -> Iterator[DiscoveredRule]:
+    """Yield a ``DiscoveredRule`` for every *rule* file under ``rule_root``.
 
-    This is the scanner the schema feature (``adef schema init --rule-root``)
-    needs: walk the repo, keep only files of the requested language, and run the
-    matching ``rule_parser`` extractor over each. Sigma is a structured YAML
-    format (not a query language) and is excluded here — pass ``spl``/``kql``/
-    ``cql``/``sql``.
+    Read-only; built on :func:`walk_outcomes` (one walker, no divergence).
+    ``NOT_A_RULE``/``UNCLAIMED`` files are skipped. Recognized files are
+    yielded — including ``RECOGNIZED_UNSUPPORTED`` formats (e.g. Panther, whose
+    logic is external) so the catalog reports honest coverage instead of
+    silently dropping them.
     """
-    # Imported lazily so the discovery module stays import-light for callers
-    # that only need the walk.
-    from adef.core.rule_parser import (
-        extract_cql_fields,
-        extract_kql_fields,
-        extract_spl_fields,
-        extract_sql_fields,
-    )
-
-    extractors = {
-        "sql": extract_sql_fields,
-        "spl": extract_spl_fields,
-        "cql": extract_cql_fields,
-        "kql": extract_kql_fields,
-    }
-    extractor = extractors.get(query_language)
-    if extractor is None:
-        return set()
-
-    fields: set[str] = set()
-    for rule in discover_rules(rule_root):
-        if rule.query_language == query_language:
-            fields |= extractor(rule.query_text)
-    return fields
+    for outcome in walk_outcomes(rule_root, profiles):
+        yield from outcome.rules
 
 
 __all__ = [
     "DiscoveredRule",
+    "FileOutcome",
     "Recognition",
     "SUPPORTED",
     "RECOGNIZED_UNSUPPORTED",
     "NOT_A_RULE",
+    "UNCLAIMED",
     "discover_rules",
     "recognize",
-    "scan_rule_fields",
     "sniff_format",
+    "walk_outcomes",
 ]

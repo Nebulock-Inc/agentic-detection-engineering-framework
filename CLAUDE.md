@@ -72,13 +72,19 @@ adef backfill journals              # Create journals for existing upstream rule
 adef backfill journals --rule-root /path/to/rules
 ```
 
-### Schema Management
+### Schema Management (declaration-driven)
 ```bash
-adef schema init edr_process            # Create schema (interactive wizard)
-adef schema show edr_process            # Display schema
-adef schema update edr_process --results -  # Re-sample data (drift detection)
-adef schema rescan edr_process          # Re-parse rules
+adef schema ingest adef-sources.yml     # Build schemas from a data-source declaration
+adef schema lint adef-sources.yml       # Validate a declaration (exit 1 on errors)
+adef schema check                       # Cross-reference rule field usage vs schemas
+adef schema show wineventlog            # Display a schema (schema_version 2)
 ```
+Users provide a declaration document (sources + fields, produced from
+`| fieldsummary` / `| getschema` / index mappings). Ingest writes
+`schema/<source>.yml` with `declared | corrected` field provenance; re-ingest
+preserves human corrections and reports drift. Rules are a schema *consumer*
+(via `check`), never a schema *source*. See
+`docs/plans/2026-07-20-schema-declaration-design.md`.
 
 ### MCP Server
 ```bash

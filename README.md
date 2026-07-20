@@ -29,6 +29,50 @@ adef detection govern  D-0001
 adef detection evolve  D-0001
 ```
 
+## Bring your existing rules
+
+Point ADEF at wherever your detections already live — it never modifies them:
+
+```bash
+adef catalog /path/to/your/rules       # walk read-only → catalog + skeleton journals
+adef catalog /path/to/rules --dry-run --report json   # see what ADEF recognizes first
+```
+
+Sigma, Splunk ESCU / `savedsearches.conf`, Panther, raw KQL/SQL/CQL work out
+of the box. In-house formats are taught with a small **extraction profile**
+(YAML, no code) — draft one by hand or let the bundled agent draft it from
+samples: `adef profile lint` validates, you approve, every future run uses it.
+
+No rules repo — everything lives in your SIEM? Export once, catalog it, and
+ADEF's workspace becomes your first version-controlled rules inventory.
+
+## Teach ADEF your data
+
+Detections are only as good as knowledge of the data they query. Hand ADEF a
+**data-source declaration** — sources + fields, reshaped in minutes from
+`| fieldsummary`, `| getschema`, or index mappings:
+
+```bash
+adef schema ingest adef-sources.yml    # → schema/<source>.yml per source
+adef schema check                      # do your rules use fields that exist?
+```
+
+Re-ingest anytime: your hand corrections survive, drift is reported. With
+schemas in place, agents can author queries against fields that actually
+exist — not guesses.
+
+## Claude plugin
+
+The repo doubles as a plugin marketplace: one install wires up the `adef-mcp`
+server, the catalog-onboarding skill, and the profile-author sub-agent.
+
+```
+/plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
+/plugin install adef
+```
+
+MCP alone works with Cursor/Copilot; the plugin is the Claude-native layer.
+
 ## ADEF and ATHF — paired siblings, not successor
 
 ADEF and ATHF are *paired siblings*. ATHF owns the threat-hunting lifecycle (LOCK pattern, hunts repo). ADEF owns the detection-engineering lifecycle (FORGE pattern, journals repo). Hunts that earn detections cross the bridge via `adef hunt-promote H-XXXX`. Both frameworks share the same Click + entry-point + FastMCP shape, so analysts and agents that learn one recognize the other immediately.

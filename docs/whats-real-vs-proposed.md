@@ -1,7 +1,18 @@
 # What's Real vs. What's Proposed
 
-**Updated:** 2026-06-25  
+**Updated:** 2026-07-20 (originally 2026-06-25)
 **Purpose:** Clear distinction between implemented commands and future ideas
+
+> **2026-07-20 update — schema and catalog are now REAL.** Since the 06-25
+> snapshot: `adef catalog` (walk an existing rules repo read-only, incl.
+> `--report json` and extraction-profile support via `adef profile lint` /
+> `--profile`), and the declaration-driven schema commands
+> (`adef schema ingest / lint / check / show`) are **shipped**. The
+> connector-based `adef schema discover` idea below is **dead** — replaced by
+> user-provided declarations (see
+> `docs/plans/2026-07-20-schema-declaration-design.md`). References to
+> `schema discover` in the body below are retained as history but are ❌
+> permanently, not ❌ not-yet.
 
 ---
 
@@ -11,7 +22,7 @@
 
 It's just **simpler than you might expect**—it only updates the journal, it doesn't query data sources automatically. All the FORGE commands (new/observe/refine/govern/evolve) are **fully implemented** and working today.
 
-The **roadmap commands** (list/search/coverage/gaps/schema) are the ones that **don't exist yet**.
+The **roadmap commands** (list/search/coverage/gaps) are the ones that **don't exist yet**. Schema commands shipped 2026-07-20 in declaration-driven form (`ingest`/`lint`/`check`/`show`).
 
 ---
 
@@ -292,11 +303,14 @@ adef research new --topic "LSASS"      # ❌ Does not exist
 adef research list                     # ❌ Does not exist
 adef research show R-0001              # ❌ Does not exist
 
-# Schema discovery
-adef schema discover --connector splunk  # ❌ Does not exist
-adef schema list                       # ❌ Does not exist
-adef schema show splunk-security       # ❌ Does not exist
-adef schema validate D-XXXX            # ❌ Does not exist
+# Schema (declaration-driven — shipped 2026-07-20)
+adef schema ingest adef-sources.yml    # ✅ SHIPPED
+adef schema lint adef-sources.yml      # ✅ SHIPPED
+adef schema check                      # ✅ SHIPPED (repo-wide field validation)
+adef schema show wineventlog           # ✅ SHIPPED
+adef schema discover --connector splunk  # ❌ DEAD — connector approach dropped
+adef schema list                       # ❌ Does not exist yet
+adef schema validate D-XXXX            # ❌ Does not exist yet (per-detection)
 ```
 
 ---
@@ -402,10 +416,10 @@ adef detection observe D-0001
 ### Roadmap Design (v0.2+): Semi-Automated
 **Philosophy:** ADEF assists your workflow, provides data
 
-**Planned for Observe:**
+**Planned for Observe** *(schema part shipped 2026-07-20 in declaration form)*:
 ```bash
-adef schema discover --connector splunk --source security
-adef detection observe D-0001 --schema splunk-security
+adef schema ingest adef-sources.yml     # ✅ shipped (replaces the dead `discover --connector`)
+adef detection observe D-0001 --schema wineventlog   # roadmap
 
 # Would append to journal:
 # **Schema Validation:**
@@ -443,7 +457,7 @@ adef detection refine D-0001
 | `adef detection list` | ❌ No | Would list all detections | N/A - not built |
 | `adef detection search` | ❌ No | Would search journals | N/A - not built |
 | `adef detection coverage` | ❌ No | Would show ATT&CK coverage | N/A - not built |
-| `adef schema discover` | ❌ No | Would discover data source schemas | N/A - not built |
+| `adef schema ingest/lint/check/show` | ✅ Yes (2026-07-20) | Declaration-driven schemas + rule-vs-schema check | Shipped; `discover` (connector-based) permanently dropped |
 | `adef research new` | ❌ No | Would generate detection drafts from CTI | N/A - not built |
 
 ---
@@ -474,7 +488,8 @@ adef detection search "test"
 # Output: Error: No such command 'search'.
 
 adef schema discover
-# Output: Error: No such command 'schema'.
+# Output: Error: No such command 'discover'.
+# (The `schema` group itself is real since 2026-07-20: ingest/lint/check/show)
 ```
 
 ---
@@ -494,9 +509,9 @@ adef schema discover
 - They (mostly) don't automate anything
 - You do the actual work (querying, analyzing, documenting)
 
-**Everything else in the roadmap (list, search, coverage, gaps, schema, research) does not exist yet.**
+**Everything else in the roadmap (list, search, coverage, gaps, research) does not exist yet.** Schema and catalog shipped 2026-07-20: `adef catalog` (+ extraction profiles) and `adef schema ingest/lint/check/show` (declaration-driven).
 
-**The confusion comes from:** Documentation describing "how Observe **should work with schema discovery**" vs. "how Observe **actually works today**" (just adds a prompt).
+**The confusion comes from:** Documentation describing "how Observe **should work with schema validation**" vs. "how Observe **actually works today**" (just adds a prompt).
 
 ---
 

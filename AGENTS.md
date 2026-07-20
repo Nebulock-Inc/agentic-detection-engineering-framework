@@ -58,39 +58,38 @@ never block). See `docs/plans/2026-07-15-catalog-design.md`.
 
 **Key modules:**
 - `adef/core/rule_discovery.py` — shared repo walk (`discover_rules`,
-  `sniff_format`, `scan_rule_fields`). Consumed by both catalog and schema.
+  `walk_outcomes`, `sniff_format`). User extraction profiles are checked
+  before built-in recognizers.
+- `adef/core/profiles.py` — declarative extraction profiles (teach ADEF a rule
+  format with YAML, not code; see 2026-07-20 plugin design doc).
 - `adef/core/catalog.py` — `CatalogRecord`, `Catalog`, INDEX generation.
-- `adef/commands/catalog.py` — the `adef catalog` command.
+- `adef/commands/catalog.py` — the `adef catalog` command
+  (`--report json`, `--profile` validation scoreboard).
 
 **`engine` vs `format`:** catalog `engine` stays in the internal four-value
 taxonomy (guarded by `test_no_new_engine_types.py`); `format`/`query_language`
 carry the true source language (sigma/spl/kql/cql/sql) losslessly.
 
-## Schema Storage
+## Schema Storage (declaration-driven)
 
-ADEF's schema storage tracks what fields exist in rules vs. actual data. Located at `<workspace>/schema/<source>.yml`.
-
-> Rule field scanning (`adef schema init --rule-root`) is wired to
-> `adef.core.rule_discovery.scan_rule_fields` — the same walk cataloging uses.
-> (Previously a documented stub.)
+Users provide a **data-source declaration** (`adef-sources.yml`: sources +
+fields, produced from `| fieldsummary` / `| getschema` / index mappings).
+Schemas live at `<workspace>/schema/<source>.yml` (`schema_version: 2`) with
+`declared | corrected` field provenance. Rules are a schema *consumer*, never
+a *source* — the rules-derived model was removed pre-release (ISA 2026-07-20).
 
 **Commands:**
-- `adef schema init <source>` — create schema (rule parsing + data sampling)
-- `adef schema update <source> --results -` — re-sample data for drift detection
-- `adef schema rescan <source>` — re-parse rules after adding detections
+- `adef schema ingest <declaration.yml>` — build schemas; re-ingest preserves
+  human `corrected` fields and reports drift
+- `adef schema lint <declaration.yml>` — validate a declaration
+- `adef schema check` — cross-reference rule field usage vs declared schemas
 - `adef schema show <source>` — display schema
 
 **Key modules:**
-- `adef/core/schema.py` — Schema dataclass, YAML I/O
-- `adef/core/rule_parser.py` — SQL (sqlglot AST), SPL/CQL/KQL (regex)
-- `adef/core/data_sampler.py` — JSON/CSV parsing, type inference
-- `adef/core/llm_client.py` — Field description generation (Claude/OpenAI)
-
-**LLM configuration:**
-```bash
-export ADEF_LLM_PROVIDER=claude  # or openai
-export ANTHROPIC_API_KEY=...     # or OPENAI_API_KEY
-```
+- `adef/core/declaration.py` — declaration lint/parse, ingest, provenance
+  merge, drift
+- `adef/core/rule_parser.py` — SQL (sqlglot AST), SPL/CQL/KQL (regex) field
+  extractors (consumed by `schema check`)
 
 ## ISA Discipline
 

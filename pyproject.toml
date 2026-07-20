@@ -38,7 +38,6 @@ dependencies = [
     "click>=8.0.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
-    "jinja2>=3.0.0",
     "python-dotenv>=1.0.0",
     "sqlglot>=23.0.0",
 ]
@@ -52,10 +51,6 @@ dev = [
 ]
 mcp = [
     "mcp[cli]>=1.0.0",
-]
-llm = [
-    "anthropic>=0.25.0",
-    "openai>=1.30.0",
 ]
 
 [project.urls]
@@ -77,6 +72,7 @@ hunt-promote = "adef.commands.hunt_promote:hunt_promote"
 backfill = "adef.commands.backfill:backfill"
 schema = "adef.commands.schema:schema"
 catalog = "adef.commands.catalog:catalog"
+profile = "adef.commands.profile:profile"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"

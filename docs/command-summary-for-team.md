@@ -52,11 +52,13 @@
 - `adef research list` — List research documents
 - `adef research show R-0001` — Display research findings
 
-#### Schema Discovery
-- `adef schema discover --connector splunk --source security-logs` — Discover data source fields
-- `adef schema list` — List discovered schemas
-- `adef schema show splunk-security` — Display schema details
-- `adef schema fields splunk-security --search "process"` — Search available fields
+#### Schema (declaration-driven — SHIPPED 2026-07-20, replaced connector-based discovery)
+- `adef schema ingest adef-sources.yml` — ✅ Build schemas from a user-provided declaration (drift reported on re-ingest)
+- `adef schema lint adef-sources.yml` — ✅ Validate a declaration
+- `adef schema check` — ✅ Cross-reference rule field usage vs declared schemas
+- `adef schema show wineventlog` — ✅ Display schema details
+- `adef schema list` — List ingested schemas (still roadmap)
+- `adef schema fields wineventlog --search "process"` — Search available fields (still roadmap)
 
 ---
 
@@ -72,8 +74,7 @@
 - `adef detection new --from-research R-0001` — Create detection from research draft
 
 #### Schema Integration
-- `adef schema validate D-XXXX` — Validate detection against discovered schema
-- `adef schema refresh splunk-security` — Re-discover schema (detect drift)
+- `adef schema validate D-XXXX` — Validate one detection against its declared schema (`schema check` already does this repo-wide)
 
 #### Hunt Promotion Enhancements
 - `adef hunt-promote list` — Show promotable hunts from ATHF
@@ -139,11 +140,11 @@ adef metrics program
 
 ### For Platform Teams
 ```bash
-# Data source integration
-adef schema discover --connector splunk
-adef schema list
-adef connector test splunk
-adef schema validate D-XXXX
+# Data source integration (declaration-driven — no connectors, by design)
+adef schema ingest adef-sources.yml   # ✅ shipped
+adef schema check                     # ✅ shipped
+adef schema show wineventlog          # ✅ shipped
+adef schema validate D-XXXX           # roadmap
 ```
 
 ---

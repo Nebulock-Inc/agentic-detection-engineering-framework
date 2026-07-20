@@ -246,57 +246,39 @@ adef research merge R-0001 R-0002  # Merge research findings
 
 ---
 
-## Schema Discovery (`adef schema`)
+## Schema (`adef schema`) — declaration-driven
 
-### 🔴 P0 (Critical Priority)
+> **Superseded 2026-07-20.** The connector-based `schema discover` sketched in
+> earlier drafts is out: it violated the no-vendor-connectors anti-goal, and
+> the team decided schemas are built from a **user-provided data-source
+> declaration**, not discovered from tools or derived from rules. See
+> `docs/plans/2026-07-20-schema-declaration-design.md`.
+
+### ✅ Shipped
 
 ```bash
-adef schema discover --connector splunk --source security-logs
-adef schema discover --connector splunk --source security-logs --time-window 30d
-adef schema discover --connector splunk --source security-logs --sample-size 1000000
-
-adef schema list
-adef schema list --format json
-
-adef schema show splunk-security
-adef schema show splunk-security --field process_name
-adef schema show splunk-security --format json
-
-adef schema delete splunk-security
-adef schema delete splunk-security --force
+adef schema ingest adef-sources.yml    # declaration → schema/<source>.yml (v2, provenance)
+adef schema lint adef-sources.yml      # validate a declaration (exit 1 on errors)
+adef schema check                      # rule field usage vs declared schemas
+adef schema check --report json        # machine-readable findings
+adef schema show wineventlog           # display a schema
 ```
 
----
+Re-ingest replaces `declared` fields, preserves human `corrected` fields, and
+reports drift — so drift detection ships with ingest, not as a separate
+command.
 
 ### 🟡 P1 (High Priority)
 
 ```bash
-adef schema validate D-XXXX
-adef schema validate D-XXXX --schema splunk-security
-adef schema validate D-XXXX --show-missing-fields
-
-adef schema fields splunk-security
-adef schema fields splunk-security --type string
-adef schema fields splunk-security --min-population 0.8
-adef schema fields splunk-security --search "process"
+adef schema list                       # list ingested schemas
+adef schema validate D-XXXX            # per-detection field validation (check is repo-wide)
 ```
-
----
 
 ### 🟢 P2 (Medium Priority)
 
 ```bash
-adef schema refresh splunk-security
-adef schema refresh splunk-security --time-window 7d
-
-adef schema drift splunk-security
-adef schema drift splunk-security --compare-to 2026-06-01
-
-adef schema export splunk-security --format yaml
-adef schema export splunk-security --format json
-adef schema import schema.yaml
-
-adef schema merge splunk-security edr-security --into combined
+adef schema fields wineventlog --search "process"   # field search within a schema
 ```
 
 ---
@@ -544,7 +526,7 @@ adef ai suggest  # Get AI suggestions for current context
 - `adef detection coverage`
 - `adef detection gaps`
 - `adef research new`
-- `adef schema discover/list/show/delete`
+- `adef schema ingest/lint/check/show` — ✅ shipped 2026-07-20 (declaration-driven; `discover` dropped)
 
 **Total: ~20 commands**
 

@@ -197,19 +197,22 @@ adef detection refine D-0102
 - Field population rates?
 - Sample data?
 
-**Currently:** Manual — query Splunk/EDR, copy results into journal
-
-**Roadmap Solution:**
+**Currently (since 2026-07-20):** declaration-driven and **shipped** — the
+connector-based `schema discover` idea was dropped (no-vendor-connectors
+anti-goal; schemas come from a user-provided declaration, see
+`docs/plans/2026-07-20-schema-declaration-design.md`):
 
 ```bash
-# 🔴 P0 — Schema discovery
-adef schema discover --connector splunk --source security-logs
-# Creates config/schemas/splunk-security.yaml with:
-#   - All available fields
-#   - Field types, population rates
-#   - Sample values
+# ✅ Shipped — declaration-driven schema
+adef schema ingest adef-sources.yml
+# Creates schema/<source>.yml per declared source with:
+#   - Declared fields (types, descriptions, enum values, aliases)
+#   - declared|corrected provenance; re-ingest preserves corrections + reports drift
 
-adef schema show splunk-security
+adef schema check
+# Cross-references fields your catalogued rules use vs declared schemas
+
+adef schema show wineventlog
 # Display schema in terminal
 
 # Observe stage enhancement (future)
@@ -410,14 +413,15 @@ adef detection new "Mshta.exe from Public Directory" --technique T1218.005
 # PHASE 3: Observe (Foundation + Roadmap)
 # ════════════════════════════════════════════════════════════════
 
-# Discover schema (Roadmap — 🔴 P0)
-adef schema discover --connector splunk --source security-logs
+# Ingest declared schema (✅ Shipped 2026-07-20 — declaration-driven)
+adef schema ingest adef-sources.yml
 
 # Advance to Observe (Foundation — ✅ Existing)
 adef detection observe D-0101
 
-# Validate fields against schema (Roadmap — 🟡 P1)
-adef schema validate D-0101 --schema splunk-security
+# Validate fields against schema (repo-wide check ✅ shipped; per-detection Roadmap — 🟡 P1)
+adef schema check
+adef schema validate D-0101   # roadmap
 # Appends to journal:
 #   ✓ process_name exists (100% populated)
 #   ✓ current_directory exists (95% populated)
@@ -486,7 +490,7 @@ adef detection stats
 | **gaps** | research, `new` | Identifies what to research/build next |
 | **stats** | All FORGE commands | Aggregates journal metadata (stage, owner, dates) |
 | **research new** | `new`, coverage | Generates detection drafts, checks existing coverage |
-| **schema discover** | `observe`, `refine` | Validates fields during Observe, checks in Refine chain |
+| **schema ingest/check** (✅ shipped, declaration-driven) | `observe`, `refine` | Validates fields during Observe, checks in Refine chain |
 | **schema validate** | `refine` | Adds schema check to Refine orchestration chain |
 | **hunt-promote** | `new` | Creates journal at Find with hunt context |
 | **assign/approve** | `govern` | Structured governance during Govern stage |
@@ -504,7 +508,7 @@ adef detection stats
 - `coverage` — Understand ATT&CK coverage
 - `gaps` — Know what to build next
 - `research new` — Structured CTI → detection pipeline
-- `schema discover` — Understand data source capabilities
+- `schema ingest` (✅ shipped) — Understand data source capabilities via user-provided declarations
 
 **Why P0?** Without these, you can only work on one detection at a time. No program-level view.
 
