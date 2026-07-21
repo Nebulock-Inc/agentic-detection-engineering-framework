@@ -318,6 +318,16 @@ def catalog(
         f"[green]Catalogued[/green] {len(planned)} rules into {cat.directory}"
     )
     console.print(f"  INDEX     → {index_path}")
+    unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
+    if unclaimed:
+        console.print(
+            f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
+            "recognizer or profile claims their format (likely in-house YAML).\n"
+            "  Teach ADEF the format with an extraction profile: "
+            "`adef catalog <root> --dry-run --report json` clusters them by shape;\n"
+            "  see docs/creating-extraction-profiles.md, then validate with "
+            "`adef catalog <root> --dry-run --profile <draft.yml>`."
+        )
     if inherited:
         console.print(f"  [green]{inherited}[/green] platform(s) inherited from declared schemas.")
     if needs_review:

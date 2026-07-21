@@ -88,8 +88,8 @@ ADEF's durable memory.
 
 - **Your rules repo:** `adef catalog /path/to/your/rules --dry-run --report json`
   first to see what ADEF recognizes; unrecognized in-house formats are taught
-  with an [extraction profile](plans/2026-07-20-claude-plugin-design.md)
-  (`adef profile lint` validates one).
+  with an extraction profile — the how-to is
+  [`docs/creating-extraction-profiles.md`](creating-extraction-profiles.md).
 - **Your data:** write a declaration from any field inventory —
   [`docs/declaring-data-sources.md`](declaring-data-sources.md) has the format
   and worked Splunk/CrowdStrike examples — then `adef schema ingest` + `check`.

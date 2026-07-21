@@ -56,6 +56,19 @@ each rule's format, and writes an enrichment record to
 per rule. Ambiguous rules are flagged `needs_review: true` (infer-and-flag,
 never block). See `docs/plans/2026-07-15-catalog-design.md`.
 
+**When `adef catalog` reports unclaimed files — drive the profile loop.**
+Unclaimed = structured files no recognizer or profile claims (in-house
+formats). Do NOT stop at diagnosis; walk the user through authoring:
+1. `adef catalog <root> --dry-run --report json` → cluster unclaimed files by
+   `top_level_keys` (one cluster = one format = one profile).
+2. Read 2–3 samples per cluster; draft a profile
+   (see `docs/creating-extraction-profiles.md` for the schema).
+3. `adef profile lint <draft>` then
+   `adef catalog <root> --dry-run --profile <draft>` — the per-field
+   extraction rates are the scoreboard (query ≥95%, title ≥90%).
+4. On user approval, save to `<workspace>/config/profiles/` and re-run the
+   real catalog.
+
 **Key modules:**
 - `adef/core/rule_discovery.py` — shared repo walk (`discover_rules`,
   `walk_outcomes`, `sniff_format`). User extraction profiles are checked
