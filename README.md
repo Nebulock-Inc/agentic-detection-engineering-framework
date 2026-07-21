@@ -75,9 +75,11 @@ exist — not guesses.
 ## Claude plugin
 
 The repo doubles as a plugin marketplace: one install wires up the `adef-mcp`
-server, the catalog-onboarding skill, and the profile-author sub-agent.
+server, the catalog-onboarding, mitre-tagger, detection-author, and
+schema-declaration skills, and the profile-author sub-agent.
 
 ```
+pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
 /plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
 /plugin install adef
 ```

@@ -184,8 +184,11 @@ The install is user-level, so it follows you into your own detections repo:
 /plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
 ```
 
-This wires up the catalog-onboarding skill, the profile-author sub-agent, and
-the `adef-mcp` server in one step.
+This wires up the catalog-onboarding, mitre-tagger, detection-author, and
+schema-declaration skills, the profile-author sub-agent, and the `adef-mcp`
+server in one step. The server needs the mcp extra installed
+(`pip install -e ".[mcp]"`) — without it the plugin points at an `adef-mcp`
+command that fails on import.
 
 ## 6. Developing
 
