@@ -18,9 +18,18 @@ See [`docs/methodology.md`](docs/methodology.md) for the full FORGE walkthrough.
 
 ## Quick Start
 
-```bash
-pip install agentic-detection-engineering-framework
+> **ADEF is not yet published to PyPI.** Until v0.1.0 ships, install from
+> source — see [`docs/quickstart.md`](docs/quickstart.md) for the full local
+> walkthrough (including a self-contained demo with sample rules and data).
 
+```bash
+git clone https://github.com/Nebulock-Inc/agentic-detection-engineering-framework.git
+cd agentic-detection-engineering-framework
+python3 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip              # pip >= 21.3 required for editable installs
+pip install -e .
+
+adef --version                         # verify
 adef init                              # scaffold ~/work/adef-workspace/
 adef detection new "Suspicious svchost.exe child process"
 adef detection observe D-0001
@@ -28,6 +37,8 @@ adef detection refine  D-0001          # invokes Similarity → Overlap → Veri
 adef detection govern  D-0001
 adef detection evolve  D-0001
 ```
+
+After release: `pip install agentic-detection-engineering-framework`.
 
 ## Bring your existing rules
 

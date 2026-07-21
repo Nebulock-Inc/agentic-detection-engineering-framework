@@ -12,10 +12,12 @@ A self-contained demo you can run end to end against a scratch workspace.
 
 ```bash
 export ADEF_WORKSPACE=$(mktemp -d)
+adef schema ingest examples/adef-sources-thrunt.yml   # first: catalog inherits platforms from these
 adef catalog examples/demo-rules
 adef detection list
 adef detection list --platform windows --report json
 adef detection show D-0001
-adef schema ingest examples/adef-sources-thrunt.yml
 adef schema check
 ```
+
+See [`docs/quickstart.md`](../docs/quickstart.md) for the full walkthrough.
