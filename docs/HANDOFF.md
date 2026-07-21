@@ -1,6 +1,6 @@
 # ADEF Feature-Branch Handoff — `feature/adef-v1-design`
 
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-21
 **Audience:** the two of us collaborating on this branch, and any future Claude
 Code session that needs cross-session context.
 **Keep this current.** When you finish a chunk of work on this branch, add a
@@ -18,9 +18,10 @@ dated entry under "Session log" and update "Current state" + "Open threads".
 
 | Area | Owner | Shortcut | Status |
 |------|-------|----------|--------|
-| Schema storage (`adef schema *`) | co-worker (Eric) | Epic 6996 / story 7396 | v1 shipped, in tree |
-| Cataloging (`adef catalog`) | Jarrett | Epic 6996 / stories 7387, 7388, 7389 | v1 built this session (uncommitted) |
-| Browsing (`adef detection list/show`, `adef coverage`) | unassigned | story 7393 | deferred |
+| Schema storage (`adef schema *`) | co-worker (Eric) | Epic 6996 / story 7396 | **reworked 2026-07-20**: declaration-driven (`ingest/lint/check/show` + scope); old rules-derived model removed |
+| Cataloging (`adef catalog`) | Jarrett | Epic 6996 / stories 7387, 7388, 7389 | shipped + extraction profiles, review_reasons, platform inheritance |
+| Browsing (`adef detection list/show`) | Jarrett | story 7393 | **shipped 2026-07-21** (`adef coverage` still deferred → coverage epic) |
+| Claude plugin (`claude-plugin/`) | Jarrett | — | shipped (catalog-onboarding skill + profile-author agent; repo doubles as marketplace) |
 
 Both features share one module — see "The shared seam" below. Coordinate before
 changing `adef/core/rule_discovery.py`, the catalog record shape, or the schema
@@ -36,8 +37,9 @@ YAML shape, because each is consumed by the other's feature.
 - Run tests with: `.venv/bin/python -m pytest -q`
 - Run the CLI with: `.venv/bin/adef ...`
 - If `.venv` is missing, recreate: `~/.pyenv/versions/3.11.11/bin/python -m venv .venv && .venv/bin/pip install -e ".[dev]"`
-- `sqlglot` is a real runtime dep (SQL parsing). `anthropic`/`openai` are optional
-  (`.[llm]`); without them, schema description generation degrades gracefully.
+- `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra
+  (`anthropic`/`openai`) was **removed 2026-07-20** with the old schema model —
+  don't reference it. `jinja2` was also dropped (unused).
 
 ---
 
@@ -436,6 +438,53 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 ---
 
 ## Session log
+
+### 2026-07-20/21 — Profiles, plugin, schema rework, browse, examples (Jarrett + Claude)
+
+Fourteen commits, `b489c02..7116ed2`. The short version — full detail in
+`docs/2026-07-21-session-status.md`, `docs/2026-07-21-next-steps.md`, and the
+ISA decision entries for both dates (co-worker signed off 2026-07-21).
+
+- **Extraction profiles** (`adef/core/profiles.py`): in-house rule formats
+  taught with YAML (signature + dot-path map), user profiles checked before
+  built-ins; `adef catalog --report json` (UNCLAIMED clustering) /
+  `--profile` (per-field extraction-rate scoreboard) / `adef profile lint`.
+  Guide: `docs/creating-extraction-profiles.md`.
+- **Claude plugin** (`claude-plugin/` + root marketplace manifest):
+  catalog-onboarding skill + profile-author sub-agent + adef-mcp wiring.
+  NOTE: inactive until `/plugin install` — quickstart step 5b.
+- **Schema rework (team decision)**: rules demoted from schema *source* to
+  *consumer*. Users provide `adef-sources.yml` declarations → `schema
+  ingest/lint/check/show`; `schema_version: 2`, `declared|corrected`
+  provenance, drift on re-ingest; `scope` handles many-shapes-per-container
+  (most-specific-match, union on ties); SPL `sourcetype=` shape literals.
+  Old model **deleted** (init wizard, from-catalog, data_sampler, llm_client,
+  core/schema.py, `.[llm]` extra). This supersedes the
+  `docs/superpowers/specs/2026-07-14-schema-storage-design.md` spec.
+- **Browse shipped** (story 7393): `adef detection list` (filters +
+  `--report json`) / `show`.
+- **needs_review rework**: `review_reasons`
+  (`malformed|external_logic|no_platform|no_mitre`); structural reasons drive
+  warnings; `no_mitre` = quiet enrichment queue; **platform inherited from
+  declared schemas at catalog time**. Demo went 8/9 flagged → 1/9.
+- **E2E-driven fixes**: rule-root-relative `rule_ref`; data_source fallback
+  for profile rules (+ SQL comment stripping, reserved-word skip);
+  `query_language` persisted on records (check now covers ESCU + profile
+  rules); INDEX `by_tactic` → `by_technique` (honesty rename).
+- **Examples + docs**: `examples/` (demo rules, thrunt declaration from a
+  real Splunk fieldsummary export, fake in-house format + its profile);
+  `docs/quickstart.md` (source install — **ADEF is not on PyPI**; every demo
+  command sandbox-executed); `docs/declaring-data-sources.md`; workspace
+  operator `AGENTS.md` scaffolded by `adef init` (package data,
+  `--force` refreshes).
+- **MITRE/coverage**: deferred by decision — sequenced in next-steps §4
+  (ATT&CK reference layer first, then mitre-tagger, then coverage report).
+- **OPEN (the one blocker)**: local `pytest` / `ruff` / `mypy` have never run
+  on any of this — sandbox lacks the tooling; ~30 new tests
+  (test_profiles, test_profile_cli, test_declaration, test_detection_browse,
+  test_review_reasons) await their first real run. Everything is
+  sandbox-smoke-verified + exact corpora regression (Splunk 2124 /
+  Panther 877 / osquery 0).
 
 ### 2026-07-17 (end of day) — Inline query field + readable YAML (Jarrett + Claude)
 - Jarrett spotted the catalog record had **no query** — discovery extracted it,
