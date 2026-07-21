@@ -346,6 +346,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **Extend `detection new`, don't add a parallel command.** `adef detection new "title" [--source <schema>]`: no `--source` = today's journal-only behavior (backward-compatible); with `--source` it *also* scaffolds a draft catalog record grounded in that declared schema (`draft_record_from_schema` in `core/catalog.py`) — platform/query_language/scope from `schema/<source>.yml`, a starter query carrying the real scope literals (`index=…`/lead-table), `data_source` = the schema's canonical `source` name (what `schema check` matches). Journal + record share one D-XXXX; record built *before* the journal so a bad `--source` fails clean. Missing schema → hard error pointing to `schema ingest` (authoring against an undeclared source is the anti-pattern).
   - **Good rules need human context; the skill's first job is drawing it out.** `detection-author` (plugin skill) interviews the DE for what an AI can't infer — intent, threat model, trigger, one-sentence hypothesis, known false positives — and seeds the journal's Find section with it (the journal was *already* the "why" home; authoring finally populates it at creation). Then grounds the query in the schema's real fields/values, checks the catalog for near-duplicates, and runs `schema check` + FORGE gates before "done." The query is the easy half; the captured reasoning is the differentiator.
 
+- 2026-07-21 — **MCP `schema_recipe` never guesses the platform.** When called with no platform and none configured, the tool returns an error + the supported-platform list instead of silently defaulting to `splunk` (the original behavior). Rationale: a silent guess hands a Sentinel user SPL; the calling assistant should ask. The CLI already had the honest path (interactive prompt) — this brings the MCP surface to parity.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -353,6 +355,13 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 ## Verification
 
 (populated at VERIFY — evidence per ISC)
+
+- 2026-07-21 — **Recipe feature gap-closure** (post-review of the SIEM recipe generator, `889e7dc`; review found the feature complete but untested). Evidence:
+  - `tests/test_recipes.py` — **28 tests**: `get_recipe` across all 7 platforms + case-insensitivity + unknown-platform error text; `render_recipe_markdown` per platform (title, command, ingest next-step); CLI `recipe` (explicit platform, `--format json` parses, `--workspace` config fallback, unknown-platform exit≠0); MCP tools via a fake-server harness (`schema_recipe` explicit/unconfigured/config-read, `schema_lint_declaration` valid/bad-YAML/bad-structure).
+  - **Real bug caught by the new tests:** `adef schema recipe --format json` emitted JSON through rich `console.print`, which soft-wraps at terminal width — invalid JSON for any parser. Switched to `click.echo` (the `adef catalog --report json` convention).
+  - MCP `schema_recipe` silent-`splunk` default replaced with error + platform list (see Decisions).
+  - `WORKSPACE_AGENTS.md` template now surfaces `adef schema recipe` (command block + declaring-data-sources workflow); README / quickstart / `plugin.json` refreshed — the `".[mcp]"` extra was documented nowhere a README reader would land (plugin pointed at an `adef-mcp` that fails on import without it), and the bundled-skill lists were stale (missing detection-author, mitre-tagger, schema-declaration).
+  - Full suite **219 passed / 2 skipped**; `ruff` + `mypy` clean on all touched files.
 
 - 2026-07-21 — **mypy taken to 0** (follow-on to the "First real quality-gate run" entry below, which fixed branch-authored files and left mypy at 9 errors in pre-existing files scoped out per HANDOFF #3). This session cleared those remaining 9, so the whole `adef/` tree is now type-clean. Reached by rebasing onto that run; overlapping fixes (init_tools, schema.py, catalog.py, rule_discovery.py) were identical and resolved to one copy. Dev env: Python 3.13.9, ruff 0.15.21, mypy 2.3.0.
   - `pytest` — **167 tests, all green** (165 passed + 2 skipped; the 2 skips are 3.13-specific — the run below on 3.11 reported 167 passed).

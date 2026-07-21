@@ -49,12 +49,30 @@ loop-variable shadow in `schema check`). Fixes are typing/wiring only; suite
 unchanged pre/post. Evidence in ISA `## Verification` ("Local quality gates"
 entry). **Branch is mergeable.**
 
-## Next up after that (see next-steps doc for detail)
+## Late-session gap-closure (2026-07-21, post-review of the recipe feature)
 
-Coverage epic in order: ATT&CK reference layer (build-time snapshot via
-`mitreattack-python`, never a runtime dep) → `mitre-tagger` skill →
-coverage report + Navigator export. Then `declaration-author` skill,
-check-report union collapse, `adef sync` design doc.
+A review of the recipe feature (`889e7dc`) against its original plan found it
+complete but untested. Closed same day:
+
+- **`tests/test_recipes.py` (28 tests)** — recipes core, `adef schema recipe`
+  CLI, and the schema MCP tools (fake-server harness). Caught a real bug:
+  `--format json` emitted through rich `console.print`, which soft-wraps at
+  terminal width → invalid JSON for any parser; now `click.echo` (the catalog
+  convention). Full suite **219 passed / 2 skipped**; ruff + mypy clean.
+- **MCP `schema_recipe` honesty fix** — unconfigured no longer silently
+  defaults to splunk; returns error + supported-platform list (ISA Decisions).
+- **Doc drift fixed** — `adef schema recipe` added to the workspace AGENTS.md
+  template; README/quickstart/plugin.json now name all bundled skills and the
+  `pip install -e ".[mcp]"` prerequisite (previously the plugin pointed at an
+  `adef-mcp` command that fails on import from a base install).
+
+## Next up (see next-steps doc for detail)
+
+Coverage epic ✅ shipped (ATT&CK reference layer → `mitre-tagger` →
+coverage report + Navigator export). Remaining: `declaration-author` skill
+(§5 — the codified reshape step the `schema-declaration` skill currently
+improvises), check-report union collapse (§6), `adef sync` design doc (§7),
+v0.1.0 release framing (§9).
 
 ## Field-testing notes (Eric)
 

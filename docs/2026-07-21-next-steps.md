@@ -37,7 +37,8 @@ Ordered by what unblocks what.
 
 ## Near-term — makes the launch demo compelling
 
-4. **The coverage epic — in this order** (decided 2026-07-21: the reference
+4. ✅ *(done 2026-07-21 — all three steps shipped: `1d8ceef`, `d3b8dbe`,
+   `e237e6e`)* **The coverage epic — in this order** (decided 2026-07-21: the reference
    layer is the cheap foundation everything expensive stands on; building
    tagger/Navigator first would mean re-auditing every mapping made before
    validation existed):
@@ -93,6 +94,13 @@ Ordered by what unblocks what.
   (`schema_recipe`, `schema_lint_declaration`, `schema_list_platforms`) +
   `schema-declaration` skill for Claude Code. `adef init --interactive`
   prompts for platform preferences. Comprehensive guide: `docs/siem-recipes.md`.
+  *Gap-closure pass (2026-07-21, post-review):* `tests/test_recipes.py` (28
+  tests — core, CLI, MCP), which caught a real bug (`--format json` wrapped
+  through rich → invalid JSON; now `click.echo`); MCP `schema_recipe` no
+  longer silently defaults to splunk when unconfigured (error + platform
+  list); `adef schema recipe` surfaced in the workspace AGENTS.md template;
+  README/quickstart/plugin.json fixed (`".[mcp]"` extra prerequisite, stale
+  bundled-skill lists).
 - Plugin skills wave 2: `journal-backfill`, `forge-stage` (rendered from
   `adef/data/prompts/`), `coverage-gaps`.
 - `schema list` + per-detection `schema validate`; `detection search`.
