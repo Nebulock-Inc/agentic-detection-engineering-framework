@@ -18,14 +18,23 @@ entries), co-worker signed off.
 - **Schemas**: declaration-driven (`adef-sources.yml`) with `scope` for
   many-shapes-per-container, `declared|corrected` provenance, drift on
   re-ingest; `schema check` cross-references rule field usage
-  (most-specific-match, union on ties).
+  (most-specific-match, union on ties). **NEW:** `adef schema recipe
+  <platform>` generates SIEM-specific field extraction recipes (7 platforms:
+  Splunk, Sentinel, Elastic, Chronicle, Sumo, QRadar, Other) with command,
+  export instructions, and reshaping scripts.
 - **Review triage**: `review_reasons` (structural vs `no_mitre` enrichment
   queue); platform auto-inherited from declared schemas at catalog time.
+- **MITRE tagging**: `adef detection tag-mitre` writes attack.* tags via LLM
+  inference; `mitre-tagger` skill orchestrates batch workflows. `adef attack
+  show` displays technique details; `adef coverage` generates ATT&CK
+  Navigator layers with quality scoring.
 - **Claude plugin** (`claude-plugin/`, repo = marketplace): catalog-onboarding
-  skill + profile-author sub-agent. **Inactive until installed** — quickstart
-  step 5b has the local-path install.
+  skill + profile-author sub-agent + mitre-tagger skill + **schema-declaration
+  skill**. **Inactive until installed** — quickstart step 5b has the
+  local-path install.
 - **Workspace AGENTS.md**: `adef init` scaffolds an operator briefing for AI
-  assistants (drive-not-describe workflows); `--force` refreshes.
+  assistants (drive-not-describe workflows); `--force` refreshes. **NEW:**
+  `adef init --interactive` prompts for SIEM platform preferences.
 - **Examples**: `examples/` = demo rules + thrunt declaration (from a real
   Splunk export) + fake in-house format with its profile — the quickstart
   runs against these, every command sandbox-executed verbatim.

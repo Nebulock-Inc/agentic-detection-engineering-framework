@@ -86,8 +86,13 @@ Ordered by what unblocks what.
 
 ## Standing follow-ups (tracked, not scheduled)
 
-- Per-SIEM recipe docs beyond the two worked examples (Sentinel `getschema`,
-  Elastic `_mapping`).
+- ✅ *(done 2026-07-21, `889e7dc`)* **Per-SIEM recipe docs** beyond the two worked
+  examples. Implemented as `adef schema recipe <platform>` with 7 platforms
+  (Splunk, Sentinel, Elastic, Chronicle, Sumo, QRadar, Other), each with
+  command + export instructions + Python reshaping script. MCP tools
+  (`schema_recipe`, `schema_lint_declaration`, `schema_list_platforms`) +
+  `schema-declaration` skill for Claude Code. `adef init --interactive`
+  prompts for platform preferences. Comprehensive guide: `docs/siem-recipes.md`.
 - Plugin skills wave 2: `journal-backfill`, `forge-stage` (rendered from
   `adef/data/prompts/`), `coverage-gaps`.
 - `schema list` + per-detection `schema validate`; `detection search`.
