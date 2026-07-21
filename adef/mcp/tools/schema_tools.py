@@ -103,11 +103,17 @@ def register(server: Any) -> None:
             if config_file.exists():
                 try:
                     config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-                    platform = config_data.get("platform", "splunk")
+                    platform = (config_data or {}).get("platform")
                 except (OSError, yaml.YAMLError):
-                    platform = "splunk"  # Fallback default
-            else:
-                platform = "splunk"  # Fallback default
+                    platform = None
+
+            if not platform:
+                # No silent default: guessing splunk would hand a Sentinel user SPL.
+                return {
+                    "error": "No platform configured. Pass a platform explicitly, "
+                    "or run `adef init --interactive` to set one.",
+                    "platforms": list_platforms(),
+                }
 
         try:
             recipe_obj = get_recipe(platform)

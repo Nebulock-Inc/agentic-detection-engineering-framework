@@ -376,6 +376,6 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
     if format == "json":
         import dataclasses
         output = dataclasses.asdict(recipe_obj)
-        console.print(json.dumps(output, indent=2))
+        click.echo(json.dumps(output, indent=2))
     else:
         console.print(render_recipe_markdown(recipe_obj))

@@ -48,6 +48,7 @@ adef catalog /path/to/rules --dry-run --report json   # triage first
 adef catalog /path/to/rules                           # records + journals + INDEX
 
 # Data schemas (user-provided declarations, never inferred from rules)
+adef schema recipe [platform]                # per-SIEM field-extraction command
 adef schema ingest adef-sources.yml          # drift reported on re-ingest
 adef schema lint adef-sources.yml
 adef schema show <source>
@@ -69,7 +70,9 @@ profile, then let the engine score it:
 `config/profiles/` and re-run. Full guide: `docs/creating-extraction-profiles.md`
 in the ADEF repo.
 
-**Declaring data sources** — when the human provides a field inventory
+**Declaring data sources** — if the human doesn't have a field inventory
+yet, `adef schema recipe [platform]` prints the exact SIEM command to
+produce one. When they provide the inventory
 (Splunk `| fieldsummary`, KQL `| getschema`, a vendor data dictionary),
 reshape it into a declaration: drop platform internals (`_*`, `punct`,
 `date_*`, `splunk_server`), fold case-duplicates into `aliases`, keep top
