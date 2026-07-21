@@ -45,33 +45,19 @@ templates_dir: templates
 # hunt_root: ~/path/to/hunts
 """
 
-WORKSPACE_AGENTS_MD = """\
-# AGENTS.md — ADEF Workspace
+def _workspace_agents_md() -> str:
+    """The operator briefing scaffolded into every workspace as AGENTS.md.
 
-This directory is an **ADEF workspace** — the durable home for detection journals.
-
-## What lives here
-
-- `journals/` — per-detection markdown journals (`D-XXXX.md`), one per rule
-- `templates/DETECTION_FORGE.md` — the FORGE-shaped template `adef detection new` clones
-- `config/.adefconfig.yaml` — workspace configuration
-
-## How journals pair with rules
-
-Detection rules continue to live in their upstream repository as YAML. Journals here are *siblings* of those rules — they capture the FORGE-stage notes, hypothesis, intel sources, query iterations, tuning decisions, and deprecation rationale that don't fit cleanly in YAML. The mapping from journal `D-XXXX` to upstream rule UUID lives in each journal's frontmatter as `rule_uuid:`.
-
-## FORGE methodology
-
-See [methodology.md](https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/blob/main/docs/methodology.md) — Find → Observe → Refine → Govern → Evolve.
-
-## Maturity model
-
-See [maturity-model.md](https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/blob/main/docs/maturity-model.md) — L0 Ad-hoc through L4 Agentic.
-
-## Why ADEF
-
-See [why-adef.md](https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/blob/main/docs/why-adef.md) — the framework adoption guide; ADEF and ATHF are paired siblings.
-"""
+    Lives in package data (``adef/data/templates/WORKSPACE_AGENTS.md``) so it
+    ships with the wheel and stays maintainable as one document — this is the
+    briefing an AI assistant *operating* ADEF reads, distinct from the repo's
+    contributor-facing AGENTS.md.
+    """
+    return (
+        resources.files("adef.data")
+        .joinpath("templates/WORKSPACE_AGENTS.md")
+        .read_text(encoding="utf-8")
+    )
 
 
 def _copy_template(target_templates_dir: Path) -> Path:
@@ -118,7 +104,7 @@ def init(path: Path | None, force: bool) -> None:
     if not config_file.exists() or force:
         config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
     if not agents_md.exists() or force:
-        agents_md.write_text(WORKSPACE_AGENTS_MD, encoding="utf-8")
+        agents_md.write_text(_workspace_agents_md(), encoding="utf-8")
 
     template_path = _copy_template(templates_dir)
 
