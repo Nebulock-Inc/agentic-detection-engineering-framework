@@ -85,7 +85,8 @@ class CatalogRecord:
     platform: str
     kind: str              # atomic | correlation | composite
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
-    format: str            # sigma | spl | kql | cql | sql (true source format)
+    format: str            # sigma | spl | kql | cql | sql | <profile name> (true source format)
+    query_language: str = ""  # language of `query` (spl|kql|cql|sql) — drives `schema check`
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
     support: str = "supported"  # supported | recognized_unsupported (how well we parse the format)
@@ -110,6 +111,7 @@ class CatalogRecord:
             "kind": self.kind,
             "engine": self.engine,
             "format": self.format,
+            "query_language": self.query_language,
             "data_source": self.data_source,
             "support": self.support,
             "mitre": list(self.mitre),
@@ -169,6 +171,7 @@ def record_from_discovered(
         kind=disc.kind,
         engine=disc.engine,
         format=disc.format,
+        query_language=disc.query_language,
         data_source=disc.data_source,
         support=disc.support,
         mitre=list(disc.mitre),

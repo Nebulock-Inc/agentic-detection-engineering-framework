@@ -219,3 +219,135 @@ def test_old_model_commands_are_gone():
     """The rules-derived schema model was removed pre-release (ISA 2026-07-20)."""
     commands = set(schema_cli.commands)
     assert commands == {"ingest", "lint", "check", "show"}
+
+
+# --------------------------------------------------------------------------- #
+# Scope (ISA 2026-07-21): name is what a schema IS; scope is every way a
+# query might ADDRESS it. Most-specific match wins; ties = union.
+# --------------------------------------------------------------------------- #
+SCOPED_DECLARATION = {
+    "version": 1,
+    "sources": [
+        {
+            "name": "sysmon_operational",
+            "platform": "windows",
+            "query_language": "spl",
+            "scope": {
+                "index": "wineventlog",
+                "sourcetype": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+            },
+            "fields": [{"name": "CallTrace"}, {"name": "GrantedAccess"}],
+        },
+        {
+            "name": "windows_dns",
+            "platform": "windows",
+            "query_language": "spl",
+            "scope": {"index": "wineventlog", "sourcetype": "MSDNS"},
+            "fields": [{"name": "answer_count", "type": "int"}, {"name": "query_type"}],
+        },
+    ],
+}
+
+
+def test_lint_scope_valid_and_invalid():
+    errors, _ = lint_declaration_dict(json.loads(json.dumps(SCOPED_DECLARATION)))
+    assert errors == []
+    bad = json.loads(json.dumps(SCOPED_DECLARATION))
+    bad["sources"][0]["scope"] = ["not", "a", "mapping"]
+    errors, _ = lint_declaration_dict(bad)
+    assert any("scope" in e for e in errors)
+    bad = json.loads(json.dumps(SCOPED_DECLARATION))
+    bad["sources"][0]["scope"] = {"index": {"nested": "no"}}
+    errors, _ = lint_declaration_dict(bad)
+    assert any("scalar" in e for e in errors)
+
+
+def test_ingest_carries_scope(tmp_path):
+    sources = load_declaration(_decl(tmp_path, SCOPED_DECLARATION, "scoped.yml"))
+    path, _ = ingest_source(sources[0], tmp_path / "schema")
+    data = read_schema_v2(path)
+    assert data["scope"] == {
+        "index": "wineventlog",
+        "sourcetype": "XmlWinEventLog:Microsoft-Windows-Sysmon/Operational",
+    }
+
+
+def _catalog_conf_rule(tmp_path, name, search):
+    from adef.commands.catalog import catalog as catalog_cli
+
+    repo = tmp_path / f"repo-{name}"
+    repo.mkdir()
+    (repo / f"{name}.conf").write_text(f"[{name}]\nsearch = {search}\n", encoding="utf-8")
+    result = CliRunner().invoke(catalog_cli, [str(repo)])
+    assert result.exit_code == 0, result.output
+
+
+def _check_report(ws):
+    result = CliRunner().invoke(schema_cli, ["check", "--report", "json"])
+    assert result.exit_code == 0, result.output
+    return json.loads(result.output)
+
+
+def test_check_container_only_rule_matches_union(ws, tmp_path):
+    """A rule filtered only by index could see any shape in it → checked
+    against the union; fields from either scoped source are legitimate."""
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(
+        tmp_path, "union",
+        "index=wineventlog CallTrace=x answer_count=3 BogusField=1",
+    )
+    report = _check_report(ws)
+    assert report["rules_checked"] == 1
+    all_missing = {f for fields in report["missing_from_schema"].values() for f in fields}
+    assert "CallTrace" not in all_missing      # sysmon field, union-legit
+    assert "answer_count" not in all_missing   # dns field, union-legit
+    assert "BogusField" in all_missing         # in neither
+    assert "index" not in all_missing          # meta pseudo-field ignored
+
+
+def test_check_shape_pinned_rule_narrows(ws, tmp_path):
+    """A rule that pins sourcetype= matches only that source — a field from
+    the sibling shape is now a finding (most-specific match wins)."""
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(
+        tmp_path, "narrow",
+        "index=wineventlog sourcetype=MSDNS CallTrace=oops query_type=A",
+    )
+    report = _check_report(ws)
+    missing = report["missing_from_schema"]
+    assert "CallTrace" in missing.get("windows_dns", {})   # flagged: wrong shape
+    assert "sysmon_operational" not in missing             # not matched at all
+
+
+def test_check_covers_profile_claimed_rules_via_query_language(ws, tmp_path):
+    """query_language persisted on records (2026-07-21) makes profile-claimed
+    rules checkable even though their `format` is the profile name."""
+    from adef.commands.catalog import catalog as catalog_cli
+
+    # Profile teaching an in-house SQL wrapper, saved as a workspace profile.
+    (ws / "config" / "profiles").mkdir(parents=True)
+    (ws / "config" / "profiles" / "acme-sql.yml").write_text(
+        yaml.safe_dump({
+            "name": "acme-sql", "version": 1,
+            "signature": {"container": "yaml", "all_keys": ["alert"]},
+            "query_language": "sql",
+            "map": {"title": "alert.name", "query": "alert.query"},
+        }),
+        encoding="utf-8",
+    )
+    repo = tmp_path / "sql-repo"
+    repo.mkdir()
+    (repo / "r.yml").write_text(
+        "alert:\n  name: R\n  query: SELECT NotAField FROM cloudtrail WHERE eventName='X'\n",
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    decl = {"version": 1, "sources": [{
+        "name": "cloudtrail", "query_language": "sql",
+        "fields": [{"name": "eventName"}, {"name": "userIdentity"}],
+    }]}
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, decl, "ct.yml"))])
+    report = _check_report(ws)
+    assert report["rules_checked"] == 1
+    assert "NotAField" in report["missing_from_schema"].get("cloudtrail", {})

@@ -98,6 +98,40 @@ fields:
 - Future ingest paths (event samples, if ever wanted) become a third
   provenance value — additive, no redesign.
 
+## Scope — many event shapes per container (added 2026-07-21)
+
+A single container (Splunk index, LogScale repo, Elastic index pattern) often
+holds several event *shapes* — mixing them into one union schema poisons
+authoring (found live: a `wineventlog` fieldsummary export blended Sysmon and
+DNS fields). Resolution: declare one source per shape, and give each an
+optional free-form **`scope`** — every literal a query might use to address
+it besides its name:
+
+```yaml
+- name: sysmon_operational
+  query_language: spl
+  scope:
+    index: wineventlog
+    sourcetype: XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+```
+
+- **`name` is what the schema IS; `scope` is every way a query might ADDRESS
+  it.** Keys are platform vocabulary (`sourcetype`, `event_simpleName`,
+  `log_type`, `event.dataset`) that ADEF never interprets — `check` compares
+  only *values* against rule literals. No platform enumeration in the format.
+- **Matching: most-specific wins, ties = union.** A rule's literals =
+  `data_source` + shape literals extracted from its query (today: SPL
+  `sourcetype=`, via `rule_discovery.shape_literals`). Sources matching the
+  most literals are kept; a container-only rule ties across all shapes in
+  that container and is checked against their union — correct, since it could
+  see any of them. Each language taught a shape literal upgrades that
+  platform from union- to exact-matching with no format change.
+- **`query_language` is now persisted on `CatalogRecord`** so `check` covers
+  ESCU and profile-claimed rules (whose `format` is not a query language).
+- Routing pseudo-fields (`index`, `sourcetype`, `host`, `earliest`, …) are
+  never findings.
+- 1:1 platforms (Sentinel tables, warehouse tables) simply omit `scope`.
+
 ## Rules' new role: consumer and prioritizer, never source
 
 - **Prioritization:** the catalog's `by_data_source` index tells the user what

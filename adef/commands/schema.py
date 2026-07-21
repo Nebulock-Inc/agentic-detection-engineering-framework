@@ -26,12 +26,14 @@ from rich.console import Console
 
 from adef.core.declaration import (
     DeclarationError,
+    address_literals,
     ingest_source,
     known_field_names,
     lint_declaration_dict,
     load_declaration,
     read_schema_v2,
 )
+from adef.core.rule_discovery import shape_literals
 from adef.core.rule_parser import (
     extract_cql_fields,
     extract_kql_fields,
@@ -41,13 +43,19 @@ from adef.core.rule_parser import (
 
 console = Console()
 
-# Query-language field extractors, keyed by the catalog record's ``format``.
+# Query-language field extractors, keyed by the record's ``query_language``.
 # Sigma is excluded on purpose — it's structured YAML, not a query language.
 _FIELD_EXTRACTORS = {
     "sql": extract_sql_fields,
     "spl": extract_spl_fields,
     "cql": extract_cql_fields,
     "kql": extract_kql_fields,
+}
+
+# Routing/meta pseudo-fields — never findings: they address data rather than
+# describe events, so no declaration would (or should) list them.
+_CHECK_IGNORED_FIELDS = {
+    "index", "sourcetype", "source", "host", "earliest", "latest", "_time",
 }
 
 
@@ -158,13 +166,20 @@ def lint_cmd(declaration_file: Path):
 def check(workspace: Path | None, report_format: str | None):
     """Cross-reference rule field usage against declared schemas.
 
-    For every catalogued rule whose ``data_source`` has a schema_version-2
-    schema, extract the fields the rule references and compare against the
-    schema (field names + aliases). Findings are advisory, never blocking:
+    For every catalogued rule whose literals match a schema_version-2 schema,
+    extract the fields the rule references and compare against the schema
+    (field names + aliases). Findings are advisory, never blocking:
 
     - rule references a field the schema doesn't know (broken rule,
       undeclared alias, or a macro worth documenting);
     - schema fields no rule uses (unexploited detection surface).
+
+    Scope matching (ISA 2026-07-21): a rule matches every source whose name
+    OR scope values contain one of the rule's literals (``data_source`` plus
+    shape literals like SPL ``sourcetype=``). **Most-specific match wins**:
+    sources matching the most literals are kept; ties keep all (the union) —
+    correct, because a query filtered only by container could see any of
+    those event shapes.
     """
     from adef.core.catalog import Catalog
 
@@ -174,35 +189,54 @@ def check(workspace: Path | None, report_format: str | None):
     schema_dir = ws / "schema"
     cat = Catalog(ws)
 
-    # source -> (known names, declared field names)
+    # source -> known names / declared names; literal -> sources it addresses
     schemas: dict[str, set[str]] = {}
     declared_fields: dict[str, set[str]] = {}
+    addressed_by: dict[str, set[str]] = {}
     for path in sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []:
         data = read_schema_v2(path)
         if data:
-            schemas[data["source"]] = known_field_names(data)
-            declared_fields[data["source"]] = {
-                str(f.get("name", "")) for f in data.get("fields", [])
-            }
+            name = data["source"]
+            schemas[name] = known_field_names(data)
+            declared_fields[name] = {str(f.get("name", "")) for f in data.get("fields", [])}
+            for literal in address_literals(data):
+                addressed_by.setdefault(literal, set()).add(name)
 
     missing: dict[str, dict[str, list[str]]] = {}  # source -> field -> [rule ids]
     used: dict[str, set[str]] = {s: set() for s in schemas}
     rules_checked = 0
     for det_id, _path, data in cat.iter_records():
-        source = (data.get("data_source") or "").strip()
-        extractor = _FIELD_EXTRACTORS.get(data.get("format", ""))
-        if source not in schemas or extractor is None:
-            continue
         query = data.get("query") or ""
-        if not query:
+        # query_language (persisted 2026-07-21) covers ESCU + profile-claimed
+        # rules whose `format` isn't itself a query language.
+        language = data.get("query_language") or data.get("format", "")
+        extractor = _FIELD_EXTRACTORS.get(language)
+        if extractor is None or not query:
             continue
+
+        literals = {(data.get("data_source") or "").strip()} - {""}
+        literals.update(shape_literals(query, language))
+        match_counts: dict[str, int] = {}
+        for literal in literals:
+            for source in addressed_by.get(literal, ()):
+                match_counts[source] = match_counts.get(source, 0) + 1
+        if not match_counts:
+            continue
+        best = max(match_counts.values())
+        matched = sorted(s for s, n in match_counts.items() if n == best)
+
         rules_checked += 1
-        fields = extractor(query)
-        for f in fields:
-            if f in schemas[source]:
-                used[source].add(f)
+        union_known: set[str] = set().union(*(schemas[s] for s in matched))
+        for f in extractor(query):
+            if f.lower() in _CHECK_IGNORED_FIELDS:
+                continue
+            if f in union_known:
+                for source in matched:
+                    if f in schemas[source]:
+                        used[source].add(f)
             else:
-                missing.setdefault(source, {}).setdefault(f, []).append(det_id)
+                for source in matched:
+                    missing.setdefault(source, {}).setdefault(f, []).append(det_id)
 
     unused = {
         source: sorted(declared_fields[source] - used[source])

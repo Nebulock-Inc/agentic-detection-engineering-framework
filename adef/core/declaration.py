@@ -48,7 +48,7 @@ QUERY_LANGUAGES = ("spl", "kql", "cql", "sql")
 PROVENANCE_DECLARED = "declared"
 PROVENANCE_CORRECTED = "corrected"
 
-_SOURCE_KEYS = {"name", "platform", "query_language", "description", "fields"}
+_SOURCE_KEYS = {"name", "platform", "query_language", "description", "scope", "fields"}
 _FIELD_KEYS = {"name", "type", "description", "values", "aliases"}
 _BAD_SOURCE_NAME = re.compile(r"[/\\]")
 
@@ -73,6 +73,13 @@ class DeclaredSource:
     platform: str = ""
     query_language: str = ""
     description: str = ""
+    # Free-form addressing literals (ISA 2026-07-21): every way a query might
+    # reach this source besides its name — e.g. for Splunk
+    # ``{index: wineventlog, sourcetype: XmlWinEventLog:...}``, for Panther
+    # ``{log_type: AWS.CloudTrail, table: panther_logs.public.aws_cloudtrail}``.
+    # Keys are platform vocabulary ADEF never interprets; ``schema check``
+    # matches only the *values* against rule literals.
+    scope: dict[str, str] = dataclass_field(default_factory=dict)
     fields: list[DeclaredField] = dataclass_field(default_factory=list)
 
 
@@ -130,6 +137,17 @@ def lint_declaration_dict(data: Any) -> tuple[list[str], list[str]]:
             errors.append(
                 f"{where}.query_language: must be one of {', '.join(QUERY_LANGUAGES)}"
             )
+
+        scope = src.get("scope")
+        if scope is not None:
+            if not isinstance(scope, dict):
+                errors.append(f"{where}.scope: must be a mapping of literal-kind -> value")
+            else:
+                for k, v in scope.items():
+                    if not isinstance(k, str) or not k.strip():
+                        errors.append(f"{where}.scope: keys must be non-empty strings")
+                    if isinstance(v, (dict, list)) or v is None or str(v).strip() == "":
+                        errors.append(f"{where}.scope.{k}: value must be a non-empty scalar")
 
         fields = src.get("fields")
         if not isinstance(fields, list) or not fields:
@@ -193,6 +211,7 @@ def parse_declaration(data: dict) -> list[DeclaredSource]:
                 platform=str(src.get("platform", "")),
                 query_language=str(src.get("query_language", "") or ""),
                 description=str(src.get("description", "")),
+                scope={str(k): str(v) for k, v in (src.get("scope") or {}).items()},
                 fields=fields,
             )
         )
@@ -303,6 +322,7 @@ def ingest_source(source: DeclaredSource, schema_dir: Path) -> tuple[Path, Drift
         "platform": source.platform,
         "query_language": source.query_language,
         "description": source.description,
+        "scope": dict(source.scope),
         "declared": _now_iso(),
         "fields": fields_out,
     }
@@ -310,6 +330,19 @@ def ingest_source(source: DeclaredSource, schema_dir: Path) -> tuple[Path, Drift
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
     return path, drift
+
+
+def address_literals(schema_data: dict) -> set[str]:
+    """Every literal a query might use to address this source: name + scope values.
+
+    ``name`` is what the schema *is*; ``scope`` is every way a query might
+    *address* it (ISA 2026-07-21). Keys are never interpreted.
+    """
+    literals = {str(schema_data.get("source", ""))}
+    for v in (schema_data.get("scope") or {}).values():
+        literals.add(str(v))
+    literals.discard("")
+    return literals
 
 
 def known_field_names(schema_data: dict) -> set[str]:
@@ -332,6 +365,7 @@ __all__ = [
     "DeclaredField",
     "DeclaredSource",
     "Drift",
+    "address_literals",
     "ingest_source",
     "known_field_names",
     "lint_declaration_dict",

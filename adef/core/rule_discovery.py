@@ -68,6 +68,7 @@ _MITRE_TECHNIQUE_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
 
 # Raw source-literal extractors: the table/index the rule reads from, verbatim.
 _SQL_FROM_RE = re.compile(r"\bfrom\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+_SPL_SOURCETYPE_RE = re.compile(r"\bsourcetype\s*=\s*\"?([^\s\"|]+)\"?", re.IGNORECASE)
 _SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
 _SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
@@ -494,6 +495,24 @@ _EXTRACTORS = {
 # --------------------------------------------------------------------------- #
 # Profile-based extraction (user profiles claim files before built-ins)
 # --------------------------------------------------------------------------- #
+def shape_literals(query: str, query_language: str) -> tuple[str, ...]:
+    """Shape-axis literals a query pins beyond its container (ISA 2026-07-21).
+
+    Today: SPL ``sourcetype=`` values. Each language we teach here upgrades
+    ``schema check`` from union-matching to exact-matching on that platform —
+    incrementally, with no format change (e.g. CQL ``#event_simpleName=`` and
+    Elastic ``event.dataset`` are future additions).
+    """
+    if not query:
+        return ()
+    if query_language == "spl":
+        seen: dict[str, None] = {}
+        for m in _SPL_SOURCETYPE_RE.finditer(query):
+            seen.setdefault(m.group(1), None)
+        return tuple(seen)
+    return ()
+
+
 def _infer_data_source(query: str, query_language: str) -> str:
     """Best-effort raw source literal from a query, by language.
 
@@ -677,6 +696,7 @@ __all__ = [
     "UNCLAIMED",
     "discover_rules",
     "recognize",
+    "shape_literals",
     "sniff_format",
     "walk_outcomes",
 ]
