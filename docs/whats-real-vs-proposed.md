@@ -288,8 +288,9 @@ All of these **do not exist** and will return "command not found":
 
 ```bash
 # Detection management
-adef detection list                    # ❌ Does not exist
-adef detection list --stage refine     # ❌ Does not exist
+adef detection list                    # ✅ SHIPPED 2026-07-21 (filters + --report json)
+adef detection list --stage refine     # ✅ SHIPPED 2026-07-21
+adef detection show D-0001             # ✅ SHIPPED 2026-07-21 (record + journal)
 adef detection search "mshta"          # ❌ Does not exist
 adef detection show D-XXXX             # ❌ Does not exist
 
@@ -454,7 +455,7 @@ adef detection refine D-0001
 | `adef hunt-promote` | ✅ Yes | Creates journal from hunt | Requires ATHF |
 | `adef backfill` | ✅ Yes | Bulk journal creation | Requires rule files |
 | | | | |
-| `adef detection list` | ❌ No | Would list all detections | N/A - not built |
+| `adef detection list` / `show` | ✅ Yes (2026-07-21) | Browse catalogued detections; filters by platform/format/status/stage/needs-review | Shipped (story 7393) |
 | `adef detection search` | ❌ No | Would search journals | N/A - not built |
 | `adef detection coverage` | ❌ No | Would show ATT&CK coverage | N/A - not built |
 | `adef schema ingest/lint/check/show` | ✅ Yes (2026-07-20) | Declaration-driven schemas + rule-vs-schema check | Shipped; `discover` (connector-based) permanently dropped |
@@ -480,10 +481,11 @@ adef detection new "Test"
 adef detection observe D-0001
 cat ~/work/adef-workspace/journals/D-0001.md
 
-# Try a fake command (will fail)
+# list/show are real since 2026-07-21
 adef detection list
-# Output: Error: No such command 'list'.
+adef detection show D-0001
 
+# Try a fake command (will fail)
 adef detection search "test"
 # Output: Error: No such command 'search'.
 
@@ -509,7 +511,7 @@ adef schema discover
 - They (mostly) don't automate anything
 - You do the actual work (querying, analyzing, documenting)
 
-**Everything else in the roadmap (list, search, coverage, gaps, research) does not exist yet.** Schema and catalog shipped 2026-07-20: `adef catalog` (+ extraction profiles) and `adef schema ingest/lint/check/show` (declaration-driven).
+**Everything else in the roadmap (search, coverage, gaps, research) does not exist yet.** Shipped since this doc's snapshot: `adef catalog` + extraction profiles, `adef schema ingest/lint/check/show` (declaration-driven, 2026-07-20), and `adef detection list/show` (2026-07-21).
 
 **The confusion comes from:** Documentation describing "how Observe **should work with schema validation**" vs. "how Observe **actually works today**" (just adds a prompt).
 

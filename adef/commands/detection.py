@@ -104,4 +104,140 @@ for _stage in FORGE_STAGES:
     detection.add_command(_make_stage_command(_stage))
 
 
+# --------------------------------------------------------------------------- #
+# Browsing — list / show (story 7393)
+# --------------------------------------------------------------------------- #
+def _workspace_from(workspace: Path | None) -> Path:
+    """Same resolution the stage commands use: journals dir's parent."""
+    return workspace_journals_dir(workspace).parent
+
+
+@detection.command("list")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
+)
+@click.option("--platform", default=None, help="Filter by platform (e.g. windows).")
+@click.option("--rule-format", "rule_format", default=None, help="Filter by source format (sigma, spl, <profile>).")
+@click.option("--status", default=None, help="Filter by status (draft, ready, tuning, deprecated).")
+@click.option("--stage", default=None, help="Filter by FORGE stage (find … evolve).")
+@click.option("--needs-review", is_flag=True, help="Only detections flagged needs_review.")
+@click.option(
+    "--report",
+    "report_format",
+    type=click.Choice(["json"]),
+    default=None,
+    help="Emit machine-readable output.",
+)
+def list_cmd(
+    workspace: Path | None,
+    platform: str | None,
+    rule_format: str | None,
+    status: str | None,
+    stage: str | None,
+    needs_review: bool,
+    report_format: str | None,
+) -> None:
+    """List catalogued detections (reads the workspace catalog)."""
+    import json as _json
+
+    from adef.core.catalog import Catalog
+
+    ws = _workspace_from(workspace)
+    records = []
+    for det_id, _path, data in Catalog(ws).iter_records():
+        if platform and data.get("platform") != platform:
+            continue
+        if rule_format and data.get("format") != rule_format:
+            continue
+        if status and data.get("status") != status:
+            continue
+        if stage and data.get("stage") != stage:
+            continue
+        if needs_review and not data.get("needs_review"):
+            continue
+        records.append(data)
+    records.sort(key=lambda d: d.get("id", ""))
+
+    if report_format == "json":
+        keys = (
+            "id", "title", "platform", "format", "query_language", "data_source",
+            "mitre", "status", "stage", "owner", "needs_review", "rule_ref",
+        )
+        click.echo(_json.dumps([{k: d.get(k) for k in keys} for d in records], indent=2))
+        return
+
+    if not records:
+        console.print("[yellow]No detections match.[/yellow] (Run `adef catalog <rules>` first?)")
+        return
+    for d in records:
+        flag = " [yellow]⚠[/yellow]" if d.get("needs_review") else ""
+        mitre = ",".join(d.get("mitre") or []) or "-"
+        console.print(
+            f"  {d.get('id', '?')}  {d.get('stage', '?'):<8} {d.get('status', '?'):<10} "
+            f"{d.get('platform', '?'):<15} {d.get('format', '?'):<22} {mitre:<12} "
+            f"{d.get('title', '')}{flag}"
+        )
+    n_review = sum(1 for d in records if d.get("needs_review"))
+    console.print(
+        f"\n[bold]{len(records)}[/bold] detection(s)"
+        + (f" ([yellow]{n_review}[/yellow] need review)" if n_review else "")
+    )
+
+
+@detection.command("show")
+@click.argument("detection_id")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
+)
+def show(detection_id: str, workspace: Path | None) -> None:
+    """Show one detection: catalog record + paired journal."""
+    from adef.core.catalog import Catalog
+
+    ws = _workspace_from(workspace)
+    record = None
+    for det_id, _path, data in Catalog(ws).iter_records():
+        if det_id == detection_id:
+            record = data
+            break
+    if record is None:
+        raise click.ClickException(f"{detection_id} not found in the catalog under {ws}")
+
+    console.print(f"[bold]{record.get('id')}  {record.get('title', '')}[/bold]")
+    for key in ("platform", "format", "query_language", "data_source", "kind", "engine"):
+        if record.get(key):
+            console.print(f"  {key:<15} {record[key]}")
+    console.print(f"  {'mitre':<15} {', '.join(record.get('mitre') or []) or '-'}")
+    console.print(
+        f"  {'lifecycle':<15} stage={record.get('stage')} status={record.get('status')}"
+        + (f" owner={record['owner']}" if record.get("owner") else "")
+    )
+    if record.get("needs_review"):
+        console.print("  [yellow]needs_review[/yellow]   platform or MITRE could not be inferred")
+    if record.get("rule_ref"):
+        console.print(f"  {'source':<15} {record['rule_ref']}")
+    if record.get("query"):
+        console.print("\n[bold]Query[/bold]")
+        for line in record["query"].splitlines():
+            console.print(f"  {line}", highlight=False)
+
+    journal_path = ws / "journals" / f"{detection_id}.md"
+    if journal_path.is_file():
+        console.print(f"\n[bold]Journal[/bold]  {journal_path}")
+        stages = [
+            line.strip()
+            for line in journal_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("## [")
+        ]
+        for entry in stages[-3:]:
+            console.print(f"  {entry}")
+    else:
+        console.print("\n[yellow]No paired journal.[/yellow]")
+
+
 __all__ = ["detection"]
