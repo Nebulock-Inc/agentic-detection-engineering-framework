@@ -678,12 +678,12 @@ def walk_outcomes(
         # 2. Built-in recognizers.
         rec = recognize(path.name, text)
         if rec.support == NOT_A_RULE or rec.format is None:
-            doc = _load_yaml(text) if _looks_like_yaml(path.name, text) else None
-            if isinstance(doc, dict) and doc:
+            parsed = _load_yaml(text) if _looks_like_yaml(path.name, text) else None
+            if isinstance(parsed, dict) and parsed:
                 yield FileOutcome(
                     path=path,
                     outcome=UNCLAIMED,
-                    top_level_keys=tuple(sorted(str(k) for k in doc)),
+                    top_level_keys=tuple(sorted(str(k) for k in parsed)),
                 )
             else:
                 yield FileOutcome(path=path, outcome=NOT_A_RULE)

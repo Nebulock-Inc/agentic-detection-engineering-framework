@@ -184,7 +184,7 @@ def check(workspace: Path | None, report_format: str | None):
     from adef.core.catalog import Catalog
 
     ws = Path(
-        workspace or os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace")
+        workspace or os.getenv("ADEF_WORKSPACE") or Path.home() / "work" / "adef-workspace"
     ).expanduser().resolve()
     schema_dir = ws / "schema"
     cat = Catalog(ws)
@@ -278,9 +278,9 @@ def check(workspace: Path | None, report_format: str | None):
         console.print(f"[bold]{source}[/bold] — rule fields missing from schema:")
         for fname, ids in sorted(fields.items()):
             console.print(f"  [yellow]?[/yellow] {fname}  (used by {', '.join(sorted(ids))})")
-    for source, fields in sorted(unused.items()):
+    for source, unused_fields in sorted(unused.items()):
         console.print(f"[bold]{source}[/bold] — declared fields no rule uses:")
-        for fname in fields:
+        for fname in unused_fields:
             console.print(f"  [cyan]·[/cyan] {fname}")
 
 

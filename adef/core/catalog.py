@@ -45,7 +45,8 @@ _CatalogDumper.add_representer(str, _represent_str)
 
 
 def _dump_catalog_yaml(data: dict) -> str:
-    return yaml.dump(data, Dumper=_CatalogDumper, sort_keys=False, allow_unicode=True)
+    out: str = yaml.dump(data, Dumper=_CatalogDumper, sort_keys=False, allow_unicode=True)
+    return out
 
 _DETECTION_ID_RE = re.compile(r"^D-(\d{4,})$")
 _SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
