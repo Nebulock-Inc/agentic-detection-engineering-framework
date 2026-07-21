@@ -1,24 +1,28 @@
 """MCP tools — declaration-driven schema operations.
 
-Exposes ``schema_show`` (render a schema_version-2 schema) and
-``schema_ingest`` (build schemas from a data-source declaration file). Both
-delegate to ``adef.core.declaration`` — the same engine the CLI uses — so MCP
-and CLI can never drift. The former sample/LLM-based ``schema_init`` tool was
-removed with the rules-derived schema model (ISA 2026-07-20).
+Exposes ``schema_show`` (render a schema_version-2 schema), ``schema_ingest``
+(build schemas from a data-source declaration file), and ``schema_recipe``
+(generate SIEM-specific field extraction recipes). All delegate to
+``adef.core.*`` — the same engine the CLI uses — so MCP and CLI never drift.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
+
 from adef.core.declaration import (
     DeclarationError,
     ingest_source,
+    lint_declaration_dict,
     load_declaration,
     read_schema_v2,
 )
+from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 
 
 def _get_workspace_schema_dir(workspace: Optional[str]) -> Path:
@@ -79,6 +83,73 @@ def register(server: Any) -> None:
                 }
             )
         return {"ingested": results}
+
+    @server.tool()
+    def schema_recipe(platform: Optional[str] = None) -> dict[str, Any]:
+        """Generate SIEM-specific field extraction recipe.
+
+        Args:
+            platform: SIEM platform name (splunk, sentinel, elastic, chronicle,
+                      sumo, qradar, other). If None, reads from workspace config.
+
+        Returns:
+            Recipe with command, export format, and markdown guide.
+        """
+        # If no platform provided, try to read from workspace config
+        if not platform:
+            workspace_path = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
+            config_file = workspace_path / "config" / ".adefconfig.yaml"
+
+            if config_file.exists():
+                try:
+                    config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+                    platform = config_data.get("platform", "splunk")
+                except (OSError, yaml.YAMLError):
+                    platform = "splunk"  # Fallback default
+            else:
+                platform = "splunk"  # Fallback default
+
+        try:
+            recipe_obj = get_recipe(platform)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+        result = dataclasses.asdict(recipe_obj)
+        result["recipe_markdown"] = render_recipe_markdown(recipe_obj)
+
+        return result
+
+    @server.tool()
+    def schema_lint_declaration(content: str) -> dict[str, Any]:
+        """Validate ADEF data source declaration YAML.
+
+        Args:
+            content: YAML declaration content as string
+
+        Returns:
+            Validation result with errors and warnings.
+        """
+        try:
+            data = yaml.safe_load(content)
+        except yaml.YAMLError as exc:
+            return {
+                "valid": False,
+                "errors": [f"YAML parse error: {exc}"],
+                "warnings": [],
+            }
+
+        errors, warnings = lint_declaration_dict(data)
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+        }
+
+    @server.tool()
+    def schema_list_platforms() -> dict[str, Any]:
+        """List supported SIEM platforms for recipe generation."""
+        return {"platforms": list_platforms()}
 
 
 __all__ = ["register"]

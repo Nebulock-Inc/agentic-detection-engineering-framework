@@ -8,10 +8,19 @@ means, and everything downstream (query-authoring assistance, `adef schema
 check`, drift reporting) lights up.
 
 ```bash
+adef schema recipe <platform>         # generate SIEM-specific extraction recipe (NEW)
 adef schema lint adef-sources.yml     # validate
 adef schema ingest adef-sources.yml   # build schema/<source>.yml per source
 adef schema check                     # cross-reference your rules against it
 ```
+
+**NEW: Platform-specific recipes.** ADEF now ships with per-SIEM recipes showing
+exactly what command to run to extract field inventories and how to reshape the
+output. Run `adef schema recipe <platform>` to get started — the recipe includes
+the command, export instructions, and a Python reshaping script tailored to your
+platform's output format. See [`siem-recipes.md`](./siem-recipes.md) for detailed
+guides covering Splunk, Sentinel, Elastic, Chronicle, Sumo Logic, QRadar, and
+generic SQL platforms.
 
 ## The format
 
@@ -55,20 +64,36 @@ one table = one schema (Sentinel, warehouse tables) don't need scope at all.
 
 Full semantics: `docs/plans/2026-07-20-schema-declaration-design.md`.
 
-## Three ways to produce one
+## Four ways to produce one
 
-1. **Reshape an inventory export** (most common). Every platform can emit a
-   field list — Splunk `| fieldsummary`, KQL `| getschema`, Elastic
+1. **Use `adef schema recipe`** (easiest for supported platforms). Generate a
+   platform-specific recipe with the exact command to run, export instructions,
+   and reshaping script:
+   ```bash
+   adef schema recipe splunk     # or sentinel, elastic, chronicle, sumo, qradar, other
+   ```
+   The recipe output includes a Python script that converts your SIEM's field
+   export into valid ADEF declaration YAML. Copy the command, run it in your
+   SIEM, paste the output into the script, and you're done.
+   **Supported platforms:** Splunk, Microsoft Sentinel, Elastic/Kibana, Google
+   Chronicle, Sumo Logic, IBM QRadar, and generic SQL-based systems.
+   **Detailed guides:** [`siem-recipes.md`](./siem-recipes.md)
+
+2. **Reshape an inventory export manually.** Every platform can emit a field
+   list — Splunk `| fieldsummary`, KQL `| getschema`, Elastic
    `GET <index>/_mapping`, a vendor's event data dictionary. The reshape into
    the format is mechanical; the worked examples below show it end to end.
-2. **Ask your AI assistant.** Paste whatever you have — fieldsummary output, a
+
+3. **Ask your AI assistant.** Paste whatever you have — fieldsummary output, a
    CSV, a docs page — and have it draft the declaration, then run
    `adef schema lint` before ingesting. The format is small enough that this
-   works reliably.
-3. **Write it by hand.** Reasonable for small or high-value sources where you
+   works reliably. (The `schema-declaration` skill orchestrates this workflow
+   when using Claude Code with ADEF's MCP server.)
+
+4. **Write it by hand.** Reasonable for small or high-value sources where you
    want to be deliberate about descriptions and enum values.
 
-Nobody hand-types 200 fields — pick 1 or 2 for anything big.
+Nobody hand-types 200 fields — pick 1, 2, or 3 for anything big.
 
 ## Worked example: Splunk
 

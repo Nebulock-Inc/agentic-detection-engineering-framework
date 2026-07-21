@@ -72,6 +72,44 @@ deliberately-broad hunt rule; and `schema check` flagging `NotARealField` —
 planted in `examples/demo-rules/broad_hunt_bogus_field.conf` so there's
 always a finding to look at.
 
+## 3a. Generate schemas for your own SIEM (recipe workflow)
+
+The demo used a pre-built declaration (`adef-sources-thrunt.yml`). For your own
+SIEM, ADEF can generate platform-specific recipes showing exactly what command
+to run and how to convert the output.
+
+```bash
+# Interactive workspace setup (optional but helpful for first-time users)
+adef init --interactive
+# Prompts for:
+#   - Which SIEM/platform? (splunk, sentinel, elastic, chronicle, sumo, qradar, other)
+#   - Query language(s)? (spl, kql, sql, cql, etc.)
+# Stores preferences in config/.adefconfig.yaml
+
+# Generate recipe for your platform
+adef schema recipe            # Uses platform from config
+adef schema recipe splunk     # Explicit platform
+adef schema recipe sentinel
+
+# Recipe shows:
+#   - Exact command to run in your SIEM (e.g., index=... | fieldsummary)
+#   - How to export the results (CSV, JSON, etc.)
+#   - Python script to convert output → ADEF declaration YAML
+```
+
+**Workflow:**
+1. Run the SIEM command from the recipe (e.g., Splunk `fieldsummary`)
+2. Export the results as CSV/JSON
+3. Use the reshaping script from the recipe to create `<platform>-sources.yml`
+4. Validate: `adef schema lint <platform>-sources.yml`
+5. Ingest: `adef schema ingest <platform>-sources.yml`
+
+Detailed per-SIEM guides: [`docs/siem-recipes.md`](./siem-recipes.md)
+
+**Why this matters:** ADEF's schema system lets it suggest detections grounded
+in what your data can actually express, and helps rules reference real field
+names (not aliases, macros, or calculated fields).
+
 ## 3b. Teach ADEF an in-house format (extraction profiles)
 
 Real repos almost always contain a format ADEF doesn't know — the first thing

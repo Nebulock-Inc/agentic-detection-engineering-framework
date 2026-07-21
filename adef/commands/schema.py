@@ -33,6 +33,7 @@ from adef.core.declaration import (
     load_declaration,
     read_schema_v2,
 )
+from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 from adef.core.rule_discovery import shape_literals
 from adef.core.rule_parser import (
     extract_cql_fields,
@@ -319,3 +320,62 @@ def show(source: str):
             console.print(f"      \"{fld['description']}\"")
         if fld.get("values"):
             console.print(f"      values: {fld['values']}")
+
+
+@schema.command()
+@click.argument("platform", required=False)
+@click.option(
+    "--format",
+    type=click.Choice(["markdown", "json"]),
+    default="markdown",
+    help="Output format (markdown or json).",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
+)
+def recipe(platform: str | None, format: str, workspace: Path | None):
+    """Generate SIEM-specific field extraction recipe.
+
+    If PLATFORM is not specified, reads platform preference from workspace config.
+    """
+    # If no platform specified, try to read from workspace config
+    if not platform:
+        workspace_path = (
+            Path(workspace).expanduser().resolve()
+            if workspace
+            else Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
+        )
+        config_file = workspace_path / "config" / ".adefconfig.yaml"
+
+        if config_file.exists():
+            try:
+                config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
+                platform = config_data.get("platform")
+            except (OSError, yaml.YAMLError):
+                pass  # Fall through to interactive prompt
+
+        if not platform:
+            # Interactive fallback
+            console.print("\n[bold]No platform configured.[/bold]")
+            console.print("Run [cyan]adef init --interactive[/cyan] to set preferences, or choose now:\n")
+            platform = click.prompt(
+                "Which SIEM/platform?",
+                type=click.Choice(list_platforms(), case_sensitive=False),
+                default="splunk",
+            )
+
+    # Get and render recipe
+    try:
+        recipe_obj = get_recipe(platform)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if format == "json":
+        import dataclasses
+        output = dataclasses.asdict(recipe_obj)
+        console.print(json.dumps(output, indent=2))
+    else:
+        console.print(render_recipe_markdown(recipe_obj))

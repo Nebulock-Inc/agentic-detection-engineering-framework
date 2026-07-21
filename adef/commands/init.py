@@ -21,6 +21,7 @@ from importlib import resources
 from pathlib import Path
 
 import click
+import yaml
 from rich.console import Console
 
 console = Console()
@@ -34,6 +35,10 @@ workspace_version: 1
 workspace_kind: detection-engineering
 journals_dir: journals
 templates_dir: templates
+
+# SIEM/platform preferences (set via adef init --interactive)
+# platform: splunk
+# query_languages: [spl]
 
 # Path to an external rule directory (e.g. a Sigma repo). ADEF reads YAML
 # metadata from here for memory search; it never writes here. Override with
@@ -82,7 +87,13 @@ def _copy_template(target_templates_dir: Path) -> Path:
     is_flag=True,
     help="Overwrite existing scaffolding files.",
 )
-def init(path: Path | None, force: bool) -> None:
+@click.option(
+    "--interactive",
+    "-i",
+    is_flag=True,
+    help="Prompt for SIEM/platform preferences.",
+)
+def init(path: Path | None, force: bool, interactive: bool) -> None:
     """Initialize an ADEF workspace at PATH (default ``~/work/adef-workspace/``)."""
     workspace = (path or DEFAULT_WORKSPACE).expanduser().resolve()
     workspace.mkdir(parents=True, exist_ok=True)
@@ -101,14 +112,64 @@ def init(path: Path | None, force: bool) -> None:
     templates_dir.mkdir(exist_ok=True)
     schema_dir.mkdir(exist_ok=True)
 
+    # Start with default config structure
+    config_data = {
+        "workspace_version": 1,
+        "workspace_kind": "detection-engineering",
+        "journals_dir": "journals",
+        "templates_dir": "templates",
+    }
+
+    # Interactive mode: prompt for SIEM preferences
+    if interactive:
+        console.print("\n[bold]SIEM/Platform Configuration[/bold]")
+        console.print("These preferences help ADEF provide relevant schema recipes.\n")
+
+        platform = click.prompt(
+            "Which SIEM/platform do you use?",
+            type=click.Choice(
+                ["splunk", "sentinel", "elastic", "chronicle", "sumo", "qradar", "other"],
+                case_sensitive=False,
+            ),
+            default="splunk",
+        )
+
+        query_langs_input = click.prompt(
+            "Which query language(s) do you write detections in? (comma-separated)",
+            default="spl",
+        )
+        query_langs = [lang.strip() for lang in query_langs_input.split(",")]
+
+        config_data["platform"] = platform
+        config_data["query_languages"] = query_langs
+
+        console.print(f"\n[green]✓[/green] Configured for {platform} with {', '.join(query_langs)}")
+
     if not config_file.exists() or force:
-        config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
+        # Write config with platform preferences if interactive was used
+        if interactive or not config_file.exists():
+            with config_file.open("w", encoding="utf-8") as f:
+                f.write("# .adefconfig.yaml — ADEF workspace configuration\n")
+                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+                f.write("""
+# Path to an external rule directory (e.g. a Sigma repo). ADEF reads YAML
+# metadata from here for memory search; it never writes here. Override with
+# the ADEF_RULE_ROOT env var or the --rule-root flag.
+# rule_root: ~/path/to/rules
+
+# Path to an external hunt directory. Used by ``adef hunt-promote``. Override
+# with the ADEF_HUNT_ROOT env var or the --hunt-root flag.
+# hunt_root: ~/path/to/hunts
+""")
+        else:
+            config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
+
     if not agents_md.exists() or force:
         agents_md.write_text(_workspace_agents_md(), encoding="utf-8")
 
     template_path = _copy_template(templates_dir)
 
-    console.print(f"[green]ADEF workspace initialized at[/green] {workspace}")
+    console.print(f"\n[green]ADEF workspace initialized at[/green] {workspace}")
     console.print(f"  journals/    → {journals}")
     console.print(f"  catalog/     → {catalog}")
     console.print(f"  config/      → {config_file}")
@@ -116,7 +177,13 @@ def init(path: Path | None, force: bool) -> None:
     console.print(f"  schema/      → {schema_dir}")
     console.print(f"  AGENTS.md    → {agents_md}")
     console.print()
-    console.print("Next: [bold]adef detection new TITLE[/bold] to create your first journal.")
+
+    if interactive and "platform" in config_data:
+        console.print("[bold]Next steps:[/bold]")
+        console.print(f"  1. Generate a schema recipe: [bold]adef schema recipe {config_data['platform']}[/bold]")
+        console.print("  2. Create your first detection: [bold]adef detection new TITLE[/bold]")
+    else:
+        console.print("Next: [bold]adef detection new TITLE[/bold] to create your first journal.")
 
 
 __all__ = ["init"]
