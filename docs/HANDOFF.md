@@ -439,6 +439,22 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 
 ## Session log
 
+### 2026-07-21 (later) — Line-ending normalization / `.gitattributes` (Josh + Claude)
+- Onboarded a WSL-on-Windows checkout. `git status` showed ~120 files "modified"
+  with equal insertions/deletions and nothing under `--ignore-all-space` — pure
+  CRLF churn, no content changes. Committed blobs were already LF (macOS/Linux
+  team baseline); the WSL working tree had picked up CRLF (`core.autocrlf`/`eol`
+  both unset, no `.gitattributes`).
+- Added `.gitattributes` with `* text=auto eol=lf` (+ defensive `binary` rules
+  for image/archive types; none tracked today). This pins LF as the single source
+  of truth in git **and** in every working tree, repo-wide, independent of anyone's
+  personal git config — so the lone Windows checkout aligns to the macOS majority
+  instead of the other way around.
+- Renormalized (`git add --renormalize .` → no real index changes, blobs already
+  LF) and physically rewrote the working tree to LF (delete tracked files +
+  `git checkout -- .`). Verified: 0 tracked files contain CR; `git status` clean.
+- No source/behavior changes; docs/tooling only.
+
 ### 2026-07-20/21 — Profiles, plugin, schema rework, browse, examples (Jarrett + Claude)
 
 Fourteen commits, `b489c02..7116ed2`. The short version — full detail in
