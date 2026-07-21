@@ -73,6 +73,7 @@ backfill = "adef.commands.backfill:backfill"
 schema = "adef.commands.schema:schema"
 catalog = "adef.commands.catalog:catalog"
 profile = "adef.commands.profile:profile"
+attack = "adef.commands.attack:attack"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"
@@ -85,6 +86,7 @@ packages = [
     "adef.commands",
     "adef.core",
     "adef.data",
+    "adef.data.attack",
     "adef.mcp",
     "adef.mcp.tools",
     "adef.orchestration",
@@ -94,6 +96,9 @@ packages = [
 "adef.data" = [
     "templates/*.md",
     "prompts/*.md",
+]
+"adef.data.attack" = [
+    "enterprise.json",
 ]
 
 [tool.pytest.ini_options]

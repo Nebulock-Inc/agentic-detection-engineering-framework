@@ -251,13 +251,18 @@ class Catalog:
 
     def rebuild_index(self) -> Path:
         """Regenerate ``catalog/INDEX.yml`` from every catalog record on disk."""
+        from adef.core.attack import attack_reference
+
+        ref = attack_reference()
+
         detections: dict[str, str] = {}
         by_platform: dict[str, list[str]] = {}
-        # Keyed by MITRE technique ID. A true by_tactic map arrives with the
-        # ATT&CK reference layer (coverage epic) — until then we don't
-        # pretend to knowledge we don't have (renamed from `by_tactic`,
-        # 2026-07-21, pre-release so no migration needed).
         by_technique: dict[str, list[str]] = {}
+        # by_tactic resolves each mapped technique to its tactic(s) via the
+        # shipped ATT&CK reference; a technique with two tactics lands under
+        # both. Techniques absent from the reference contribute to
+        # by_technique but not by_tactic (they're flagged `invalid_mitre`).
+        by_tactic: dict[str, list[str]] = {}
         by_engine: dict[str, list[str]] = {}
         by_status: dict[str, list[str]] = {}
         by_data_source: dict[str, list[str]] = {}
@@ -270,14 +275,18 @@ class Catalog:
             by_status.setdefault(data.get("status", "draft"), []).append(det_id)
             for technique in data.get("mitre") or []:
                 by_technique.setdefault(technique, []).append(det_id)
+                for tactic in ref.tactics_for(technique):
+                    by_tactic.setdefault(tactic, []).append(det_id)
             src = data.get("data_source") or ""
             if src:
                 by_data_source.setdefault(src, []).append(det_id)
 
+        # dedupe: a rule mapping two techniques in the same tactic appears once.
         index = {
             "generated": True,
             "detections": dict(sorted(detections.items())),
             "by_platform": {k: sorted(v) for k, v in sorted(by_platform.items())},
+            "by_tactic": {k: sorted(set(v)) for k, v in sorted(by_tactic.items())},
             "by_technique": {k: sorted(v) for k, v in sorted(by_technique.items())},
             "by_engine": {k: sorted(v) for k, v in sorted(by_engine.items())},
             "by_status": {k: sorted(v) for k, v in sorted(by_status.items())},

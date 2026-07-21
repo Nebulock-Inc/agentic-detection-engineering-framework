@@ -314,6 +314,13 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 - 2026-07-21 — **ATT&CK reference layer deferred to the coverage epic; INDEX honesty rename.** Decision: MITRE capture stays regex (sufficient for v0.1.0 — journals/catalog/profiles/schemas/check need no ATT&CK knowledge), but nothing coverage-branded ships without the reference layer first (compact snapshot from official STIX via `mitreattack-python` as a build-time tool, never a runtime dep; `adef attack refresh` for updates; consumers: `invalid_mitre`/revoked validation reasons, true tactic resolution, mitre-tagger grounding — agents select from the snapshot, never model memory). Sequenced in `docs/2026-07-21-next-steps.md` §4. Done now (pre-release, migration-free): INDEX `by_tactic` → **`by_technique`** — it was keyed by technique and labeled tactic; renamed rather than pretend.
 
+- 2026-07-21 — **ATT&CK reference layer built (coverage epic step 1)** — implements the deferral decision above. Decisions taken while building:
+  - **STIX fetched directly, no dependency at all.** The generator (`adef/data/attack/_generate.py`, dev-time only, not imported at runtime) pulls MITRE's official `enterprise-attack.json` from `mitre-attack/attack-stix-data` with stdlib `urllib`+`json` and distils it. Chosen over `mitreattack-python` (which the deferral named) because a fixed public STIX URL needs no wrapper and keeps `mitreattack-python` out of even the *dev* deps — stronger form of "never a runtime dep."
+  - **Compact snapshot shipped as package data** (`adef/data/attack/enterprise.json`, ~104K, ATT&CK 19.1: 858 techniques, 15 tactics): `id → {name, tactics[], parent?, deprecated?, revoked?, superseded_by?}` + tactic shortname→display map. Only the fields consumers need. `snapshot_version` gates the reader.
+  - **Runtime read side** (`adef/core/attack.py`): JSON-only, no network/STIX. `attack_reference()` prefers a `refresh`-ed `$ADEF_WORKSPACE/attack/enterprise.json` over the shipped copy, so `adef attack refresh` takes effect with no package-data write. Cached (`lru_cache`).
+  - **`adef attack` command**: `info` / `show <id>` (name, tactics, parent, revoked→replacement) / `refresh` (re-fetch into workspace; network failure reports and exits 1, shipped snapshot stays in use).
+  - **Consumers wired (proof the layer is real, not shelf-ware):** (1) new **structural** review reason `invalid_mitre` — a mapped ID absent from the reference flags the rule (mutually exclusive with `no_mitre` — enrichment vs. defect). (2) INDEX gains real **`by_tactic`** resolved through the reference (dual-tactic techniques land under both; kept `by_technique` too — completes the honesty-rename thread above).
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -342,3 +349,10 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `ruff check adef/` on branch-authored files — clean (0 findings). Repo-wide, 3 findings remain in pre-existing/unchanged files (`cli.py` E402 intentional post-`load_dotenv` imports; `journal.py` unused `shutil`) — out of scope per HANDOFF Open thread #3.
   - `mypy adef/` — the 5 findings in branch-authored files fixed (catalog.py, rule_discovery.py, schema.py ×2, plus the `init_tools.py` regression). 14 → 9 errors; the remaining 9 are all in unchanged files (`_base.py`, `journal.py`, `hunt_promotion.py`, `agent_tools.py`).
   - **Real bug fixed:** `adef/mcp/tools/init_tools.py` imported `WORKSPACE_AGENTS_MD` from `adef.commands.init`, a constant the 07-20 init refactor removed (init now reads `adef/data/templates/WORKSPACE_AGENTS.md` via package data). The MCP `workspace_init` tool would have crashed on import. Repointed to the `_workspace_agents_md()` helper; verified: module imports and `_scaffold_workspace` writes a 4876-byte AGENTS.md end-to-end.
+
+- 2026-07-21 — ATT&CK reference layer (coverage epic step 1). Evidence:
+  - Generator run against live official STIX → shipped `adef/data/attack/enterprise.json`: ATT&CK 19.1, 858 techniques (697 active + 12 deprecated + 149 revoked), 15 tactics; subtechnique parent (`T1059.001`→`T1059`), revoked+replacement (`T1143`→`T1564.003`) all resolve.
+  - `tests/test_attack.py` — **9 tests**, incl. `invalid_mitre` firing on a bogus ID and staying off real/absent IDs. Full suite **176 passed** (was 167).
+  - `ruff check` clean on all new files; `mypy adef/` adds **zero** new errors (still the same pre-existing 9).
+  - CLI end-to-end: `adef attack info` (ATT&CK 19.1, 858/15), `show T1059.001` (PowerShell / Execution / parent T1059), `show T1143` (revoked → T1564.003), `show T9999` (invalid, exit 1).
+  - Consumers proven on the `examples/demo-rules` corpus: INDEX `by_tactic` resolves (e.g. T1547.001 → both *Persistence* and *Privilege Escalation*); `invalid_mitre` produced zero false positives on the demo's real IDs.

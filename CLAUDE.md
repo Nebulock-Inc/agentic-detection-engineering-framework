@@ -86,6 +86,18 @@ preserves human corrections and reports drift. Rules are a schema *consumer*
 (via `check`), never a schema *source*. See
 `docs/plans/2026-07-20-schema-declaration-design.md`.
 
+### ATT&CK Reference Layer
+```bash
+adef attack info                    # Active snapshot's ATT&CK version + counts
+adef attack show T1059.001          # Technique name, tactics, parent, revoked→replacement
+adef attack refresh                 # Pull a fresh snapshot from official STIX into the workspace
+```
+Compact ATT&CK snapshot (`adef/data/attack/enterprise.json`, distilled from
+official STIX at build time by `adef/data/attack/_generate.py` — a dev-time
+stdlib script, **never a runtime dep**). Consumers: catalog-time `invalid_mitre`
+validation and true `by_tactic` INDEX resolution. `refresh` writes to
+`$ADEF_WORKSPACE/attack/enterprise.json`, which wins over the shipped copy on read.
+
 ### MCP Server
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot

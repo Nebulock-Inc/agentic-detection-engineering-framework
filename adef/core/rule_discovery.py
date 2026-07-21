@@ -50,8 +50,9 @@ REVIEW_MALFORMED = "malformed"          # extraction threw; catalogued raw
 REVIEW_EXTERNAL_LOGIC = "external_logic"  # logic in a sibling file we don't parse
 REVIEW_NO_PLATFORM = "no_platform"      # platform could not be inferred/inherited
 REVIEW_NO_MITRE = "no_mitre"            # no ATT&CK mapping found anywhere
+REVIEW_INVALID_MITRE = "invalid_mitre"  # a mapped ID isn't in the ATT&CK reference
 STRUCTURAL_REVIEW_REASONS = frozenset(
-    {REVIEW_MALFORMED, REVIEW_EXTERNAL_LOGIC, REVIEW_NO_PLATFORM}
+    {REVIEW_MALFORMED, REVIEW_EXTERNAL_LOGIC, REVIEW_NO_PLATFORM, REVIEW_INVALID_MITRE}
 )
 
 
@@ -323,6 +324,18 @@ def _sigma_platform(logsource: dict) -> Optional[str]:
     if "azure" in product or "azure" in service:
         return "cloud-azure"
     return None
+
+
+def _has_invalid_mitre(ids: Iterable[str]) -> bool:
+    """True if any mapped ID isn't a real ATT&CK technique.
+
+    Imported lazily so discovery never hard-depends on the snapshot at import
+    time; the reference itself is cached after first load.
+    """
+    from adef.core.attack import attack_reference
+
+    ref = attack_reference()
+    return any(not ref.is_valid(tid) for tid in ids)
 
 
 def _normalise_mitre(tokens: Iterable[str]) -> tuple[str, ...]:
@@ -635,6 +648,8 @@ def finalize_review(rule: DiscoveredRule, malformed: bool = False) -> Discovered
         reasons.append(REVIEW_NO_PLATFORM)
     if not rule.mitre:
         reasons.append(REVIEW_NO_MITRE)
+    elif _has_invalid_mitre(rule.mitre):
+        reasons.append(REVIEW_INVALID_MITRE)
     rule.review_reasons = tuple(reasons)
     rule.needs_review = bool(reasons)
     return rule
