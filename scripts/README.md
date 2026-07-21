@@ -64,6 +64,21 @@ Quick ADEF reinstallation from GitHub for testing from a completely clean state.
 | `--keep-workspace` | | Don't remove existing workspace | (workspace is removed by default) |
 | `--help` | `-h` | Show help | |
 
+### Safety Features
+
+**Automatic self-relocation**: If you run the script from within the ADEF directory that's about to be deleted, it automatically copies itself to `/tmp` and re-executes from there. This means you can safely run:
+
+```bash
+cd ~/agentic-detection-engineering-framework
+./scripts/fresh-install.sh  # ✓ Safe - script relocates itself automatically
+```
+
+The script detects this situation and displays:
+```
+⚠️  Warning: Running from directory that will be deleted
+   Copying script to /tmp and re-executing...
+```
+
 ### After Installation
 
 The script prints next steps, but here's a quick reference:

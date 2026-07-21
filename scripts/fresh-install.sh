@@ -94,6 +94,23 @@ echo -e "${YELLOW}  Workspace:${NC}    $WORKSPACE_DIR $([ "$CLEAN_WORKSPACE" = t
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
 
+# Safety check: detect if running from install directory
+CURRENT_DIR=$(pwd)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ "$SCRIPT_DIR" == "$INSTALL_DIR"* ]]; then
+    echo -e "${YELLOW}⚠️  Warning: Running from directory that will be deleted${NC}"
+    echo -e "${YELLOW}   Copying script to /tmp and re-executing...${NC}"
+    echo
+
+    # Copy script to temp location
+    TEMP_SCRIPT="/tmp/adef-fresh-install-$$.sh"
+    cp "$0" "$TEMP_SCRIPT"
+    chmod +x "$TEMP_SCRIPT"
+
+    # Re-execute from temp location with same arguments
+    exec "$TEMP_SCRIPT" "$@"
+fi
+
 # Step 1: Remove ADEF workspace
 if [ "$CLEAN_WORKSPACE" = true ]; then
     if [ -d "$WORKSPACE_DIR" ]; then
