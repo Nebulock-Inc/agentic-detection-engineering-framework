@@ -15,11 +15,11 @@ Ordered by what unblocks what.
    real dev environment; record evidence in ISA `## Verification`. Everything
    since 2026-07-20 is sandbox-smoke-verified (28/28, 31/31, 15/15, 10/10 +
    exact corpora regression) but not suite-verified. The only blocker.
-2. **Co-worker sign-off** on the three implemented design decisions, per ISA
+2. ✅ *(done 2026-07-21)* **Co-worker sign-off** on the three implemented design decisions, per ISA
    discipline: extraction profiles + plugin (`2026-07-20-claude-plugin-design.md`),
    declarations (`2026-07-20-schema-declaration-design.md`), and its scope
    section (2026-07-21). All changed schema-shared surfaces.
-3. **`needs_review` rework** (agreed, unbuilt). The demo showed 8/9 rules
+3. ✅ *(shipped 2026-07-21, `5bb621c`)* **`needs_review` rework**. The demo showed 8/9 rules
    flagged → zero signal. Scope:
    - `review_reasons: [no_platform, no_mitre, malformed, external_logic]` on
      records; boolean kept for compat; `list --needs-review <reason>` triage.
@@ -36,36 +36,49 @@ Ordered by what unblocks what.
 
 ## Near-term — makes the launch demo compelling
 
-4. **`mitre-tagger` skill.** Drains the `no_mitre` queue: propose techniques
-   from query + title, human approves, enrichment written to *catalog records*
-   (ADEF's layer — upstream rules stay untouched). Gate to everything
-   coverage-shaped.
-5. **Catalog-time coverage report + MITRE Navigator layer export.** The
-   "first 15 minutes" artifact identified at the very start and still
-   unshipped. Cheap once MITRE density is decent; it's the
-   screenshot-into-Slack moment for a skeptical DE lead.
-6. **`declaration-author` skill.** Performed manually twice this session
+4. **The coverage epic — in this order** (decided 2026-07-21: the reference
+   layer is the cheap foundation everything expensive stands on; building
+   tagger/Navigator first would mean re-auditing every mapping made before
+   validation existed):
+   1. **ATT&CK reference layer.** Compact snapshot of the ATT&CK catalog
+      (`id → name, tactics, deprecated/revoked + replacement, parent`)
+      generated at build time from official STIX via `mitreattack-python`
+      (dev-time tool, NOT a runtime dependency), shipped as package data;
+      `adef attack refresh` pulls a newer snapshot on demand. Consumers:
+      catalog-time validation (new reasons: `invalid_mitre`,
+      revoked-with-replacement), true `by_tactic` resolution (INDEX renamed
+      `by_technique` 2026-07-21 until then), tagger grounding.
+   2. **`mitre-tagger` skill.** Drains the `no_mitre` queue: agent selects
+      from the shipped snapshot (never from model memory — hallucinated IDs),
+      deterministic validation confirms, human approves, enrichment written
+      to *catalog records* (ADEF's layer — upstream rules stay untouched).
+   3. **Coverage report + MITRE Navigator layer export.** The "first 15
+      minutes" artifact — honest only once 1–2 exist; the
+      screenshot-into-Slack moment for a skeptical DE lead.
+   Not a v0.1.0 blocker: everything shipped today works without ATT&CK
+   knowledge, and the `no_mitre` queue accumulates correctly meanwhile.
+5. **`declaration-author` skill.** Performed manually twice this session
    against live Splunk exports; logic now fully specified: internals filter,
    case-dupe → aliases, enum harvesting with value-length caps, numeric/hex
    typing, and mixed-shape detection → "re-export per sourcetype" guard.
-7. **`schema check` report polish.** Union-matched rules attribute a missing
+6. **`schema check` report polish.** Union-matched rules attribute a missing
    field to every matched source (`NotARealField` × 14 rows in the demo).
    Correct but noisy — collapse union findings into one row.
 
 ## Strategic — design before build
 
-8. **`adef sync` design doc.** The biggest unaddressed trust risk: stale
+7. **`adef sync` design doc.** The biggest unaddressed trust risk: stale
    catalogs. Already designed verbally: identity cascade (rule UUID → content
    hash → path → fuzzy), git-based diffing (SHA at catalog time,
    rename detection), staleness-aware reads (CLI + MCP annotate or auto-resync),
    and auto-journaling of out-of-band edits with harvested commit messages —
    edits that bypass ADEF become history, not lost value. Write the doc before
    v0.1.0 even if implementation follows later.
-9. **Benchmark corpus in CI.** Recognition/extraction rates per public repo
+8. **Benchmark corpus in CI.** Recognition/extraction rates per public repo
    (SigmaHQ, security_content, panther-analysis, Sentinel, elastic) as
    tracked numbers — the objective merge gate for community-contributed
    profiles.
-10. **v0.1.0 release framing.** Gap to releasable is small: items 1–3, a
+9. **v0.1.0 release framing.** Gap to releasable is small: items 1–3, a
     README pass, and confirming `examples/` + the Claude plugin are part of
     the launch story (recommended — they *are* the demo). "Release and
     iterate" was the plan from day one.

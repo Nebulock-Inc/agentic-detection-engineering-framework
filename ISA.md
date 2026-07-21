@@ -312,6 +312,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `list --needs-review` upgraded to optional-value (bare = structural; `<reason>` = that queue); legacy records without `review_reasons` degrade to an opaque `legacy` reason.
   - Evidence: examples demo went **8/9 flagged → 1/9** (7 platforms inherited; the survivor is the deliberately-broad hunt, correctly ambiguous). 11/11 new smoke checks; suites 28/28 + 31/31; corpora exact. Tests in `tests/test_review_reasons.py`. Co-worker sign-off recorded for the 2026-07-20/21 design decisions. Full pytest/ruff/mypy still pending local run.
 
+- 2026-07-21 — **ATT&CK reference layer deferred to the coverage epic; INDEX honesty rename.** Decision: MITRE capture stays regex (sufficient for v0.1.0 — journals/catalog/profiles/schemas/check need no ATT&CK knowledge), but nothing coverage-branded ships without the reference layer first (compact snapshot from official STIX via `mitreattack-python` as a build-time tool, never a runtime dep; `adef attack refresh` for updates; consumers: `invalid_mitre`/revoked validation reasons, true tactic resolution, mitre-tagger grounding — agents select from the snapshot, never model memory). Sequenced in `docs/2026-07-21-next-steps.md` §4. Done now (pre-release, migration-free): INDEX `by_tactic` → **`by_technique`** — it was keyed by technique and labeled tactic; renamed rather than pretend.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)

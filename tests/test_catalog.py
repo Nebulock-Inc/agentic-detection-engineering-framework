@@ -251,8 +251,9 @@ def test_index_has_reverse_maps(workspace):
     assert set(idx["by_engine"]["sigma"]) == {"D-0001"}
     assert set(idx["by_status"]["ready"]) == {"D-0001"}
     assert set(idx["by_status"]["draft"]) == {"D-0002"}
-    # by_tactic is keyed by MITRE technique when tactics aren't resolved.
-    assert "D-0001" in idx["by_tactic"]["T1218.005"]
+    # Honestly named: keyed by technique; a true by_tactic map arrives with
+    # the ATT&CK reference layer.
+    assert "D-0001" in idx["by_technique"]["T1218.005"]
 
 
 def test_index_is_generated_marker(workspace):
