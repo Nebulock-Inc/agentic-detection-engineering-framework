@@ -271,4 +271,44 @@ def show(detection_id: str, workspace: Path | None) -> None:
         console.print("\n[yellow]No paired journal.[/yellow]")
 
 
+@detection.command("tag-mitre")
+@click.argument("detection_id")
+@click.argument("technique_ids", nargs=-1, required=True)
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
+)
+def tag_mitre_cmd(
+    detection_id: str, technique_ids: tuple[str, ...], workspace: Path | None
+) -> None:
+    """Add ATT&CK technique IDs to a catalog record (drains the no_mitre queue).
+
+    IDs are validated against the shipped ATT&CK reference; an invalid ID
+    aborts without writing. Writes only to ADEF's catalog record — never the
+    source rule. Example: ``adef detection tag-mitre D-0007 T1547.001 T1055``.
+    """
+    from adef.core.tag import InvalidTechniqueError, tag_mitre
+
+    ws = _workspace_from(workspace)
+    try:
+        result = tag_mitre(ws, detection_id, list(technique_ids))
+    except KeyError as exc:
+        raise click.ClickException(str(exc).strip('"')) from exc
+    except InvalidTechniqueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if result.added:
+        console.print(f"[green]Tagged[/green] {detection_id} += {', '.join(result.added)}")
+    if result.already_present:
+        console.print(f"  already present: {', '.join(result.already_present)}")
+    for revoked_id, replacement in result.revoked.items():
+        console.print(
+            f"  [yellow]note[/yellow] {revoked_id} is revoked → consider {replacement}"
+        )
+    if not result.added and not result.already_present:
+        console.print("Nothing to add.")
+
+
 __all__ = ["detection"]

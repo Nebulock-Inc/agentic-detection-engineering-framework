@@ -321,6 +321,11 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **`adef attack` command**: `info` / `show <id>` (name, tactics, parent, revoked→replacement) / `refresh` (re-fetch into workspace; network failure reports and exits 1, shipped snapshot stays in use).
   - **Consumers wired (proof the layer is real, not shelf-ware):** (1) new **structural** review reason `invalid_mitre` — a mapped ID absent from the reference flags the rule (mutually exclusive with `no_mitre` — enrichment vs. defect). (2) INDEX gains real **`by_tactic`** resolved through the reference (dual-tactic techniques land under both; kept `by_technique` too — completes the honesty-rename thread above).
 
+- 2026-07-21 — **`mitre-tagger` skill + `adef detection tag-mitre` write path (coverage epic step 2)**. Decisions:
+  - **A real CLI write verb, not skill-authored YAML.** `adef detection tag-mitre D-XXXX T#### [...]` is the only MITRE-enrichment write path. A skill hand-editing catalog YAML is the exact "paste metadata by hand, doesn't survive sync" anti-pattern the catalog-onboarding skill already forbids; the tagger gets the same discipline. `tag_mitre` (`adef/core/tag.py`): validates every ID against the shipped reference (invalid → `InvalidTechniqueError`, **nothing written** — atomic), merges+dedupes into `mitre`, drops `no_mitre`/`invalid_mitre` from `review_reasons`, recomputes `needs_review`, rebuilds INDEX (so `by_tactic` updates immediately). Revoked-but-real IDs are accepted with a `→ replacement` note (caller decides). Added `Catalog.find_record` / `Catalog.write_raw` (in-place rewrite, no re-slug).
+  - **Durability note (deliberate non-goal):** enrichment written to a record is wiped if `adef catalog` is re-run, because re-catalog currently assigns fresh IDs and does not reconcile. This applies uniformly to *all* enrichment (status/stage/owner today), not just MITRE — the tagger does not make it worse. Sync-safe re-derivation is the unbuilt `adef sync` epic (next-steps §7); not solved here by decision.
+  - **Skill grounds every ID in the shipped reference, never model memory.** `mitre-tagger` reads each `no_mitre` record's *logic* (title+query), proposes techniques, and MUST confirm each with `adef attack show` before offering it; `tag-mitre`'s deterministic validation is the backstop. Human approval is a hard gate per write. Plugin auto-discovers it from `claude-plugin/skills/`.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -356,3 +361,9 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `ruff check` clean on all new files; `mypy adef/` adds **zero** new errors (still the same pre-existing 9).
   - CLI end-to-end: `adef attack info` (ATT&CK 19.1, 858/15), `show T1059.001` (PowerShell / Execution / parent T1059), `show T1143` (revoked → T1564.003), `show T9999` (invalid, exit 1).
   - Consumers proven on the `examples/demo-rules` corpus: INDEX `by_tactic` resolves (e.g. T1547.001 → both *Persistence* and *Privilege Escalation*); `invalid_mitre` produced zero false positives on the demo's real IDs.
+
+- 2026-07-21 — `mitre-tagger` skill + `adef detection tag-mitre` (coverage epic step 2). Evidence:
+  - `tests/test_tag_mitre.py` — **6 tests**: add+dedupe, `no_mitre` dropped (other reasons kept), `needs_review` cleared when it was the last reason, invalid ID rejected atomically (nothing written), INDEX `by_tactic` rebuilt, unknown detection raises. Full suite **182 passed** (was 176).
+  - `ruff check` clean on new files; `mypy` adds zero new errors (the 3 shown are pre-existing `journal.py`/`_base.py`, surfaced via imports).
+  - CLI end-to-end on a fresh `examples/demo-rules` catalog: `tag-mitre D-0001 T1071.004` → tagged, `no_mitre` gone (only `no_platform` left); `T9999` → rejected, exit 1, unchanged; `T1143` → tagged with `revoked → T1564.003` note; INDEX `by_tactic` immediately shows D-0001 under Command and Control + Stealth.
+  - `mitre-tagger` skill written to `claude-plugin/skills/mitre-tagger/SKILL.md` (auto-discovered; plugin.json description updated). Orchestration-only — grounds IDs via `adef attack show`, writes via `tag-mitre`, human-approval gate.

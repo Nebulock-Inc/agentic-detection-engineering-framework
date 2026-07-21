@@ -209,6 +209,24 @@ class Catalog:
         _atomic_write(path, content)
         return path
 
+    def find_record(self, detection_id: str) -> tuple[Path, dict] | None:
+        """Return ``(path, data)`` for one record by ID, or None if absent."""
+        for det_id, path, data in self.iter_records():
+            if det_id == detection_id:
+                return path, data
+        return None
+
+    def write_raw(self, path: Path, data: dict) -> Path:
+        """Write an already-shaped record dict back to ``path`` (in place).
+
+        Unlike ``write`` this does not re-derive the filename from the record,
+        so it preserves the existing file location — used by enrichment paths
+        that mutate a record without moving it.
+        """
+        _check_not_under_detections(path)
+        _atomic_write(path, _dump_catalog_yaml(data))
+        return path
+
     def iter_records(self):
         """Yield ``(detection_id, path, data)`` for every catalog YAML on disk."""
         for path in sorted(self._dir.rglob("D-*.yml")):

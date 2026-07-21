@@ -48,7 +48,14 @@ adef detection evolve  D-0001       # Stage 5: tuning, deprecation
 
 # Add notes to any stage transition
 adef detection observe D-0001 --note "Checked 30d of process_create events"
+
+# Enrich a catalog record with ATT&CK technique IDs (drains the no_mitre queue)
+adef detection tag-mitre D-0007 T1547.001 T1055   # validated vs the shipped reference
 ```
+`tag-mitre` validates each ID against the ATT&CK reference (invalid ID aborts,
+nothing written), merges into the record's `mitre`, drops the `no_mitre` review
+reason, and rebuilds the INDEX. Writes only to ADEF's catalog record — never the
+source rule. The `mitre-tagger` skill orchestrates this over the whole queue.
 
 ### Hunt Promotion (ATHF Integration)
 ```bash
