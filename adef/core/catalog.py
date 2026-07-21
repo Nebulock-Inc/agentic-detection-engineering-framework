@@ -80,7 +80,7 @@ class CatalogRecord:
 
     id: str
     title: str
-    rule_ref: str          # pointer to the source file, relative to the workspace
+    rule_ref: str          # pointer to the source file, relative to the rule root
     original_path: str     # absolute path to the source file (provenance)
     platform: str
     kind: str              # atomic | correlation | composite
@@ -126,21 +126,36 @@ def record_from_discovered(
     detection_id: str,
     disc: DiscoveredRule,
     workspace: Path,
+    rule_root: Path | None = None,
 ) -> CatalogRecord:
     """Build a ``CatalogRecord`` from a ``DiscoveredRule``.
 
     Applies the infer-and-flag rule: an unknown platform falls back to the
     ``multi-platform`` escape hatch and preserves ``needs_review``.
+
+    ``rule_ref`` is relative to the *rule root* when one is given
+    (``<root-name>/<path-inside-root>``) — portable regardless of where the
+    workspace lives. The workspace-relative form is only a fallback for
+    callers that don't know the root (found by the 2026-07-21 E2E test, where
+    a distant workspace produced ``../../..``-style refs).
     """
     ws = Path(workspace).expanduser().resolve()
     abs_path = disc.path.expanduser().resolve()
-    try:
-        rule_ref = str(abs_path.relative_to(ws.parent))
-    except ValueError:
-        # Source repo lives outside the workspace parent — use a relative walk.
-        import os
+    rule_ref = ""
+    if rule_root is not None:
+        root = Path(rule_root).expanduser().resolve()
+        try:
+            rule_ref = str(Path(root.name) / abs_path.relative_to(root))
+        except ValueError:
+            rule_ref = ""  # not under the given root — fall through
+    if not rule_ref:
+        try:
+            rule_ref = str(abs_path.relative_to(ws.parent))
+        except ValueError:
+            # Source repo lives outside the workspace parent — relative walk.
+            import os
 
-        rule_ref = os.path.relpath(abs_path, ws)
+            rule_ref = os.path.relpath(abs_path, ws)
 
     platform = disc.platform or _UNKNOWN_PLATFORM
     title = disc.title or abs_path.stem

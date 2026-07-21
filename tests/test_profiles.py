@@ -224,3 +224,55 @@ def test_walk_outcomes_not_a_rule_for_unstructured(tmp_path):
     outcomes = list(walk_outcomes(root))
     assert len(outcomes) == 1
     assert outcomes[0].outcome == NOT_A_RULE
+
+
+def test_profile_data_source_falls_back_to_query_literal(tmp_path):
+    """A profile with no data_source mapping still yields the raw source
+    literal from the query (2026-07-21 E2E finding: Panther scheduled
+    queries carried their table in SQL FROM but records were empty)."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "sched.yml").write_text(
+        "alert:\n  name: Sched\n  query: SELECT 1 FROM panther_logs.public.auth0_events\n",
+        encoding="utf-8",
+    )
+    prof_dict = {
+        **ACME_PROFILE,
+        "query_language": "sql",
+        "map": {"title": "alert.name", "query": "alert.query"},  # no data_source
+    }
+    rules = list(discover_rules(root, [profile_from_dict(prof_dict)]))
+    assert rules[0].data_source == "panther_logs.public.auth0_events"
+
+
+def test_profile_mapped_data_source_wins_over_fallback(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "r.yml").write_text(
+        "alert:\n  name: R\n  query: SELECT 1 FROM other_table\n  index: declared_source\n",
+        encoding="utf-8",
+    )
+    prof_dict = {**ACME_PROFILE, "query_language": "sql"}  # maps data_source: alert.index
+    rules = list(discover_rules(root, [profile_from_dict(prof_dict)]))
+    assert rules[0].data_source == "declared_source"
+
+
+def test_sql_data_source_ignores_comments(tmp_path):
+    """Prose in SQL comments ("adapted from a SnowAlert query") must not
+    masquerade as the FROM table (2026-07-21 E2E finding)."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "r.yml").write_text(
+        "alert:\n  name: R\n  query: |\n"
+        "    -- this was adapted from a SnowAlert query\n"
+        "    /* also copied from elsewhere */\n"
+        "    SELECT 1 FROM snowflake.account_usage.login_history\n",
+        encoding="utf-8",
+    )
+    prof_dict = {
+        **ACME_PROFILE,
+        "query_language": "sql",
+        "map": {"title": "alert.name", "query": "alert.query"},
+    }
+    rules = list(discover_rules(root, [profile_from_dict(prof_dict)]))
+    assert rules[0].data_source == "snowflake.account_usage.login_history"

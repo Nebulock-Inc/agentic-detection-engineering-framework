@@ -68,6 +68,29 @@ _MITRE_TECHNIQUE_RE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b", re.IGNORECASE)
 
 # Raw source-literal extractors: the table/index the rule reads from, verbatim.
 _SQL_FROM_RE = re.compile(r"\bfrom\s+([A-Za-z_][\w.]*)", re.IGNORECASE)
+_SQL_LINE_COMMENT_RE = re.compile(r"--[^\n]*")
+_SQL_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _strip_sql_comments(query: str) -> str:
+    """Drop ``--`` and ``/* */`` comments so prose like "adapted from a
+    SnowAlert query" can't masquerade as a FROM table (2026-07-21 E2E
+    finding against Panther scheduled queries)."""
+    return _SQL_LINE_COMMENT_RE.sub("", _SQL_BLOCK_COMMENT_RE.sub("", query))
+
+
+# Not table names: SQL constructs that can follow FROM.
+_SQL_FROM_RESERVED = {"table", "select", "values", "unnest", "lateral"}
+
+
+def _sql_from_table(query: str) -> str:
+    """First plausible FROM table literal, skipping comments and constructs
+    like Snowflake's ``FROM TABLE(RESULT_SCAN(...))``."""
+    for m in _SQL_FROM_RE.finditer(_strip_sql_comments(query)):
+        candidate = m.group(1)
+        if candidate.lower() not in _SQL_FROM_RESERVED:
+            return candidate
+    return ""
 _SPL_INDEX_RE = re.compile(r"\bindex\s*=\s*\"?([A-Za-z_][\w.-]*)\"?", re.IGNORECASE)
 _KQL_LEAD_TABLE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -373,8 +396,7 @@ def _extract_generic(text: str, fmt: Format) -> DiscoveredRule:
     """
     data_source = ""
     if fmt == "sql":
-        m = _SQL_FROM_RE.search(text)
-        data_source = m.group(1) if m else ""
+        data_source = _sql_from_table(text)
     return DiscoveredRule(
         path=Path("."),
         format=fmt,
@@ -472,11 +494,35 @@ _EXTRACTORS = {
 # --------------------------------------------------------------------------- #
 # Profile-based extraction (user profiles claim files before built-ins)
 # --------------------------------------------------------------------------- #
+def _infer_data_source(query: str, query_language: str) -> str:
+    """Best-effort raw source literal from a query, by language.
+
+    The same extraction the built-in formats use (SQL ``FROM``, SPL
+    ``index=``, KQL lead table) — applied when a profile's map doesn't
+    provide ``data_source`` (found by the 2026-07-21 E2E test: Panther
+    scheduled queries carried their table in ``FROM`` but records were empty).
+    """
+    if not query:
+        return ""
+    if query_language == "sql":
+        return _sql_from_table(query)
+    if query_language == "spl":
+        m = _SPL_INDEX_RE.search(query)
+        return m.group(1) if m else ""
+    if query_language == "kql":
+        m = _KQL_LEAD_TABLE_RE.match(query)
+        return m.group(1) if m else ""
+    return ""
+
+
 def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
     """Build a ``DiscoveredRule`` from one profile-claimed document."""
     fields = profiles_mod.extract_fields(profile, doc)
     mitre = _normalise_mitre(fields.get("mitre") or [])
     platform = fields.get("platform") or None
+    data_source = fields.get("data_source", "") or _infer_data_source(
+        fields.get("query", ""), profile.query_language
+    )
     return DiscoveredRule(
         path=Path("."),  # filled by caller
         format=profile.name,
@@ -486,7 +532,7 @@ def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
         mitre=mitre,
         kind="atomic",
         rule_uuid=fields.get("uuid", ""),
-        data_source=fields.get("data_source", ""),
+        data_source=data_source,
         support=SUPPORTED,
         needs_review=not (platform and mitre),
         query_language_hint=(

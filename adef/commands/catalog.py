@@ -214,7 +214,9 @@ def catalog(
     planned: list = []
     for disc in discovered:
         detection_id = f"D-{next_idx:04d}"
-        planned.append(record_from_discovered(detection_id, disc, workspace=ws))
+        planned.append(
+            record_from_discovered(detection_id, disc, workspace=ws, rule_root=rule_root)
+        )
         next_idx += 1
 
     needs_review = sum(1 for r in planned if r.needs_review)

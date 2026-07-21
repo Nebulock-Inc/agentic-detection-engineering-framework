@@ -158,6 +158,24 @@ def test_record_rule_ref_is_relative_to_workspace(rule_repo, workspace):
     assert Path(rec.original_path).is_absolute()
 
 
+def test_record_rule_ref_is_rule_root_relative_even_for_distant_workspace(
+    rule_repo, tmp_path
+):
+    """2026-07-21 E2E finding: with the workspace far from the rule repo,
+    rule_ref degraded to ../../..-style walks. With rule_root given, the ref
+    is <root-name>/<path-inside-root> regardless of workspace location."""
+    from adef.core.rule_discovery import discover_rules
+
+    far_ws = tmp_path / "deep" / "nested" / "elsewhere" / "ws"
+    far_ws.mkdir(parents=True)
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered(
+        "D-0001", disc, workspace=far_ws, rule_root=rule_repo
+    )
+    assert rec.rule_ref == "their-detections/windows/mshta.yml"
+    assert ".." not in rec.rule_ref
+
+
 def test_record_missing_platform_defaults_and_flags(workspace):
     disc = DiscoveredRule(
         path=Path("/tmp/x/raw.sql"),
