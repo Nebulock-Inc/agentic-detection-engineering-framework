@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -173,15 +172,15 @@ class JournalEntry:
 
     @property
     def detection_id(self) -> str:
-        return self.frontmatter.get("id", self.path.stem)
+        return str(self.frontmatter.get("id", self.path.stem))
 
     @property
     def current_stage(self) -> str:
-        return self.frontmatter.get("current_stage", "find")
+        return str(self.frontmatter.get("current_stage", "find"))
 
     @property
     def rule_uuid(self) -> str:
-        return self.frontmatter.get("rule_uuid", "") or ""
+        return str(self.frontmatter.get("rule_uuid", "") or "")
 
 
 class Journal:

@@ -3,7 +3,7 @@
 **Branch:** `feature/adef-v1-design` — all work committed; push any remaining
 local commits from a terminal (`git push origin feature/adef-v1-design`;
 pushes fail from the Cowork sandbox by design).
-**Roadmap:** `docs/2026-07-21-next-steps.md` (items 2–3 done; item 1 open).
+**Roadmap:** `docs/2026-07-21-next-steps.md` (items 1–3 done; branch mergeable).
 **Decisions:** all in `ISA.md ## Decisions` (2026-07-20 and 2026-07-21
 entries), co-worker signed off.
 
@@ -30,14 +30,15 @@ entries), co-worker signed off.
   Splunk export) + fake in-house format with its profile — the quickstart
   runs against these, every command sandbox-executed verbatim.
 
-## The one blocker
+## The one blocker — CLEARED 2026-07-21
 
-**Local quality gates have never run**: `pytest`, `ruff check adef/`,
-`mypy adef/` (sandbox lacks the tooling; ~30 new sandbox-mirrored tests await
-their first real pytest run: test_profiles, test_profile_cli,
-test_declaration, test_detection_browse, test_review_reasons). Run in
-`.venv`, fix whatever surfaces, record evidence in ISA `## Verification`.
-Then the branch is mergeable.
+**Local quality gates run to green** in a real dev env (Python 3.13.9,
+ruff 0.15.21, mypy 2.3.0): `pytest` **165 passed / 2 skipped**,
+`ruff check adef/` clean, `mypy adef/` clean (fixed 14 errors incl. two real
+bugs — a crashing `init_tools` import of a since-refactored constant, and a
+loop-variable shadow in `schema check`). Fixes are typing/wiring only; suite
+unchanged pre/post. Evidence in ISA `## Verification` ("Local quality gates"
+entry). **Branch is mergeable.**
 
 ## Next up after that (see next-steps doc for detail)
 

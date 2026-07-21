@@ -128,13 +128,12 @@ class HuntPromotionAgent:
 
         journal = Journal(journals_dir).create(
             detection_id=detection_id,
-            title=(
-                generated.get("title")
-                if isinstance(generated, dict)
-                else f"Promoted from {hunt_id}"
+            title=str(
+                (generated.get("title") if isinstance(generated, dict) else None)
+                or f"Promoted from {hunt_id}"
             ),
             owner="",
-            rule_uuid=(generated.get("uuid") if isinstance(generated, dict) else "") or "",
+            rule_uuid=str((generated.get("uuid") if isinstance(generated, dict) else "") or ""),
             note=f"Promoted from upstream hunt {hunt_id}. Draft YAML: {staging_yaml}",
         )
 

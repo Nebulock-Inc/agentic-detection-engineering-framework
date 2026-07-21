@@ -310,7 +310,7 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **Platform inheritance from declared schemas at catalog time** (`_inherit_platforms`): rule literals matched against source names + scope values, most-specific-wins (same semantics as `schema check`); inherit only when the platform is unambiguous — never guess. Declaring data cleans the catalog.
   - **Tier-2 MITRE parity for profile rules**: technique-ID text sweep over title + description + query when the profile map yields no MITRE (why Panther scheduled queries were 0%). `description` added to profile MAP_FIELDS.
   - `list --needs-review` upgraded to optional-value (bare = structural; `<reason>` = that queue); legacy records without `review_reasons` degrade to an opaque `legacy` reason.
-  - Evidence: examples demo went **8/9 flagged → 1/9** (7 platforms inherited; the survivor is the deliberately-broad hunt, correctly ambiguous). 11/11 new smoke checks; suites 28/28 + 31/31; corpora exact. Tests in `tests/test_review_reasons.py`. Co-worker sign-off recorded for the 2026-07-20/21 design decisions. Full pytest/ruff/mypy still pending local run.
+  - Evidence: examples demo went **8/9 flagged → 1/9** (7 platforms inherited; the survivor is the deliberately-broad hunt, correctly ambiguous). 11/11 new smoke checks; suites 28/28 + 31/31; corpora exact. Tests in `tests/test_review_reasons.py`. Co-worker sign-off recorded for the 2026-07-20/21 design decisions. (Full pytest/ruff/mypy local run completed 2026-07-21 — see the "Local quality gates" entry at the top of this section.)
 
 - 2026-07-21 — **ATT&CK reference layer deferred to the coverage epic; INDEX honesty rename.** Decision: MITRE capture stays regex (sufficient for v0.1.0 — journals/catalog/profiles/schemas/check need no ATT&CK knowledge), but nothing coverage-branded ships without the reference layer first (compact snapshot from official STIX via `mitreattack-python` as a build-time tool, never a runtime dep; `adef attack refresh` for updates; consumers: `invalid_mitre`/revoked validation reasons, true tactic resolution, mitre-tagger grounding — agents select from the snapshot, never model memory). Sequenced in `docs/2026-07-21-next-steps.md` §4. Done now (pre-release, migration-free): INDEX `by_tactic` → **`by_technique`** — it was keyed by technique and labeled tactic; renamed rather than pretend.
 
@@ -321,6 +321,12 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 ## Verification
 
 (populated at VERIFY — evidence per ISC)
+
+- 2026-07-21 — **mypy taken to 0** (follow-on to the "First real quality-gate run" entry below, which fixed branch-authored files and left mypy at 9 errors in pre-existing files scoped out per HANDOFF #3). This session cleared those remaining 9, so the whole `adef/` tree is now type-clean. Reached by rebasing onto that run; overlapping fixes (init_tools, schema.py, catalog.py, rule_discovery.py) were identical and resolved to one copy. Dev env: Python 3.13.9, ruff 0.15.21, mypy 2.3.0.
+  - `pytest` — **167 tests, all green** (165 passed + 2 skipped; the 2 skips are 3.13-specific — the run below on 3.11 reported 167 passed).
+  - `ruff check adef/` — **All checks passed** after: removed unused `shutil` import (`journal.py`); `# noqa: E402` on the two `cli.py` imports that must follow `load_dotenv()`.
+  - `mypy adef/` — **Success, 0 issues** after clearing the 9 in previously-unchanged files: `no-any-return` hardening via `str(...)`/`cast` in `journal.py` (id/stage/uuid props), `agent_tools.py` (`_to_dict` + 4 tool returns), `hunt_promotion.py` (title/uuid `str(... or ...)`); and a `getattr` → `isinstance(cls, type)` guard in `_base.py`.
+  - Anti-goal guards green (`test_schema_parity`, `test_no_new_engine_types`, `test_no_vendor_connectors`, `test_no_web_ui_deps`). Fixes are typing-only; no behavior change (suite unchanged pre/post).
 
 - 2026-07-15 — Catalog layer (Epic 6996 / stories 7387, 7388, 7389). Evidence:
   - `adef/core/rule_discovery.py` — shared read-only repo walk; 14 tests (`tests/test_rule_discovery.py`) + 4 field-scan tests (`tests/test_rule_field_scan.py`) pass.

@@ -183,9 +183,8 @@ def check(workspace: Path | None, report_format: str | None):
     """
     from adef.core.catalog import Catalog
 
-    ws = Path(
-        workspace or os.getenv("ADEF_WORKSPACE") or Path.home() / "work" / "adef-workspace"
-    ).expanduser().resolve()
+    ws_default = os.getenv("ADEF_WORKSPACE") or str(Path.home() / "work" / "adef-workspace")
+    ws = Path(workspace or ws_default).expanduser().resolve()
     schema_dir = ws / "schema"
     cat = Catalog(ws)
 

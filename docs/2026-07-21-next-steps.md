@@ -11,10 +11,11 @@ Ordered by what unblocks what.
 
 ## Immediate — makes the branch mergeable
 
-1. **Local quality gates.** `pytest`, `ruff check adef/`, `mypy adef/` in a
-   real dev environment; record evidence in ISA `## Verification`. Everything
-   since 2026-07-20 is sandbox-smoke-verified (28/28, 31/31, 15/15, 10/10 +
-   exact corpora regression) but not suite-verified. The only blocker.
+1. ✅ *(done 2026-07-21)* **Local quality gates.** `pytest`, `ruff check adef/`,
+   `mypy adef/` in a real dev environment; evidence in ISA `## Verification`.
+   Result: pytest 165 passed / 2 skipped; ruff clean; mypy clean (fixed 14
+   errors incl. two real bugs — a crashing `init_tools` import and a
+   loop-variable shadow in `schema check`). Was "the only blocker."
 2. ✅ *(done 2026-07-21)* **Co-worker sign-off** on the three implemented design decisions, per ISA
    discipline: extraction profiles + plugin (`2026-07-20-claude-plugin-design.md`),
    declarations (`2026-07-20-schema-declaration-design.md`), and its scope

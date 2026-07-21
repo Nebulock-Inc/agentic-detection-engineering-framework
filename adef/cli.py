@@ -14,8 +14,8 @@ from rich.console import Console
 
 load_dotenv()
 
-from adef import __version__
-from adef.plugin_system import PluginRegistry
+from adef import __version__  # noqa: E402 — must follow load_dotenv()
+from adef.plugin_system import PluginRegistry  # noqa: E402
 
 console = Console()
 
