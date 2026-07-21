@@ -4,16 +4,17 @@ Development utility scripts for ADEF maintenance and testing.
 
 ## fresh-install.sh
 
-Quick ADEF reinstallation from GitHub for testing from a clean state.
+Quick ADEF reinstallation from GitHub for testing from a completely clean state.
 
 ### What it does
 
-1. Removes existing ADEF checkout (if present)
-2. Clones ADEF from GitHub
-3. Creates a fresh Python virtual environment (`.adef`)
-4. Upgrades pip
-5. Installs ADEF in editable mode
-6. Verifies installation
+1. Removes ADEF workspace directory (`~/work/adef-workspace` by default)
+2. Removes existing ADEF checkout (if present)
+3. Clones ADEF from GitHub
+4. Creates a fresh Python virtual environment (`.adef`)
+5. Upgrades pip
+6. Installs ADEF in editable mode
+7. Verifies installation
 
 ### Usage
 
@@ -37,9 +38,19 @@ Quick ADEF reinstallation from GitHub for testing from a clean state.
 ./scripts/fresh-install.sh --python 3.11
 ```
 
+**Keep existing workspace (don't delete ~/work/adef-workspace):**
+```bash
+./scripts/fresh-install.sh --keep-workspace
+```
+
+**Custom workspace location:**
+```bash
+./scripts/fresh-install.sh --workspace /tmp/my-workspace
+```
+
 **Combined options:**
 ```bash
-./scripts/fresh-install.sh --branch main --path /tmp/adef --python 3.13
+./scripts/fresh-install.sh --branch main --path /tmp/adef --python 3.13 --keep-workspace
 ```
 
 ### Options
@@ -49,6 +60,8 @@ Quick ADEF reinstallation from GitHub for testing from a clean state.
 | `--branch` | `-b` | Git branch to clone | `feature/adef-v1-design` |
 | `--path` | `-p` | Installation directory | `~/agentic-detection-engineering-framework` |
 | `--python` | | Python version (3.11, 3.12, 3.13) | `3.12` |
+| `--workspace` | | ADEF workspace directory | `~/work/adef-workspace` |
+| `--keep-workspace` | | Don't remove existing workspace | (workspace is removed by default) |
 | `--help` | `-h` | Show help | |
 
 ### After Installation

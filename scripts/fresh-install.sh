@@ -2,15 +2,17 @@
 #
 # fresh-install.sh — Quick ADEF reinstall for testing
 #
-# Removes existing ADEF checkout, re-clones from GitHub, and sets up
-# a fresh Python 3.12 venv with all dependencies. Useful for testing
-# from a clean state.
+# Removes existing ADEF checkout AND workspace, re-clones from GitHub, and
+# sets up a fresh Python 3.12 venv with all dependencies. Useful for testing
+# from a completely clean state.
 #
 # Usage:
-#   ./scripts/fresh-install.sh                    # Clone feature branch to ~/agentic-detection-engineering-framework
-#   ./scripts/fresh-install.sh --branch main      # Clone main branch
-#   ./scripts/fresh-install.sh --path /tmp/adef   # Clone to custom location
-#   ./scripts/fresh-install.sh --help             # Show this help
+#   ./scripts/fresh-install.sh                           # Default: remove workspace + install to ~/agentic-detection-engineering-framework
+#   ./scripts/fresh-install.sh --branch main             # Clone main branch
+#   ./scripts/fresh-install.sh --path /tmp/adef          # Clone to custom location
+#   ./scripts/fresh-install.sh --keep-workspace          # Don't remove ~/work/adef-workspace
+#   ./scripts/fresh-install.sh --workspace /tmp/ws       # Use custom workspace location
+#   ./scripts/fresh-install.sh --help                    # Show this help
 
 set -euo pipefail
 
@@ -19,6 +21,8 @@ REPO_URL="https://github.com/Nebulock-Inc/agentic-detection-engineering-framewor
 BRANCH="feature/adef-v1-design"
 PYTHON_VERSION="3.12"
 VENV_NAME=".adef"
+WORKSPACE_DIR="$HOME/work/adef-workspace"
+CLEAN_WORKSPACE=true
 
 # Platform detection
 OS_TYPE=$(uname -s)
@@ -59,6 +63,14 @@ while [[ $# -gt 0 ]]; do
             PYTHON_VERSION="$2"
             shift 2
             ;;
+        --workspace)
+            WORKSPACE_DIR="$2"
+            shift 2
+            ;;
+        --keep-workspace)
+            CLEAN_WORKSPACE=false
+            shift
+            ;;
         --help|-h)
             grep '^#' "$0" | grep -v '#!/' | sed 's/^# //' | sed 's/^#//'
             exit 0
@@ -74,14 +86,28 @@ done
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  ADEF Fresh Install${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}  Install dir:${NC} $INSTALL_DIR"
-echo -e "${YELLOW}  Branch:${NC}      $BRANCH"
-echo -e "${YELLOW}  Python:${NC}      $PYTHON_VERSION"
-echo -e "${YELLOW}  Venv name:${NC}   $VENV_NAME"
+echo -e "${YELLOW}  Install dir:${NC}  $INSTALL_DIR"
+echo -e "${YELLOW}  Branch:${NC}       $BRANCH"
+echo -e "${YELLOW}  Python:${NC}       $PYTHON_VERSION"
+echo -e "${YELLOW}  Venv name:${NC}    $VENV_NAME"
+echo -e "${YELLOW}  Workspace:${NC}    $WORKSPACE_DIR $([ "$CLEAN_WORKSPACE" = true ] && echo "(will be removed)" || echo "(will be kept)")"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo
 
-# Step 1: Remove existing installation
+# Step 1: Remove ADEF workspace
+if [ "$CLEAN_WORKSPACE" = true ]; then
+    if [ -d "$WORKSPACE_DIR" ]; then
+        echo -e "${YELLOW}⚙  Removing ADEF workspace...${NC}"
+        rm -rf "$WORKSPACE_DIR"
+        echo -e "${GREEN}✓  Removed $WORKSPACE_DIR${NC}"
+    else
+        echo -e "${GREEN}✓  No workspace found at $WORKSPACE_DIR${NC}"
+    fi
+else
+    echo -e "${BLUE}ℹ  Keeping workspace at $WORKSPACE_DIR${NC}"
+fi
+
+# Step 2: Remove existing installation
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${YELLOW}⚙  Removing existing installation...${NC}"
     rm -rf "$INSTALL_DIR"
