@@ -40,6 +40,13 @@ adef init --path /custom/path       # Create workspace at custom location
 adef detection new "Suspicious mshta.exe child process"
 adef detection new "Title" --owner alice --rule-uuid <UUID>
 
+# Author a NEW rule grounded in a declared schema (journal + draft catalog record)
+adef detection new "Suspicious mshta child" --source wineventlog_xml
+#   --source pulls platform/query_language/scope from schema/<source>.yml and
+#   scaffolds a starter query with the real index/sourcetype literals. Errors if
+#   the schema isn't declared. Omit --source for a journal only (as before).
+#   The rule lands in the ADEF catalog; moving it to the user's repo is deferred.
+
 # Advance through FORGE stages
 adef detection observe D-0001       # Stage 2: characterize telemetry
 adef detection refine  D-0001       # Stage 3: runs Similarity → Overlap → Verification chain

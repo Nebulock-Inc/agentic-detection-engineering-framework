@@ -38,15 +38,43 @@ def detection() -> None:
 @click.option("--owner", default="", help="Initial owner of the detection.")
 @click.option("--rule-uuid", default="", help="Optional upstream rule UUID to pair.")
 @click.option(
+    "--source",
+    default="",
+    help="Declared schema to ground a new rule against (e.g. wineventlog_xml). "
+    "Also creates a draft catalog record with the source's platform, "
+    "query_language, and scope literals. Omit to create a journal only.",
+)
+@click.option(
     "--workspace",
     type=click.Path(file_okay=False, path_type=Path),
     default=None,
     help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
 )
-def new(title: str, owner: str, rule_uuid: str, workspace: Path | None) -> None:
-    """Create a new detection journal at the Find stage."""
+def new(
+    title: str, owner: str, rule_uuid: str, source: str, workspace: Path | None
+) -> None:
+    """Create a new detection journal at the Find stage.
+
+    With ``--source``, also scaffolds a draft catalog record grounded in that
+    declared schema — the starting point for authoring a brand-new rule (the
+    journal captures *why*; the record holds the *what*). The rule lands in the
+    ADEF catalog; getting it into your rules repo is your call.
+    """
     journals_dir = workspace_journals_dir(workspace)
     detection_id = next_detection_id(journals_dir)
+
+    # If grounding a new rule, build the record FIRST so a bad --source fails
+    # before we write a dangling journal.
+    record = None
+    if source:
+        from adef.core.catalog import Catalog, draft_record_from_schema
+
+        ws = journals_dir.parent
+        try:
+            record = draft_record_from_schema(ws, detection_id, title, source)
+        except FileNotFoundError as exc:
+            raise click.ClickException(str(exc)) from exc
+
     journal = Journal(journals_dir).create(
         detection_id=detection_id,
         title=title,
@@ -56,6 +84,20 @@ def new(title: str, owner: str, rule_uuid: str, workspace: Path | None) -> None:
     console.print(
         f"[green]Created[/green] {journal.path.relative_to(journals_dir.parent)} at Find stage."
     )
+
+    if record is not None:
+        cat = Catalog(journals_dir.parent)
+        rec_path = cat.write(record)
+        cat.rebuild_index()
+        console.print(
+            f"[green]Scaffolded[/green] draft rule {rec_path.relative_to(journals_dir.parent)} "
+            f"grounded in schema [cyan]{source}[/cyan] "
+            f"({record.platform} / {record.query_language})."
+        )
+        console.print(
+            "  Next: fill in the query + author the Find context in the journal "
+            "(the AI assistant / mitre-tagger can help)."
+        )
 
 
 def _make_stage_command(stage: str) -> click.Command:

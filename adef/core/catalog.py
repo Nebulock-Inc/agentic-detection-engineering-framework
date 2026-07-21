@@ -183,6 +183,71 @@ def record_from_discovered(
     )
 
 
+def _starter_query(query_language: str, scope: dict[str, str]) -> str:
+    """A skeleton query grounded in the schema's scope, in the source language.
+
+    Not runnable logic — a scaffold that gets the *addressing* right (real
+    index/sourcetype/table literals) so the author fills in behavior, not
+    boilerplate. Empty when there's nothing to ground on.
+    """
+    if not scope:
+        return ""
+    ql = query_language.lower()
+    if ql == "spl":
+        prefix = " ".join(f"{k}={v}" for k, v in scope.items())
+        return f"{prefix}\n| where <condition>" if prefix else ""
+    if ql in ("kql", "cql"):
+        # Lead table is the container literal; prefer an explicit table/source.
+        table = scope.get("table") or scope.get("source") or next(iter(scope.values()))
+        return f"{table}\n| where <condition>"
+    if ql == "sql":
+        table = scope.get("table") or next(iter(scope.values()))
+        return f"SELECT * FROM {table}\nWHERE <condition>"
+    return ""
+
+
+def draft_record_from_schema(
+    workspace: Path,
+    detection_id: str,
+    title: str,
+    source: str,
+) -> "CatalogRecord":
+    """Build a draft catalog record grounded in a declared schema.
+
+    Pulls ``platform`` / ``query_language`` / scope from ``schema/<source>.yml``
+    so a newly-authored detection starts with correct addressing instead of
+    guesses. ``data_source`` is the schema's canonical ``source`` name — the
+    identity ``adef schema check`` matches on. Raises ``FileNotFoundError`` if
+    the schema isn't declared (author against a real source, not a guess).
+    """
+    from adef.core.declaration import read_schema_v2
+
+    schema_path = Path(workspace).expanduser().resolve() / "schema" / f"{source}.yml"
+    data = read_schema_v2(schema_path) if schema_path.is_file() else None
+    if not data:
+        raise FileNotFoundError(
+            f"no schema '{source}' in the workspace — run `adef schema ingest` "
+            f"first, or `adef schema show` to list declared sources"
+        )
+
+    query_language = str(data.get("query_language", ""))
+    scope = {str(k): str(v) for k, v in (data.get("scope") or {}).items()}
+    return CatalogRecord(
+        id=detection_id,
+        title=title,
+        rule_ref="",           # authored in ADEF, not (yet) in the user's repo
+        original_path="",
+        platform=str(data.get("platform") or _UNKNOWN_PLATFORM),
+        kind="atomic",
+        engine="sql" if query_language in ("sql", "spl", "kql", "cql") else "sigma",
+        format=query_language or "sql",
+        query_language=query_language,
+        query=_starter_query(query_language, scope),
+        data_source=source,
+        support="supported",
+    )
+
+
 class Catalog:
     """File-system-backed catalog writer + INDEX generator for a workspace."""
 
