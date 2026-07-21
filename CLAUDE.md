@@ -105,6 +105,19 @@ stdlib script, **never a runtime dep**). Consumers: catalog-time `invalid_mitre`
 validation and true `by_tactic` INDEX resolution. `refresh` writes to
 `$ADEF_WORKSPACE/attack/enterprise.json`, which wins over the shipped copy on read.
 
+### Coverage Report
+```bash
+adef coverage                                  # coverage-quality report (terminal)
+adef coverage --navigator layer.json           # + a scored MITRE Navigator layer
+```
+Not a heatmap — reports coverage *quality* from the catalog with zero human
+input: **solid** (depth ≥2, ≥1 reviewed) vs **fragile** (single detection or all
+`needs_review`); **log-source concentration** (techniques riding one feed);
+**single points of failure** (depth-1 techniques); and **fictional coverage**
+(mapped IDs absent from the ATT&CK reference). `--navigator` writes a Navigator
+v4.5 layer scored by the same tiers (solid=100, fragile=50) with the why in each
+comment. Core model: `adef/core/coverage.py`.
+
 ### MCP Server
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot

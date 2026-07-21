@@ -326,6 +326,14 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **Durability note (deliberate non-goal):** enrichment written to a record is wiped if `adef catalog` is re-run, because re-catalog currently assigns fresh IDs and does not reconcile. This applies uniformly to *all* enrichment (status/stage/owner today), not just MITRE — the tagger does not make it worse. Sync-safe re-derivation is the unbuilt `adef sync` epic (next-steps §7); not solved here by decision.
   - **Skill grounds every ID in the shipped reference, never model memory.** `mitre-tagger` reads each `no_mitre` record's *logic* (title+query), proposes techniques, and MUST confirm each with `adef attack show` before offering it; `tag-mitre`'s deterministic validation is the backstop. Human approval is a hard gate per write. Plugin auto-discovers it from `claude-plugin/skills/`.
 
+- 2026-07-21 — **`adef coverage` — coverage *quality* report, not a heatmap (coverage epic step 3)**. Decisions:
+  - **Differentiate on what a vendor heatmap discards.** Every team already has a binary technique heatmap from their SIEM. The value ADEF adds is the per-detection context a heatmap throws away — log source, review state, depth — turned into the questions a skeptical DE lead asks. Model in `adef/core/coverage.py`; command `adef coverage` (+ `--navigator`).
+  - **Trust tiers, not presence.** Per technique: **solid** (depth ≥2 AND ≥1 detection not `needs_review`) · **fragile** (single detection, or every detection needs review) · **blind** (no valid mapping). A draft/unreviewed/single rule is *not* coloured the same green as battle-tested coverage.
+  - **Status is deliberately NOT a tier input (cold-start honesty).** Freshly-catalogued rules are all `status: draft` — a ready-vs-draft tier would fire on 100% of a cold catalog and cry wolf. The tier uses `needs_review` + depth, which are real from day one (zero human input) — matching the handoff's core bet. `status` can enhance later; it doesn't gate now.
+  - **Day-one risk views (no journaling required):** log-source concentration ("N/M techniques ride a single feed — it breaks, they go dark"), single-points-of-failure (depth-1 list), and fictional coverage (mappings to IDs absent from the reference — reused from the reference layer). On the demo corpus these are vivid: 0% trustworthy, 8/8 single-source, 8 SPOFs.
+  - **Invalid IDs never count as coverage.** A mapping to a non-reference ID is surfaced as *fictional*, never as a covered technique — coverage math stays honest.
+  - **Navigator export scored by quality, not binary.** `--navigator` writes a Navigator v4.5 layer: solid=100 / fragile=50, each technique's comment carrying the why (depth, sources, review state). Even the shareable heatmap says more than green/red. JSON report deferred (YAGNI — `detection list --report json` already exposes raw records).
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -367,3 +375,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `ruff check` clean on new files; `mypy` adds zero new errors (the 3 shown are pre-existing `journal.py`/`_base.py`, surfaced via imports).
   - CLI end-to-end on a fresh `examples/demo-rules` catalog: `tag-mitre D-0001 T1071.004` → tagged, `no_mitre` gone (only `no_platform` left); `T9999` → rejected, exit 1, unchanged; `T1143` → tagged with `revoked → T1564.003` note; INDEX `by_tactic` immediately shows D-0001 under Command and Control + Stealth.
   - `mitre-tagger` skill written to `claude-plugin/skills/mitre-tagger/SKILL.md` (auto-discovered; plugin.json description updated). Orchestration-only — grounds IDs via `adef attack show`, writes via `tag-mitre`, human-approval gate.
+
+- 2026-07-21 — `adef coverage` — coverage-quality report + Navigator export (coverage epic step 3). Evidence:
+  - `tests/test_coverage.py` — **7 tests**: solid needs depth+clean, single detection is fragile, all-needs-review is fragile even with depth, invalid ID not counted (surfaced separately), SPOF list, source concentration, Navigator scores by tier with why-comments. Full suite **189 passed** (was 182).
+  - `ruff check` clean on new files; `mypy` adds zero new errors (2 shown are pre-existing `journal.py`, via import).
+  - CLI end-to-end on the cold `examples/demo-rules` catalog (all draft, 8/9 one source): headline "only 0% of your mapped coverage is trustworthy"; log-source risk "8/8 techniques ride a single source"; 8 single-points-of-failure listed with why; by-tactic rollup; `--navigator /tmp/adef-layer.json` → valid v4.5 layer, 8 techniques, fragile→score 50 with comment. Tier logic verified to respond: a depth-2 reviewed multi-source technique → solid.

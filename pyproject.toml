@@ -74,6 +74,7 @@ schema = "adef.commands.schema:schema"
 catalog = "adef.commands.catalog:catalog"
 profile = "adef.commands.profile:profile"
 attack = "adef.commands.attack:attack"
+coverage = "adef.commands.coverage:coverage"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"
