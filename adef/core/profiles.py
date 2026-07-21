@@ -39,7 +39,7 @@ IMPLEMENTED_CONTAINERS = ("yaml", "json")
 QUERY_LANGUAGES = ("spl", "kql", "cql", "sql", "none")
 
 # map keys a profile may set; `title` and `query` are required.
-MAP_FIELDS = ("title", "query", "mitre", "uuid", "data_source", "severity")
+MAP_FIELDS = ("title", "query", "mitre", "uuid", "data_source", "severity", "description")
 
 _NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _PATH_RE = re.compile(r"^[A-Za-z_][\w-]*(\[\])?(\.[A-Za-z_][\w-]*(\[\])?)*$")

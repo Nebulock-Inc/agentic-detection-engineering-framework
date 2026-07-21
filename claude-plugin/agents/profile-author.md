@@ -39,6 +39,7 @@ map:                     # dot-paths into the parsed document; [] iterates array
   uuid: <path>           # stable rule ID if the format has one — critical for sync identity
   data_source: <path>    # table/index/logsource the rule reads
   severity: <path>       # optional
+  description: <path>    # optional — also swept for MITRE technique IDs
 platform:
   path: <path>           # or `const: <platform>` for single-platform repos; omit if unknowable
 ```

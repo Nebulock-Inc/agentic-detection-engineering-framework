@@ -95,6 +95,8 @@ class CatalogRecord:
     stage: str = "find"    # find | observe | refine | govern | evolve
     owner: str = ""
     needs_review: bool = False
+    # Why (REVIEW_* constants from rule_discovery); needs_review == bool(reasons).
+    review_reasons: list[str] = dataclass_field(default_factory=list)
     created: str = ""
     updated: str = ""
 
@@ -119,6 +121,7 @@ class CatalogRecord:
             "stage": self.stage,
             "owner": self.owner,
             "needs_review": self.needs_review,
+            "review_reasons": list(self.review_reasons),
             "created": self.created or ts,
             "updated": self.updated or ts,
         }
@@ -176,6 +179,7 @@ def record_from_discovered(
         support=disc.support,
         mitre=list(disc.mitre),
         needs_review=disc.needs_review or disc.platform is None,
+        review_reasons=list(disc.review_reasons),
     )
 
 

@@ -43,6 +43,22 @@ NOT_A_RULE = "not_a_rule"                          # config, docs, pack, story, 
 # catalog-onboarding skill (ISA 2026-07-20).
 UNCLAIMED = "unclaimed"
 
+# Review reasons (ISA 2026-07-21): needs_review with a *why*. Structural
+# reasons drive the ⚠ marker and headline counts; NO_MITRE is enrichment
+# work (the mitre-tagger queue), visible but quiet.
+REVIEW_MALFORMED = "malformed"          # extraction threw; catalogued raw
+REVIEW_EXTERNAL_LOGIC = "external_logic"  # logic in a sibling file we don't parse
+REVIEW_NO_PLATFORM = "no_platform"      # platform could not be inferred/inherited
+REVIEW_NO_MITRE = "no_mitre"            # no ATT&CK mapping found anywhere
+STRUCTURAL_REVIEW_REASONS = frozenset(
+    {REVIEW_MALFORMED, REVIEW_EXTERNAL_LOGIC, REVIEW_NO_PLATFORM}
+)
+
+
+def structural_reasons(reasons) -> tuple[str, ...]:
+    """The review reasons that should trip the headline warning."""
+    return tuple(r for r in reasons if r in STRUCTURAL_REVIEW_REASONS)
+
 # Fold a source format into ADEF's internal engine taxonomy. Sigma is its own
 # engine; SQL is sql; everything else is a query engine we treat as sql-shaped
 # for the internal taxonomy while preserving the true format in ``format``.
@@ -134,6 +150,9 @@ class DiscoveredRule:
     # RECOGNIZED_UNSUPPORTED (format known, extractor pending, e.g. Panther .py).
     support: str = SUPPORTED
     needs_review: bool = False
+    # Why review is needed (REVIEW_* constants). Computed centrally by
+    # ``walk_outcomes``; ``needs_review`` == bool(review_reasons).
+    review_reasons: tuple[str, ...] = ()
     # Set by profile-based extraction, where the query language comes from the
     # profile document rather than the static format map.
     query_language_hint: str = ""
@@ -538,6 +557,12 @@ def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
     """Build a ``DiscoveredRule`` from one profile-claimed document."""
     fields = profiles_mod.extract_fields(profile, doc)
     mitre = _normalise_mitre(fields.get("mitre") or [])
+    if not mitre:
+        # Tier-2 parity with the conf extractor (ISA 2026-07-21): sweep the
+        # rule's prose for technique-ID tokens when the map yields nothing.
+        mitre = _normalise_mitre(
+            [fields.get("title", ""), fields.get("description", ""), fields.get("query", "")]
+        )
     platform = fields.get("platform") or None
     data_source = fields.get("data_source", "") or _infer_data_source(
         fields.get("query", ""), profile.query_language
@@ -594,6 +619,27 @@ class FileOutcome:
     top_level_keys: tuple[str, ...] = ()
 
 
+def finalize_review(rule: DiscoveredRule, malformed: bool = False) -> DiscoveredRule:
+    """Compute ``review_reasons`` + ``needs_review`` centrally (ISA 2026-07-21).
+
+    One place, all discovery paths — so the semantics can't drift between
+    built-in extractors and profile extraction. Also re-run by the catalog
+    after declaration-based platform inheritance.
+    """
+    reasons: list[str] = []
+    if malformed:
+        reasons.append(REVIEW_MALFORMED)
+    if rule.support == RECOGNIZED_UNSUPPORTED:
+        reasons.append(REVIEW_EXTERNAL_LOGIC)
+    if not rule.platform:
+        reasons.append(REVIEW_NO_PLATFORM)
+    if not rule.mitre:
+        reasons.append(REVIEW_NO_MITRE)
+    rule.review_reasons = tuple(reasons)
+    rule.needs_review = bool(reasons)
+    return rule
+
+
 def walk_outcomes(
     rule_root: Path, profiles: Sequence[Profile] = ()
 ) -> Iterator[FileOutcome]:
@@ -623,7 +669,7 @@ def walk_outcomes(
             for doc in docs:
                 rule = _extract_via_profile(profile, doc)
                 rule.path = path
-                rules.append(rule)
+                rules.append(finalize_review(rule))
             yield FileOutcome(
                 path=path, outcome=SUPPORTED, format=profile.name, rules=tuple(rules)
             )
@@ -644,13 +690,13 @@ def walk_outcomes(
             continue
 
         extractor = _EXTRACTORS.get(rec.format)
+        malformed = False
         if extractor is None:
             rule = DiscoveredRule(
                 path=path,
                 format=rec.format,
                 query_text="",
                 support=rec.support,
-                needs_review=True,
             )
         else:
             try:
@@ -658,14 +704,15 @@ def walk_outcomes(
             except Exception:
                 # A malformed rule of a known format still gets catalogued as
                 # needs_review rather than vanishing.
+                malformed = True
                 rule = DiscoveredRule(
                     path=path,
                     format=rec.format,
                     query_text=text.strip(),
                     support=rec.support,
-                    needs_review=True,
                 )
             rule.path = path
+        finalize_review(rule, malformed=malformed)
         yield FileOutcome(
             path=path, outcome=rule.support, format=rec.format, rules=(rule,)
         )
@@ -694,9 +741,16 @@ __all__ = [
     "RECOGNIZED_UNSUPPORTED",
     "NOT_A_RULE",
     "UNCLAIMED",
+    "REVIEW_MALFORMED",
+    "REVIEW_EXTERNAL_LOGIC",
+    "REVIEW_NO_PLATFORM",
+    "REVIEW_NO_MITRE",
+    "STRUCTURAL_REVIEW_REASONS",
     "discover_rules",
+    "finalize_review",
     "recognize",
     "shape_literals",
     "sniff_format",
+    "structural_reasons",
     "walk_outcomes",
 ]

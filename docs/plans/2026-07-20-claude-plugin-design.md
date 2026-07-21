@@ -190,7 +190,7 @@ only surface):
   marketplace); skills orchestrate CLI/MCP, never reimplement it; the FORGE
   stage prompts remain the single source for any future forge-stage skill.
 
-## Resolutions (accepted 2026-07-20, pending co-worker sign-off)
+## Resolutions (accepted 2026-07-20; co-worker signed off 2026-07-21)
 
 1. **Path syntax: dot-paths + `[]` array iteration only. No JSONPath.**
    Profiles must be human-reviewable — the approval gate is only meaningful

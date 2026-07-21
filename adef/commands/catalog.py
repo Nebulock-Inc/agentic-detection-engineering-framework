@@ -37,6 +37,9 @@ from adef.core.rule_discovery import (
     NOT_A_RULE,
     UNCLAIMED,
     FileOutcome,
+    finalize_review,
+    shape_literals,
+    structural_reasons,
     walk_outcomes,
 )
 
@@ -57,6 +60,51 @@ def _resolve_workspace(explicit: Path | None) -> Path:
     else:
         ws = Path.home() / "work" / "adef-workspace"
     return ws.expanduser().resolve()
+
+
+def _inherit_platforms(discovered: list, ws: Path) -> int:
+    """Inherit platform from scoped declarations (ISA 2026-07-21).
+
+    A rule with no platform whose literals (data_source + shape literals)
+    match declared sources inherits their platform when it's unambiguous —
+    most-specific match wins, same semantics as ``schema check``. Declaring
+    your data makes your catalog cleaner. Returns how many rules resolved.
+    """
+    from adef.core.declaration import address_literals, read_schema_v2
+
+    schema_dir = ws / "schema"
+    if not schema_dir.is_dir():
+        return 0
+    addressed_by: dict[str, set[str]] = {}
+    platforms: dict[str, str] = {}
+    for path in sorted(schema_dir.glob("*.yml")):
+        data = read_schema_v2(path)
+        if data:
+            platforms[data["source"]] = str(data.get("platform") or "")
+            for literal in address_literals(data):
+                addressed_by.setdefault(literal, set()).add(data["source"])
+    if not addressed_by:
+        return 0
+
+    resolved = 0
+    for disc in discovered:
+        if disc.platform:
+            continue
+        literals = {disc.data_source} - {""}
+        literals.update(shape_literals(disc.query_text, disc.query_language))
+        counts: dict[str, int] = {}
+        for literal in literals:
+            for source in addressed_by.get(literal, ()):
+                counts[source] = counts.get(source, 0) + 1
+        if not counts:
+            continue
+        best = max(counts.values())
+        candidates = {platforms[s] for s, n in counts.items() if n == best} - {""}
+        if len(candidates) == 1:  # unambiguous only — never guess
+            disc.platform = candidates.pop()
+            finalize_review(disc, malformed="malformed" in disc.review_reasons)
+            resolved += 1
+    return resolved
 
 
 def _field_rates(rules: list) -> dict[str, float]:
@@ -105,6 +153,9 @@ def _build_report(
             entry["top_level_keys"] = list(oc.top_level_keys)
         if oc.rules:
             entry["needs_review"] = any(r.needs_review for r in oc.rules)
+            reasons = sorted({reason for r in oc.rules for reason in r.review_reasons})
+            if reasons:
+                entry["review_reasons"] = reasons
             missing = [
                 f
                 for f in _RATE_FIELDS
@@ -197,6 +248,7 @@ def catalog(
 
     outcomes = list(walk_outcomes(rule_root, active_profiles))
     discovered = [rule for oc in outcomes for rule in oc.rules]
+    inherited = _inherit_platforms(discovered, ws)
 
     if report_format == "json":
         report = _build_report(rule_root, outcomes, candidate, profile_errors)
@@ -219,11 +271,15 @@ def catalog(
         )
         next_idx += 1
 
-    needs_review = sum(1 for r in planned if r.needs_review)
+    # Headline count = structural reasons only; MITRE gaps are the enrichment
+    # queue, reported separately (ISA 2026-07-21).
+    needs_review = sum(1 for r in planned if structural_reasons(r.review_reasons))
+    mitre_gaps = sum(1 for r in planned if "no_mitre" in r.review_reasons)
 
     if dry_run:
         for rec in planned:
-            flag = " [yellow](needs review)[/yellow]" if rec.needs_review else ""
+            structural = structural_reasons(rec.review_reasons)
+            flag = f" [yellow]({', '.join(structural)})[/yellow]" if structural else ""
             console.print(f"  {rec.id}  {rec.platform:<14} {rec.format:<6} {rec.title}{flag}")
         unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
         console.print(
@@ -262,10 +318,17 @@ def catalog(
         f"[green]Catalogued[/green] {len(planned)} rules into {cat.directory}"
     )
     console.print(f"  INDEX     → {index_path}")
+    if inherited:
+        console.print(f"  [green]{inherited}[/green] platform(s) inherited from declared schemas.")
     if needs_review:
         console.print(
             f"  [yellow]{needs_review} need review[/yellow] "
-            "(platform or MITRE could not be inferred)."
+            "(see `adef detection list --needs-review`)."
+        )
+    if mitre_gaps:
+        console.print(
+            f"  {mitre_gaps} without ATT&CK mapping "
+            "(enrichment queue: `adef detection list --needs-review no_mitre`)."
         )
 
 

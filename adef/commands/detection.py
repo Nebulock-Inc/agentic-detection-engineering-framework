@@ -123,7 +123,16 @@ def _workspace_from(workspace: Path | None) -> Path:
 @click.option("--rule-format", "rule_format", default=None, help="Filter by source format (sigma, spl, <profile>).")
 @click.option("--status", default=None, help="Filter by status (draft, ready, tuning, deprecated).")
 @click.option("--stage", default=None, help="Filter by FORGE stage (find … evolve).")
-@click.option("--needs-review", is_flag=True, help="Only detections flagged needs_review.")
+@click.option(
+    "--needs-review",
+    "needs_review",
+    is_flag=False,
+    flag_value="any",
+    default=None,
+    help="Only detections needing review. Bare flag = structural reasons "
+    "(malformed, external_logic, no_platform); pass a reason to filter it "
+    "specifically (e.g. --needs-review no_mitre for the enrichment queue).",
+)
 @click.option(
     "--report",
     "report_format",
@@ -137,13 +146,20 @@ def list_cmd(
     rule_format: str | None,
     status: str | None,
     stage: str | None,
-    needs_review: bool,
+    needs_review: str | None,
     report_format: str | None,
 ) -> None:
     """List catalogued detections (reads the workspace catalog)."""
     import json as _json
 
     from adef.core.catalog import Catalog
+    from adef.core.rule_discovery import structural_reasons
+
+    def _reasons(data: dict) -> list[str]:
+        if "review_reasons" in data:
+            return list(data.get("review_reasons") or [])
+        # Pre-rework records: boolean only — treat as one opaque structural reason.
+        return ["legacy"] if data.get("needs_review") else []
 
     ws = _workspace_from(workspace)
     records = []
@@ -156,15 +172,21 @@ def list_cmd(
             continue
         if stage and data.get("stage") != stage:
             continue
-        if needs_review and not data.get("needs_review"):
-            continue
+        reasons = _reasons(data)
+        if needs_review == "any":
+            if not (structural_reasons(reasons) or "legacy" in reasons):
+                continue
+        elif needs_review is not None:
+            if needs_review not in reasons:
+                continue
         records.append(data)
     records.sort(key=lambda d: d.get("id", ""))
 
     if report_format == "json":
         keys = (
             "id", "title", "platform", "format", "query_language", "data_source",
-            "mitre", "status", "stage", "owner", "needs_review", "rule_ref",
+            "mitre", "status", "stage", "owner", "needs_review", "review_reasons",
+            "rule_ref",
         )
         click.echo(_json.dumps([{k: d.get(k) for k in keys} for d in records], indent=2))
         return
@@ -173,18 +195,26 @@ def list_cmd(
         console.print("[yellow]No detections match.[/yellow] (Run `adef catalog <rules>` first?)")
         return
     for d in records:
-        flag = " [yellow]⚠[/yellow]" if d.get("needs_review") else ""
+        structural = structural_reasons(_reasons(d)) or (
+            ("legacy",) if "legacy" in _reasons(d) else ()
+        )
+        flag = f" [yellow]⚠ {','.join(structural)}[/yellow]" if structural else ""
         mitre = ",".join(d.get("mitre") or []) or "-"
         console.print(
             f"  {d.get('id', '?')}  {d.get('stage', '?'):<8} {d.get('status', '?'):<10} "
             f"{d.get('platform', '?'):<15} {d.get('format', '?'):<22} {mitre:<12} "
             f"{d.get('title', '')}{flag}"
         )
-    n_review = sum(1 for d in records if d.get("needs_review"))
-    console.print(
-        f"\n[bold]{len(records)}[/bold] detection(s)"
-        + (f" ([yellow]{n_review}[/yellow] need review)" if n_review else "")
+    n_structural = sum(
+        1 for d in records if structural_reasons(_reasons(d)) or "legacy" in _reasons(d)
     )
+    n_mitre = sum(1 for d in records if "no_mitre" in _reasons(d))
+    summary = f"\n[bold]{len(records)}[/bold] detection(s)"
+    if n_structural:
+        summary += f" ([yellow]{n_structural}[/yellow] need review)"
+    if n_mitre:
+        summary += f" ({n_mitre} missing ATT&CK — `--needs-review no_mitre`)"
+    console.print(summary)
 
 
 @detection.command("show")
@@ -218,7 +248,8 @@ def show(detection_id: str, workspace: Path | None) -> None:
         + (f" owner={record['owner']}" if record.get("owner") else "")
     )
     if record.get("needs_review"):
-        console.print("  [yellow]needs_review[/yellow]   platform or MITRE could not be inferred")
+        reasons = ", ".join(record.get("review_reasons") or []) or "unspecified (legacy record)"
+        console.print(f"  [yellow]needs_review[/yellow]   {reasons}")
     if record.get("rule_ref"):
         console.print(f"  {'source':<15} {record['rule_ref']}")
     if record.get("query"):
