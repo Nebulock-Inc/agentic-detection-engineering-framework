@@ -94,8 +94,28 @@ ADEF's durable memory.
   [`docs/declaring-data-sources.md`](declaring-data-sources.md) has the format
   and worked Splunk/CrowdStrike examples — then `adef schema ingest` + `check`.
 - **Claude Code / Cursor / Copilot:** `pip install -e ".[mcp]"` and run
-  `adef-mcp`; Claude users can install the bundled plugin
-  (`/plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework`).
+  `adef-mcp` for the MCP tool surface (portable to all assistants).
+
+## 5b. Claude users: install the plugin (do this — it matters)
+
+The skills and sub-agents in `claude-plugin/` are **inactive until the plugin
+is installed** — sitting in the repo does nothing. Without them, Claude can
+*describe* ADEF workflows (it reads the repo docs) but won't *drive* them —
+e.g. it will diagnose unclaimed rule formats and stop, instead of running the
+catalog-onboarding flow that drafts and validates extraction profiles for you.
+The install is user-level, so it follows you into your own detections repo:
+
+```
+# from a local checkout (works pre-release):
+/plugin marketplace add /path/to/agentic-detection-engineering-framework
+/plugin install adef@adef-marketplace
+
+# or once you have the repo remote handy:
+/plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
+```
+
+This wires up the catalog-onboarding skill, the profile-author sub-agent, and
+the `adef-mcp` server in one step.
 
 ## 6. Developing
 
