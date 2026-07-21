@@ -107,6 +107,17 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
     return resolved
 
 
+def _print_unclaimed_nudge(unclaimed: int) -> None:
+    console.print(
+        f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
+        "recognizer or profile claims their format (likely in-house YAML).\n"
+        "  Teach ADEF the format with an extraction profile: "
+        "`adef catalog <root> --dry-run --report json` clusters them by shape;\n"
+        "  see docs/creating-extraction-profiles.md, then validate with "
+        "`adef catalog <root> --dry-run --profile <draft.yml>`."
+    )
+
+
 def _field_rates(rules: list) -> dict[str, float]:
     """Fraction of profile-claimed rules with each field non-empty."""
     if not rules:
@@ -255,8 +266,11 @@ def catalog(
         click.echo(json.dumps(report, indent=2))
         return
 
+    unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
     if not discovered:
         console.print(f"[yellow]No detection rules found under[/yellow] {rule_root}")
+        if unclaimed:
+            _print_unclaimed_nudge(unclaimed)
         return
 
     cat = Catalog(ws)
@@ -318,16 +332,8 @@ def catalog(
         f"[green]Catalogued[/green] {len(planned)} rules into {cat.directory}"
     )
     console.print(f"  INDEX     → {index_path}")
-    unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
     if unclaimed:
-        console.print(
-            f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
-            "recognizer or profile claims their format (likely in-house YAML).\n"
-            "  Teach ADEF the format with an extraction profile: "
-            "`adef catalog <root> --dry-run --report json` clusters them by shape;\n"
-            "  see docs/creating-extraction-profiles.md, then validate with "
-            "`adef catalog <root> --dry-run --profile <draft.yml>`."
-        )
+        _print_unclaimed_nudge(unclaimed)
     if inherited:
         console.print(f"  [green]{inherited}[/green] platform(s) inherited from declared schemas.")
     if needs_review:

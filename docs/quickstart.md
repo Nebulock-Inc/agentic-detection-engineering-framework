@@ -72,6 +72,38 @@ deliberately-broad hunt rule; and `schema check` flagging `NotARealField` —
 planted in `examples/demo-rules/broad_hunt_bogus_field.conf` so there's
 always a finding to look at.
 
+## 3b. Teach ADEF an in-house format (extraction profiles)
+
+Real repos almost always contain a format ADEF doesn't know — the first thing
+you'll hit outside the demo. `examples/inhouse-rules/` is a made-up
+"Nebulock hunt" format so you can experience the loop:
+
+```bash
+adef catalog examples/inhouse-rules
+# → "3 structured files were NOT catalogued — no recognizer or profile
+#    claims their format" ... nothing was added.
+
+# Cluster the unclaimed files by shape (one key-set = one format = one profile):
+adef catalog examples/inhouse-rules --dry-run --report json | grep top_level_keys
+
+# A ready-made profile for this format ships in examples/profiles/.
+# Validate it — the engine reports per-field extraction rates (the scoreboard):
+adef profile lint examples/profiles/nebulock-hunt.yml
+adef catalog examples/inhouse-rules --dry-run --profile examples/profiles/nebulock-hunt.yml
+# → claimed 3; title 100%, query 100%, uuid 100%, mitre 100% ...
+
+# Install it and catalog for real:
+mkdir -p $ADEF_WORKSPACE/config/profiles
+cp examples/profiles/nebulock-hunt.yml $ADEF_WORKSPACE/config/profiles/
+adef catalog examples/inhouse-rules
+adef detection list --rule-format nebulock-hunt
+```
+
+For your own formats, the profile is ~15 lines of YAML you write once —
+full how-to: [`docs/creating-extraction-profiles.md`](creating-extraction-profiles.md).
+(With the Claude plugin installed, the catalog-onboarding skill drafts and
+validates profiles for you — see step 5b.)
+
 ## 4. The FORGE lifecycle (journals)
 
 ```bash

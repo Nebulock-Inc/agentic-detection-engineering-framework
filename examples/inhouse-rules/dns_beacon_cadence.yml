@@ -1,0 +1,5 @@
+hunt: DNS beaconing cadence
+id: NH-0002
+severity: medium
+tags: [T1071.004]
+logic: index=thrunt sourcetype="bro:dns:json" | stats count by query "id.orig_h" | where count > 100

@@ -9,6 +9,10 @@ A self-contained demo you can run end to end against a scratch workspace.
 - `adef-sources-thrunt.yml` — the matching data-source declaration: 14 sources
   scoped to `{index: thrunt, sourcetype: ...}`, generated from a Splunk
   `fieldsummary` export.
+- `inhouse-rules/` + `profiles/nebulock-hunt.yml` — a made-up rule format no
+  built-in recognizer claims, with its ready-made extraction profile: the
+  quickstart's hands-on demo of the profile loop (unclaimed → validate →
+  install → catalogued).
 
 ```bash
 export ADEF_WORKSPACE=$(mktemp -d)
