@@ -216,9 +216,13 @@ def test_cli_check_reports_both_finding_types(ws, tmp_path):
 
 
 def test_old_model_commands_are_gone():
-    """The rules-derived schema model was removed pre-release (ISA 2026-07-20)."""
+    """The rules-derived schema model was removed pre-release (ISA 2026-07-20).
+
+    `recipe` (SIEM declaration-recipe generator, 2026-07-21) is a declaration-
+    model command, not a resurrection of the old rules-derived one.
+    """
     commands = set(schema_cli.commands)
-    assert commands == {"ingest", "lint", "check", "show"}
+    assert commands == {"ingest", "lint", "check", "show", "recipe"}
 
 
 # --------------------------------------------------------------------------- #
