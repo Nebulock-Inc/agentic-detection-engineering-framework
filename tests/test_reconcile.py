@@ -9,12 +9,12 @@ from adef.core.reconcile import Action, reconcile
 
 
 def _existing(id, *, uuid="", source_hash="", rule_ref="", title="", query="",
-              mitre=None, status="draft", owner=""):
+              mitre=None, status="draft", owner="", origin="catalogued"):
     """A minimal existing-record dict as read from the catalog."""
     return {
         "id": id, "rule_uuid": uuid, "source_hash": source_hash,
         "rule_ref": rule_ref, "title": title, "query": query,
-        "mitre": mitre or [], "status": status, "owner": owner,
+        "mitre": mitre or [], "status": status, "owner": owner, "origin": origin,
     }
 
 
@@ -80,6 +80,15 @@ def test_missing_source_is_orphaned():
     plan = reconcile(existing, [])  # rule no longer in the repo
     assert plan[0].action is Action.ORPHANED
     assert plan[0].detection_id == "D-0007"
+
+
+def test_authored_record_never_orphaned():
+    """A rule authored in ADEF has no upstream — sync must leave it untouched,
+    not orphan it (ISA 2026-07-22, "ADEF as a detection home")."""
+    existing = [_existing("D-0008", origin="authored", title="Authored in ADEF")]
+    plan = reconcile(existing, [])  # no source repo match — would orphan a catalogued rule
+    # No plan entry at all for the authored record → nothing written, still alive.
+    assert plan == []
 
 
 def test_enrichment_preserved_on_modified():

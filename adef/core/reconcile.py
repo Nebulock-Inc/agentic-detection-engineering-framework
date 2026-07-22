@@ -141,8 +141,13 @@ def reconcile(
             )
         )
 
-    # 6. existing records with no discovered match → orphaned.
+    # 6. existing records with no discovered match → orphaned — EXCEPT records
+    # authored in ADEF, which have no upstream source to reconcile against.
+    # Orphaning them would mark a repo-less team's own detections deprecated;
+    # they pass through untouched (ISA 2026-07-22, "ADEF as a detection home").
     for rec in existing:
+        if rec.get("origin") == "authored":
+            continue
         if rec["id"] not in matched_ids:
             orphaned = dict(rec)
             orphaned["status"] = "deprecated"

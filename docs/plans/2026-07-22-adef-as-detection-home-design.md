@@ -121,9 +121,12 @@ records, not purely a layer. That's the decision above, logged in `ISA.md`.
 
 ## Sequencing
 
-1. **Origin marker + sync-exclusion** (the safety fix) — `origin` on the record,
-   `reconcile()` skips `authored`, catalog won't clobber. Small; lands first
-   because it fixes a live data-integrity bug. TDD.
+1. ✅ **Origin marker + sync-exclusion** (the safety fix — done 2026-07-22) —
+   `origin: authored|catalogued` on the record (`draft_record_from_schema` →
+   authored, `record_from_discovered` → catalogued, legacy defaults catalogued);
+   `reconcile()` skips `authored` records so `adef sync` never orphans them;
+   surfaced in `list --origin` / `show`. Proved E2E: an authored rule survives a
+   `sync` against a repo that doesn't contain it.
 2. **Git-friendly workspace docs** + optional `adef init --git`.
 3. *(deferred — §5)* `adef export` + per-SIEM deployment docs. Not now.
 

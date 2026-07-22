@@ -45,8 +45,9 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef sync <rule-root>`** — reconcile the catalog after the repo changes:
   identity cascade (`rule_uuid` → `source_hash` → path → new; gone → orphaned,
   never deleted); refreshes derived fields, **preserves enrichment** (mitre /
-  status / owner / journal); journals out-of-band edits. `--dry-run` /`--check`
-  (CI). Fuzzy rename-match deferred (falls to `new`, never mis-attributes).
+  status / owner / journal); journals out-of-band edits. Skips `origin: authored`
+  records (created in ADEF, no upstream). `--dry-run` /`--check` (CI). Fuzzy
+  rename-match deferred (falls to `new`, never mis-attributes).
 
 ### Browse
 - **`adef detection list`** — filter by `--platform / --rule-format / --status /

@@ -115,6 +115,10 @@ class CatalogRecord:
                            # fallback for UUID-less formats. Empty for authored rules.
     catalog_sha: str = ""  # repo HEAD SHA at catalog time (git repos only) — the
                            # one-shot staleness check + `git diff` base for sync.
+    origin: str = "catalogued"  # authored (created in ADEF — ADEF owns the durable
+                           # copy) | catalogued (derived from a source repo). `adef
+                           # sync` skips `authored` records (no upstream to
+                           # reconcile). ISA 2026-07-22.
     query_language: str = ""  # language of `query` (spl|kql|cql|sql) — drives `schema check`
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
@@ -140,6 +144,7 @@ class CatalogRecord:
             "rule_uuid": self.rule_uuid,
             "source_hash": self.source_hash,
             "catalog_sha": self.catalog_sha,
+            "origin": self.origin,
             "query": self.query,
             "platform": self.platform,
             "kind": self.kind,
@@ -281,6 +286,7 @@ def draft_record_from_schema(
         query=_starter_query(query_language, scope),
         data_source=source,
         support="supported",
+        origin="authored",  # created in ADEF — sync must never orphan it
     )
 
 

@@ -178,6 +178,12 @@ def _workspace_from(workspace: Path | None) -> Path:
 @click.option("--status", default=None, help="Filter by status (draft, ready, tuning, deprecated).")
 @click.option("--stage", default=None, help="Filter by FORGE stage (find … evolve).")
 @click.option(
+    "--origin",
+    type=click.Choice(["authored", "catalogued"]),
+    default=None,
+    help="Filter by origin: authored (created in ADEF) vs catalogued (from a repo).",
+)
+@click.option(
     "--needs-review",
     "needs_review",
     is_flag=False,
@@ -202,6 +208,7 @@ def list_cmd(
     rule_format: str | None,
     status: str | None,
     stage: str | None,
+    origin: str | None,
     needs_review: str | None,
     report_format: str | None,
 ) -> None:
@@ -259,6 +266,9 @@ def list_cmd(
             continue
         if stage and data.get("stage") != stage:
             continue
+        # Default origin for legacy records (no field) is "catalogued".
+        if origin and (data.get("origin") or "catalogued") != origin:
+            continue
         if want_tactic is not None:
             if want_tactic not in {_norm(t) for t in _tactics_of(data)}:
                 continue
@@ -275,8 +285,8 @@ def list_cmd(
     if report_format == "json":
         keys = (
             "id", "title", "platform", "engine", "format", "query_language",
-            "data_source", "mitre", "status", "stage", "owner", "needs_review",
-            "review_reasons", "rule_ref",
+            "data_source", "mitre", "status", "stage", "owner", "origin",
+            "needs_review", "review_reasons", "rule_ref",
         )
         payload = []
         for d in records:
@@ -357,6 +367,7 @@ def show(detection_id: str, workspace: Path | None) -> None:
         f"  {'lifecycle':<15} stage={record.get('stage')} status={record.get('status')}"
         + (f" owner={record['owner']}" if record.get("owner") else "")
     )
+    console.print(f"  {'origin':<15} {record.get('origin') or 'catalogued'}")
     if record.get("needs_review"):
         reasons = ", ".join(record.get("review_reasons") or []) or "unspecified (legacy record)"
         console.print(f"  [yellow]needs_review[/yellow]   {reasons}")
