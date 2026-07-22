@@ -476,6 +476,7 @@ def _extract_splunk_escu(text: str) -> DiscoveredRule:
         platform=None,  # ESCU doesn't carry a clean OS platform; inferred later
         mitre=mitre,
         kind="atomic",
+        rule_uuid=str(doc.get("id") or "").strip(),  # ESCU carries a stable UUID
         data_source=data_source,
         support=SUPPORTED,
         needs_review=not mitre,
@@ -513,6 +514,7 @@ def _extract_panther(text: str) -> DiscoveredRule:
         platform=None,
         mitre=mitre,
         kind="atomic",
+        rule_uuid=str(doc.get("RuleID") or "").strip(),  # Panther's stable key (a name)
         data_source=data_source,
         support=RECOGNIZED_UNSUPPORTED,
         needs_review=True,

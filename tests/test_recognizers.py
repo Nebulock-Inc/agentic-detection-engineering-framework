@@ -70,6 +70,14 @@ def test_splunk_story_is_not_a_rule():
     assert r.support == NOT_A_RULE
 
 
+def test_escu_captures_rule_uuid():
+    """ESCU rules carry a stable `id:` — the sync identity key must persist it."""
+    from adef.core.rule_discovery import _extract_splunk_escu
+
+    rule = _extract_splunk_escu(SPLUNK_DETECTION)
+    assert rule.rule_uuid == "07c36cda-6567-43c3-bc1a-89dff61e2cd9"
+
+
 # --------------------------------------------------------------------------- #
 # Panther — recognized, but query lives in sibling .py → recognized_unsupported
 # --------------------------------------------------------------------------- #
@@ -104,6 +112,14 @@ def test_panther_rule_recognized_unsupported():
     r = recognize("aws_console_signin.yml", PANTHER_RULE)
     assert r.format == "panther"
     assert r.support == RECOGNIZED_UNSUPPORTED
+
+
+def test_panther_captures_rule_uuid():
+    """Panther's `RuleID` is its stable identity key — persist it for sync."""
+    from adef.core.rule_discovery import _extract_panther
+
+    rule = _extract_panther(PANTHER_RULE)
+    assert rule.rule_uuid == "AWS.Console.Sign-In"
 
 
 def test_panther_pack_is_not_a_rule():

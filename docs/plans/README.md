@@ -22,6 +22,10 @@ brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
   `origin: authored|catalogued` marker, sync-exclusion for authored records,
   git-friendly workspace. (`adef export` considered and deferred.)
   *Proposed; no code yet.*
+- **[2026-07-22-unify-on-profiles-design.md](2026-07-22-unify-on-profiles-design.md)** —
+  analysis of whether built-in extractors should collapse into shipped profiles
+  (they can't without turning the profile format into a DSL). Decision record
+  for when the question recurs. *Analysis; keep-the-split recommended.*
 
 ## Where else to look
 
