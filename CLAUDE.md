@@ -137,18 +137,40 @@ stdlib script, **never a runtime dep**). Consumers: catalog-time `invalid_mitre`
 validation and true `by_tactic` INDEX resolution. `refresh` writes to
 `$ADEF_WORKSPACE/attack/enterprise.json`, which wins over the shipped copy on read.
 
+### Detection Browsing
+```bash
+adef detection list                            # all catalogued detections
+adef detection list --platform windows --status draft
+adef detection list --tactic defense-evasion   # by ATT&CK tactic (shortname or display name)
+adef detection list --engine sigma             # by internal engine (sigma|sql|sch_sql|composite)
+adef detection list --origin authored          # created in ADEF vs catalogued from a repo
+adef detection list --needs-review no_mitre    # triage the enrichment queue
+adef detection list --report json              # machine-readable (adds a derived `tactics` array)
+adef detection show D-0001                     # record + query + derived tactics + journal tail
+```
+`list` filters on catalog record fields (`--platform`/`--status`/`--stage`/
+`--rule-format`/`--origin`/`--needs-review`) plus `--tactic` and `--engine`, which
+are resolved from each detection's ATT&CK technique IDs (`--tactic` accepts the
+tactic shortname or display name). `show` renders the record, its query, derived
+ATT&CK tactics, a `support` line for recognized-but-unsupported formats, and the
+tail of the paired journal. Both are read-only over the catalog.
+
 ### Coverage Report
 ```bash
 adef coverage                                  # coverage-quality report (terminal)
 adef coverage --navigator layer.json           # + a scored MITRE Navigator layer
+adef coverage --gaps                            # + list uncovered technique IDs by tactic
 ```
 Not a heatmap — reports coverage *quality* from the catalog with zero human
 input: **solid** (depth ≥2, ≥1 reviewed) vs **fragile** (single detection or all
 `needs_review`); **log-source concentration** (techniques riding one feed);
 **single points of failure** (depth-1 techniques); and **fictional coverage**
-(mapped IDs absent from the ATT&CK reference). `--navigator` writes a Navigator
-v4.5 layer scored by the same tiers (solid=100, fragile=50) with the why in each
-comment. Core model: `adef/core/coverage.py`.
+(mapped IDs absent from the ATT&CK reference). It also reports **coverage gaps** —
+how many ATT&CK techniques you cover of the total (revoked/deprecated excluded),
+per tactic, with fully-blind tactics flagged; `--gaps` lists the uncovered
+technique IDs by tactic. `--navigator` writes a Navigator v4.5 layer scored by the
+same tiers (solid=100, fragile=50) with the why in each comment. Core model:
+`adef/core/coverage.py`.
 
 ### MCP Server
 ```bash
