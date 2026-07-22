@@ -46,14 +46,21 @@ The identity cascade needs keys the record doesn't store yet. Add to
 | Field | Source | Purpose | Status |
 |-------|--------|---------|--------|
 | `rule_uuid` | Sigma `id:` / profile uuid (already on `DiscoveredRule`) | primary identity key when present | **persisted 2026-07-22** |
-| `source_hash` | SHA-256 of the source file's bytes at catalog time | unchanged/modified detection; identity fallback for non-UUID rules | todo |
-| `catalog_sha` | repo HEAD SHA at catalog time (git repos only; empty otherwise) | one-shot staleness check + `git diff` base | todo |
+| `source_hash` | SHA-256 of the source file's bytes at catalog time | unchanged/modified detection; identity fallback for non-UUID rules | **persisted 2026-07-22** |
+| `catalog_sha` | repo HEAD SHA at catalog time (git repos only; empty otherwise) | one-shot staleness check + `git diff` base | **persisted 2026-07-22** |
 
-`rule_uuid` was the smallest, highest-value change — done first, independently
-of the rest of sync (it also hardens `rule_ref` against renames today).
-`record_from_discovered` now carries it onto the record and `to_yaml_dict`
-persists it; empty for formats without an embedded UUID (SPL conf, raw sql).
-`source_hash`/`catalog_sha` are sync-specific and still to add.
+All three identity fields are now written at catalog time — the data the
+reconciler needs is in place; only the reconciler itself remains.
+
+- `rule_uuid` hardens `rule_ref` against renames today.
+- `source_hash` is stamped once per file in `walk_outcomes` (all extraction
+  paths) as SHA-256 of the **raw bytes** (not decoded text — a faithful digest
+  of the file on disk).
+- `catalog_sha` is one HEAD SHA per catalog run (`git_head_sha` in
+  `core/catalog.py` — detects the git work tree, empty otherwise, never raises).
+
+Authored rules (`draft_record_from_schema`) leave `source_hash`/`catalog_sha`
+empty — they have no source file or repo, by construction.
 
 ## The reconciliation cascade
 
@@ -167,7 +174,8 @@ both `sync` and a future `catalog` that reconciles by default.
 
 1. ✅ **Persist `rule_uuid` on the record** (done 2026-07-22) — tiny; valuable
    on its own; hardens identity immediately.
-2. **Add `source_hash` + `catalog_sha`** at catalog time.
+2. ✅ **Add `source_hash` + `catalog_sha`** at catalog time (done 2026-07-22) —
+   all identity data now captured; the reconciler has what it needs.
 3. **`reconcile()` core + `adef sync` / `--dry-run` / `--check`.**
 4. **Staleness-aware reads** (CLI banner, MCP annotation).
 5. **Out-of-band journal harvesting** (git commit-message pull).

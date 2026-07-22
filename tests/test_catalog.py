@@ -96,6 +96,27 @@ def test_rule_uuid_round_trips_through_yaml(rule_repo, workspace):
     assert bare.to_yaml_dict()["rule_uuid"] == ""
 
 
+def test_source_hash_is_sha256_of_raw_bytes(rule_repo, workspace):
+    """Discovery stamps a SHA-256 of the file bytes; it lands on the record."""
+    import hashlib
+
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    expected = hashlib.sha256((rule_repo / "windows" / "mshta.yml").read_bytes()).hexdigest()
+    assert disc.source_hash == expected
+    rec = record_from_discovered("D-0001", disc, workspace=workspace, catalog_sha="cafe123")
+    y = rec.to_yaml_dict()
+    assert y["source_hash"] == expected
+    assert y["catalog_sha"] == "cafe123"
+
+
+def test_git_head_sha_empty_for_non_git_dir(tmp_path):
+    from adef.core.catalog import git_head_sha
+
+    assert git_head_sha(tmp_path) == ""  # not a git work tree → empty, never raises
+
+
 def test_record_carries_data_source(rule_repo, workspace):
     from adef.core.rule_discovery import discover_rules
 

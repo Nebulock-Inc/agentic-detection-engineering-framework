@@ -276,12 +276,21 @@ def catalog(
     cat = Catalog(ws)
     journal = Journal(ws / "journals")
 
+    # One HEAD SHA for the whole run — the sync staleness base (empty if the
+    # rule root isn't a git work tree; sync falls back to per-file hashing).
+    from adef.core.catalog import git_head_sha
+
+    catalog_sha = git_head_sha(rule_root)
+
     next_idx = int(max(cat.max_index(), cat._journals_max_index())) + 1
     planned: list = []
     for disc in discovered:
         detection_id = f"D-{next_idx:04d}"
         planned.append(
-            record_from_discovered(detection_id, disc, workspace=ws, rule_root=rule_root)
+            record_from_discovered(
+                detection_id, disc, workspace=ws, rule_root=rule_root,
+                catalog_sha=catalog_sha,
+            )
         )
         next_idx += 1
 

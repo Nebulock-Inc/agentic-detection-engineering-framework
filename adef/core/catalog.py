@@ -70,6 +70,27 @@ def catalog_dir(workspace: Path) -> Path:
     return Path(workspace).expanduser().resolve() / "catalog"
 
 
+def git_head_sha(directory: Path) -> str:
+    """Repo HEAD SHA if ``directory`` is inside a git work tree, else ``""``.
+
+    Stamped on records as ``catalog_sha`` so `adef sync` can do a one-shot
+    staleness check (`git rev-parse HEAD` vs. this) and diff. No git → empty,
+    and sync falls back to per-file hashing. Never raises.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
 @dataclass
 class CatalogRecord:
     """One ADEF catalog record — the enrichment layer over a source rule.
@@ -89,6 +110,11 @@ class CatalogRecord:
     rule_uuid: str = ""    # embedded rule UUID (Sigma `id:`, profile uuid) — the
                            # primary identity key for `adef sync` reconciliation
                            # (survives file renames); empty when the format has none.
+    source_hash: str = ""  # SHA-256 of the source file's bytes at catalog time —
+                           # `adef sync` unchanged/modified signal + identity
+                           # fallback for UUID-less formats. Empty for authored rules.
+    catalog_sha: str = ""  # repo HEAD SHA at catalog time (git repos only) — the
+                           # one-shot staleness check + `git diff` base for sync.
     query_language: str = ""  # language of `query` (spl|kql|cql|sql) — drives `schema check`
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
@@ -112,6 +138,8 @@ class CatalogRecord:
             "rule_ref": self.rule_ref,
             "original_path": self.original_path,
             "rule_uuid": self.rule_uuid,
+            "source_hash": self.source_hash,
+            "catalog_sha": self.catalog_sha,
             "query": self.query,
             "platform": self.platform,
             "kind": self.kind,
@@ -136,6 +164,7 @@ def record_from_discovered(
     disc: DiscoveredRule,
     workspace: Path,
     rule_root: Path | None = None,
+    catalog_sha: str = "",
 ) -> CatalogRecord:
     """Build a ``CatalogRecord`` from a ``DiscoveredRule``.
 
@@ -174,6 +203,8 @@ def record_from_discovered(
         rule_ref=rule_ref,
         original_path=str(abs_path),
         rule_uuid=disc.rule_uuid,
+        source_hash=disc.source_hash,
+        catalog_sha=catalog_sha,
         query=disc.query_text,
         platform=platform,
         kind=disc.kind,

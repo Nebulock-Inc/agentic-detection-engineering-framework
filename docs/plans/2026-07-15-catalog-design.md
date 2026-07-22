@@ -42,6 +42,8 @@ title: Suspicious mshta.exe child process
 rule_ref: their-detections/windows/mshta.yml   # pointer to source (relative)
 original_path: /abs/.../their-detections/windows/mshta.yml  # provenance
 rule_uuid: 03cc0c25-389f-...                    # embedded rule UUID (Sigma id:) — sync identity key; '' if none
+source_hash: f7d121a9...                        # SHA-256 of source bytes at catalog time (sync change signal)
+catalog_sha: 6dd1995c...                        # repo HEAD at catalog time (git only; '' otherwise) — sync staleness base
 query: |                                        # detection logic, verbatim (block scalar)
   <the rule's query / SPL / SQL / Sigma body>   # empty when logic is external (Panther .py)
 platform: windows

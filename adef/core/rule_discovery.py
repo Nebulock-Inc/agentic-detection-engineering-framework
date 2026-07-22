@@ -19,6 +19,7 @@ Design commitments (see ISA.md 2026-07-15 catalog decision):
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -147,6 +148,11 @@ class DiscoveredRule:
     # normalisation). Empty when unresolvable. Keys schema prioritization and
     # `adef schema check`; see ISA.md 2026-07-16 + 2026-07-20.
     data_source: str = ""
+    # SHA-256 of the source file's raw bytes at discovery time. Stamped by
+    # ``walk_outcomes`` (one place, all extraction paths). The `adef sync`
+    # reconciler uses it to tell unchanged from modified, and as the identity
+    # fallback for formats with no embedded UUID. Empty only if unreadable.
+    source_hash: str = ""
     # How well ADEF handles this format: SUPPORTED (parsed) or
     # RECOGNIZED_UNSUPPORTED (format known, extractor pending, e.g. Panther .py).
     support: str = SUPPORTED
@@ -672,9 +678,13 @@ def walk_outcomes(
         if not path.is_file():
             continue
         try:
-            text = path.read_text(encoding="utf-8")
+            raw = path.read_bytes()
+            text = raw.decode("utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        # Hash the raw bytes (not the decoded text) so it's a faithful digest of
+        # the file on disk — the `adef sync` unchanged/modified signal.
+        source_hash = hashlib.sha256(raw).hexdigest()
 
         # 1. User profiles first.
         claim = _profile_claim(profiles, path.name, text)
@@ -684,6 +694,7 @@ def walk_outcomes(
             for doc in docs:
                 rule = _extract_via_profile(profile, doc)
                 rule.path = path
+                rule.source_hash = source_hash
                 rules.append(finalize_review(rule))
             yield FileOutcome(
                 path=path, outcome=SUPPORTED, format=profile.name, rules=tuple(rules)
@@ -727,6 +738,7 @@ def walk_outcomes(
                     support=rec.support,
                 )
             rule.path = path
+        rule.source_hash = source_hash
         finalize_review(rule, malformed=malformed)
         yield FileOutcome(
             path=path, outcome=rule.support, format=rec.format, rules=(rule,)
