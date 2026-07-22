@@ -67,6 +67,23 @@ def test_extract_spl_fields():
     assert "command_line" in fields
 
 
+def test_extract_spl_fields_space_separated_lists():
+    """SPL `by`/`fields`/`table` lists use spaces, not just commas (D-0002 regression)."""
+    query = (
+        'index=thrunt sourcetype="cisco:asa" action=denied '
+        "| stats count by src_ip dest_ip dest_port | where count > 20"
+    )
+
+    fields = extract_spl_fields(query)
+
+    assert {"src_ip", "dest_ip", "dest_port"} <= fields
+    assert "src_ip dest_ip dest_port" not in fields
+
+    fields = extract_spl_fields("index=web | fields src_ip uri_path | table src_ip uri_path")
+    assert {"src_ip", "uri_path"} <= fields
+    assert all(" " not in f for f in fields)
+
+
 def test_extract_cql_fields():
     """Test CQL parser extracts fields."""
     query = """

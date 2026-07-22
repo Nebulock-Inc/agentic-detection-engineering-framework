@@ -62,8 +62,8 @@ def extract_spl_fields(query: str) -> set[str]:
                     EVAL_RE, FIELDS_RE, RENAME_RE]:
         matches = pattern.findall(query)
         for match in matches:
-            # Split comma-separated fields
-            for field in match.split(','):
+            # SPL lists are comma- or space-separated (e.g. `by src_ip dest_ip`)
+            for field in re.split(r'[,\s]+', match):
                 field = field.strip()
                 if field and not field.isdigit():  # Skip numeric values
                     fields.add(field)
@@ -114,7 +114,7 @@ def extract_kql_fields(query: str) -> set[str]:
     for pattern in [KQL_FIELD_COMPARISON_RE, KQL_PROJECT_RE, KQL_SUMMARIZE_BY_RE]:
         matches = pattern.findall(query)
         for match in matches:
-            for field in match.split(','):
+            for field in re.split(r'[,\s]+', match):
                 field = field.strip()
                 if field and not field.isdigit():
                     fields.add(field)
