@@ -110,6 +110,10 @@ before installing. Same artifact, no hand-authoring.
   paths (`rule.threat[].technique[].id`); validated at 2015/2015 rules claimed.
   TOML support needs Python 3.11+ (stdlib `tomllib`); on 3.10 a TOML profile
   simply claims nothing.
+- `examples/profiles/azure-sentinel.yml` — a **YAML format ADEF has no built-in
+  for** (`Azure/Azure-Sentinel`). Shows a signature (`all_keys: [id, name,
+  query]`) used to *exclude* near-miss stubs; one profile claims both the
+  Detections (170) and Hunting Queries (1158) dirs.
 
 The repo's Panther corpus has 95 scheduled-query files no built-in claims —
 two formats (`Query:` vs `SnowflakeQuery:`), so two profiles. See

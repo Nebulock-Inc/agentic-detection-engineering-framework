@@ -124,16 +124,22 @@ query 94% — via a *user profile*, no built-in. Their fields (`rule.name`,
 a specialized built-in. **This validated the whole thesis: profiles are the
 scaling mechanism; they just needed the container.**
 
-**P2 — Profiles catch unknown-but-YAML formats (cheap).** Azure-Sentinel (483
-unclaimed) is already YAML with clean top-level fields — a profile with today's
-format likely catches it, maybe + **coalesce** (first-non-empty of N paths, for
-the renamed-field case). This is the smallest, safest add and validates the
-"users profile their own variant" story on a real repo.
+**P2 — Profiles catch unknown-but-YAML formats. ✅ DONE 2026-07-22 (no code
+needed).** Azure-Sentinel was YAML with clean top-level fields, as predicted —
+`examples/profiles/azure-sentinel.yml` claims it with **today's profile format,
+zero new features**: Detections/ 170 (title/query/uuid 100%, mitre 91% via
+`relevantTechniques[]`), Hunting Queries/ 1158 — one profile, both dirs. The
+`all_keys: [id, name, query]` signature correctly excludes ~300 migration stubs
+(no `query`) → unclaimed; **0 real rules missed** (every query-bearing file
+claimed). Confirms the "users profile their own variant" story on a real repo —
+and that coalesce was *not* needed here.
 
-**P3 — Small transform helpers, only if measured need.** list-index (`[0]`),
-value-mapping table. Earlier speculation; the wide test did *not* show these as
-the blocker (Sigma's built-in already handles its mapping; unknown-YAML formats
-mostly have flat fields). Add only if a real profile hits the wall.
+**P3 — Small transform helpers: NOT NEEDED (confirmed 2026-07-22).** list-index
+(`[0]`), value-mapping. Both real unclaimed corpora (Elastic P1, Azure-Sentinel
+P2) were fully handled without them — Sigma's built-in already does its own
+mapping, and the unknown-YAML/TOML formats had flat or `[]`-iterable fields. **No
+evidence P3 is a blocker.** Left unbuilt; add only if a future real profile
+actually hits the wall (YAGNI).
 
 **Explicitly out:** regex/exec in profiles, sibling-file logic (Panther `.py`) —
 structural and rare; keep as built-ins. The line to hold: **named, bounded
