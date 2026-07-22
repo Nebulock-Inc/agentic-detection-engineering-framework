@@ -42,7 +42,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 | Browse (`adef detection list/show`) | Jarrett | shipped |
 | Coverage epic (attack layer / mitre-tagger / coverage report + gaps) | Jarrett | shipped |
 | Authoring (`detection new --source` + detection-author skill) | Jarrett | shipped |
-| Claude plugin (`claude-plugin/`) | shared | shipped (5 skills + profile-author agent) |
+| Claude plugin (`claude-plugin/`) | shared | shipped (6 skills + profile-author agent) |
 
 **Shared seam — coordinate before changing:** `adef/core/rule_discovery.py`, the
 catalog record shape (`adef/core/catalog.py`), or the schema YAML shape — each is
