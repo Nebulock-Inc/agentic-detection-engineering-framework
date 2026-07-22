@@ -21,7 +21,33 @@ import textwrap
 
 import pytest
 
-from adef.core.rule_discovery import discover_rules, sniff_format
+from adef.core.rule_discovery import _normalise_mitre, discover_rules, sniff_format
+
+
+# --------------------------------------------------------------------------- #
+# MITRE normalisation — must capture ALL technique IDs, incl. multiple per token
+# (regression: `.search()` found only the first ID in a comma-joined string).
+# --------------------------------------------------------------------------- #
+def test_normalise_mitre_separate_tokens():
+    assert _normalise_mitre(["T1078", "T1110"]) == ("T1078", "T1110")
+
+
+def test_normalise_mitre_multiple_ids_in_one_token():
+    # One string listing several techniques — every ID must be captured.
+    assert _normalise_mitre(["T1078, T1110, T1059.001"]) == ("T1078", "T1110", "T1059.001")
+
+
+def test_normalise_mitre_tactic_technique_pairs():
+    # Panther-style "TAxxxx:Txxxx" pairs joined in one token.
+    assert _normalise_mitre(["TA0001:T1078,TA0006:T1110"]) == ("T1078", "T1110")
+
+
+def test_normalise_mitre_dedupes_and_uppercases():
+    assert _normalise_mitre(["t1078", "T1078", "T1110"]) == ("T1078", "T1110")
+
+
+def test_normalise_mitre_ignores_non_ids():
+    assert _normalise_mitre(["attack.persistence", "no ids here"]) == ()
 
 
 # --------------------------------------------------------------------------- #

@@ -345,11 +345,15 @@ def _has_invalid_mitre(ids: Iterable[str]) -> bool:
 
 
 def _normalise_mitre(tokens: Iterable[str]) -> tuple[str, ...]:
-    """Uppercase + dedupe MITRE technique IDs, preserving first-seen order."""
+    """Uppercase + dedupe MITRE technique IDs, preserving first-seen order.
+
+    Each token may pack *several* IDs (a comma-joined string, ``TAxxxx:Txxxx``
+    pairs, prose) — capture **all** of them, not just the first. (Regression:
+    `.search()` silently dropped every ID after the first in a shared string.)
+    """
     seen: dict[str, None] = {}
     for tok in tokens:
-        m = _MITRE_TECHNIQUE_RE.search(tok)
-        if m:
+        for m in _MITRE_TECHNIQUE_RE.finditer(str(tok)):  # str(): tolerate ints/etc from parsed lists
             seen.setdefault(m.group(0).upper(), None)
     return tuple(seen)
 
