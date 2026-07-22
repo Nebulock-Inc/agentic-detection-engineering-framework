@@ -33,7 +33,7 @@ Run this search in Splunk Web (Search & Reporting app):
 
 ```spl
 index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
-| fieldsummary maxvals=20
+| fieldsummary maxvals=50
 | fields field count distinct_count numeric_count values
 ```
 
@@ -67,6 +67,13 @@ adef schema reshape fields.csv --platform splunk
 # scope: (index/sourcetype) is filled in from the export automatically.
 # Set `platform:` in the output YAML before ingesting — never inferred.
 ```
+
+**Review the fold list for semantic strangers.** The case-fold rule is
+lexical, and Splunk data can pair a search-time meta field with a raw event
+field that differs only by case. Real example: `eventtype ← EventType` —
+Splunk's event-typing metadata folded onto Sysmon's registry-event field.
+Split such pairs back into two entries in the output YAML. CIM pairs
+(`user ← User`, `signature ← Signature`) are correct folds — leave them.
 
 ### Version Notes
 

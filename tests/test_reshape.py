@@ -96,6 +96,16 @@ def test_enum_skipped_when_high_cardinality():
     assert "values" not in fields[0]
 
 
+def test_enum_harvested_at_eventcode_scale():
+    """Windows enum-ish fields sit in the 20–50 distinct band (live thrunt
+    export: EventCode=24) — the cap must not exclude them."""
+    values = [str(4600 + i) for i in range(24)]
+    fields, _ = reshape_fields(
+        [RawField("EventCode", total_count=100, numeric_count=100, distinct_count=24, values=values)]
+    )
+    assert fields[0]["values"] == [int(v) for v in values]
+
+
 def test_enum_skipped_when_value_exceeds_length_cap():
     fields, _ = reshape_fields(
         [RawField("blob", distinct_count=2, values=["x" * 200, "y"])]
@@ -232,6 +242,7 @@ def test_cli_reshape_writes_declaration_and_report(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert "Transformation report" in result.output
+    assert "Scope inferred from the export: index=thrunt, sourcetype=XmlWinEventLog" in result.output
     assert "Dropped 5 internals" in result.output
     data = yaml.safe_load((tmp_path / "winlog-sources.yml").read_text(encoding="utf-8"))
     assert lint_declaration_dict(data)[0] == []

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import textwrap
 
-import yaml
 from click.testing import CliRunner
 
 from adef.commands.catalog import catalog

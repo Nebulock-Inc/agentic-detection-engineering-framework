@@ -437,6 +437,9 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     report = result.report
     console.print(f"[green]✓[/green] Wrote [bold]{out_path}[/bold] — {len(src['fields'])} fields declared\n")
     console.print("[bold]Transformation report[/bold] (approve these, not the YAML):")
+    if src.get("scope"):
+        scope_str = ", ".join(f"{k}={v}" for k, v in src["scope"].items())
+        console.print(f"  Scope inferred from the export: {scope_str}")
     console.print(f"  Dropped {len(report.dropped_internals)} internals: {', '.join(report.dropped_internals) or '—'}")
     if report.folded_aliases:
         folded = "; ".join(f"{k} ← {', '.join(v)}" for k, v in report.folded_aliases.items())

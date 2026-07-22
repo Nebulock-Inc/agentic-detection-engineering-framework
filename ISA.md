@@ -385,6 +385,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
 
+- 2026-07-22 — **conjecture:** `ENUM_MAX_DISTINCT=20` (with recipe `maxvals=20`) captures the enum-ish fields worth harvesting. **refuted_by:** first live corpus through `adef schema reshape` (thrunt XmlWinEventLog, 334k events, 370 fields): `EventCode` 24 distinct, `tag` 24, `eventtype` 26 — all missed harvest, and EventCode grounding is the point of the feature. **learned:** Windows enum-ish fields routinely sit in the 20–50 distinct band. **criterion_now:** cap = 50, recipe `maxvals=50`; regression test pins a 24-distinct harvest (`test_enum_harvested_at_eventcode_scale`). Same live run also showed the report omitting inferred `scope:` (now printed) and produced the canonical case-fold veto example (`eventtype ← EventType`, Splunk search-time meta vs Sysmon registry field — documented in the skill + siem-recipes, deliberately not coded as an exception list).
+
 ## Verification
 
 (populated at VERIFY — evidence per ISC)

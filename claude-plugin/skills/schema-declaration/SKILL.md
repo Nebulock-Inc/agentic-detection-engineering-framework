@@ -86,10 +86,20 @@ low-cardinality fields (length-capped), int/float type inference, and a
 mixed-shape guard — a multi-sourcetype export is refused with re-export
 guidance (one declaration per event shape; that is what `scope:` is for).
 
-**Walk the user through the transformation report it prints** — dropped
-internals, folded aliases, harvested enums — and get their approval of the
-*transformations*, not a wall of YAML. If they veto a drop or a fold, edit
-the output YAML with them.
+**Walk the user through the transformation report it prints** — inferred
+scope, dropped internals, folded aliases, harvested enums — and get their
+approval of the *transformations*, not a wall of YAML. If they veto a drop
+or a fold, edit the output YAML with them.
+
+**The known veto case — folds that merge semantic strangers.** The case-fold
+rule is lexical; occasionally two *different* fields differ only by case.
+Real example (live Splunk XmlWinEventLog export): `eventtype ← EventType`
+merged Splunk's search-time event-typing metadata (lowercase, 26 tag names)
+with Sysmon's registry-event field (`EventType`, values like `SetValue`).
+When a fold pairs a Splunk search-time meta field (`eventtype`, `tag`) with
+a raw event field, split them back into two entries in the output YAML.
+CIM pairs like `user ← User` or `signature ← Signature` are the *correct*
+folds — same concept, two spellings — leave those alone.
 
 Then finish the fields the command never guesses:
 - `platform:` — set from what the user tells you (windows/linux/network/cloud)

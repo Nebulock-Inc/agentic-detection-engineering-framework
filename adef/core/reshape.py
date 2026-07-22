@@ -29,7 +29,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ENUM_MAX_DISTINCT = 20  # ponytail: fixed caps; make configurable if a real corpus demands it
+# 50, not 20: the live thrunt export (2026-07-22) had EventCode at 24 distinct,
+# eventtype 26, tag 24 — Windows enum-ish fields routinely sit in the 20–50
+# band, and EventCode grounding is the whole point of harvesting.
+ENUM_MAX_DISTINCT = 50  # ponytail: fixed caps; make configurable if a real corpus demands it
 ENUM_MAX_VALUE_LEN = 64
 
 # Fields that are platform plumbing, never detection-grounding surface.
