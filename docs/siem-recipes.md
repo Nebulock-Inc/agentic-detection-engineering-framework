@@ -35,7 +35,6 @@ Run this search in Splunk Web (Search & Reporting app):
 index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
 | fieldsummary maxvals=20
 | fields field count distinct_count numeric_count values
-| outputcsv fields.csv
 ```
 
 **Adjust:**
@@ -52,7 +51,10 @@ mixed-shape exports.
 
 1. Wait for search to complete
 2. Click "Export" → "CSV"
-3. Download `fields.csv`
+3. Browser downloads the results (typically as `results.csv`)
+4. Rename to `fields.csv` for the reshaping step
+
+**Note:** Don't use `| outputcsv fields.csv` in the query — that writes server-side to `/opt/splunk/var/run/splunk/csv/` (inaccessible in Splunk Cloud). The UI Export button downloads directly to your browser.
 
 ### Reshaping
 
