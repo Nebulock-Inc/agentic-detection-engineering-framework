@@ -126,6 +126,10 @@ def test_disjoint_value_fold_flagged_suspect():
     )
     assert report.suspect_folds == ["eventtype"]
     assert len(fields) == 1  # still folded — flagged for a human, never auto-split
+    assert report.fold_evidence["eventtype"] == {
+        "eventtype": ["winsec", "os", "windows"],
+        "EventType": ["SetValue"],
+    }
 
 
 def test_overlapping_value_fold_not_suspect():
@@ -310,6 +314,9 @@ def test_cli_reshape_suspect_marker_and_no_fold(tmp_path):
     assert result.exit_code == 0, result.output
     assert "SUSPECT" in result.output
     assert "--no-fold EventType" in result.output
+    # evidence shown in place: both spellings with their values
+    assert "'winsec'" in result.output
+    assert "'SetValue'" in result.output
 
     out2 = tmp_path / "d2.yml"
     result = CliRunner().invoke(
@@ -320,6 +327,47 @@ def test_cli_reshape_suspect_marker_and_no_fold(tmp_path):
     assert "SUSPECT" not in result.output
     names = {f["name"] for f in yaml.safe_load(out2.read_text())["sources"][0]["fields"]}
     assert {"eventtype", "EventType"} <= names
+
+
+def _suspect_rows():
+    return list(SPLUNK_ROWS) + [
+        {"field": "eventtype", "count": 100, "distinct_count": 2, "numeric_count": 0,
+         "values": _vals(("winsec", 60), ("os", 40))},
+        {"field": "EventType", "count": 10, "distinct_count": 1, "numeric_count": 0,
+         "values": _vals(("SetValue", 10))},
+    ]
+
+
+def test_cli_reshape_interactive_split(tmp_path):
+    """Answering 'no' (different fields) splits the fold and echoes the
+    reproducible --no-fold command."""
+    export = _splunk_csv(tmp_path, _suspect_rows())
+    out = tmp_path / "d.yml"
+    result = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
+        input="n\n",
+    )
+    assert result.exit_code == 0, result.output
+    names = {f["name"] for f in yaml.safe_load(out.read_text())["sources"][0]["fields"]}
+    assert {"eventtype", "EventType"} <= names
+    assert "Reproducible:" in result.output
+    assert "--no-fold EventType" in result.output
+
+
+def test_cli_reshape_interactive_keep(tmp_path):
+    """Answering 'yes' (same field, default) keeps the fold."""
+    export = _splunk_csv(tmp_path, _suspect_rows())
+    out = tmp_path / "d.yml"
+    result = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
+        input="y\n",
+    )
+    assert result.exit_code == 0, result.output
+    by = {f["name"]: f for f in yaml.safe_load(out.read_text())["sources"][0]["fields"]}
+    assert by["eventtype"]["aliases"] == ["EventType"]
+    assert "EventType" not in by
 
 
 def test_cli_reshape_mixed_shape_exits_nonzero(tmp_path):

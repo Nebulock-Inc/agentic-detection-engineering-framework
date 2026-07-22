@@ -104,7 +104,10 @@ adef schema reshape <export> --platform <p> --no-fold EventType
 
 `--no-fold <variant>` keeps that spelling as its own field; it's repeatable.
 Re-running with flags keeps the veto reproducible — a hand-edited YAML loses
-the fix the next time anyone reshapes a fresh export.
+the fix the next time anyone reshapes a fresh export. (A human driving the
+CLI directly can use `--interactive` instead: it shows each suspect fold's
+value evidence, asks keep-or-split, and echoes the equivalent `--no-fold`
+command for scripts.)
 
 A `SUSPECT` flag has two legitimate outcomes — read the values, don't assume:
 

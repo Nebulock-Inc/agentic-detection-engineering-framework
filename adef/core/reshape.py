@@ -110,6 +110,9 @@ class ReshapeReport:
     # sets — the signature of two different fields colliding on spelling
     # (eventtype vs EventType), not two spellings of one field (user/User).
     suspect_folds: list[str] = field(default_factory=list)
+    # canonical -> {spelling: harvested values} for suspect folds, so the
+    # keep-or-split decision can be made from the report alone.
+    fold_evidence: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     enum_fields: list[str] = field(default_factory=list)
     typed_fields: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
@@ -338,6 +341,9 @@ def reshape_fields(
                 if r is not canonical
             ):
                 report.suspect_folds.append(canonical.name)
+                report.fold_evidence[canonical.name] = {
+                    r.name: list(r.values) for r in group
+                }
 
         entry: dict = {"name": canonical.name}
         if aliases:

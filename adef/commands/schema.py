@@ -390,13 +390,21 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
         console.print(render_recipe_markdown(recipe_obj))
 
 
+def _print_fold_evidence(canonical: str, evidence: dict[str, list[str]], indent: str = "  ") -> None:
+    """Show each spelling's harvested values so keep-or-split is decidable in place."""
+    for spelling, values in evidence.items():
+        shown = ", ".join(repr(v) for v in values[:4]) + (", …" if len(values) > 4 else "")
+        console.print(f"{indent}{spelling}: {shown or '(no values harvested)'}")
+
+
 @schema.command()
 @click.argument("export_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--platform", default=None, help="Export format: splunk, sentinel, elastic (others: one field per line).")
 @click.option("--source", "source_name", default=None, help="Declared source name (default: derived from sourcetype/filename).")
 @click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Output declaration path (default: <source>-sources.yml).")
 @click.option("--no-fold", "no_fold", multiple=True, help="Field name to exempt from case-folding — it keeps its own entry. Repeatable. Use when a fold merged two different fields that collide on spelling.")
-def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...]):
+@click.option("--interactive", "-i", is_flag=True, help="Walk each SUSPECT fold with its value evidence and ask keep or split.")
+def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...], interactive: bool):
     """Reshape a raw SIEM field export into a draft declaration.
 
     Applies the five reshape rules (internals filter, case-dupes to aliases,
@@ -424,6 +432,19 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     except ReshapeError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    if interactive and result.report.suspect_folds:
+        console.print(f"\n[bold]{len(result.report.suspect_folds)} suspect fold(s)[/bold] — disjoint value sets. Same field under two spellings shares values; two different fields don't.\n")
+        split: list[str] = []
+        for canonical in result.report.suspect_folds:
+            variants = result.report.folded_aliases.get(canonical, [])
+            _print_fold_evidence(canonical, result.report.fold_evidence.get(canonical, {}))
+            if not click.confirm(f"  Same field — keep the fold {canonical} ← {', '.join(variants)}?", default=True):
+                split.extend(variants)
+            console.print()
+        if split:
+            no_fold = tuple(no_fold) + tuple(split)
+            result = reshape_export(export_file, platform, source_name, no_fold)
+
     errors, warnings = lint_declaration_dict(result.declaration)
     if errors:  # reshape output must always lint clean — this is a bug, not user error
         raise click.ClickException("reshape produced an invalid declaration: " + "; ".join(errors))
@@ -450,12 +471,19 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         )
         console.print(f"  Folded {len(report.folded_aliases)} case-dupes: {folded}")
     for suspect in report.suspect_folds:
-        variants = ", ".join(report.folded_aliases.get(suspect, []))
+        variant_str = ", ".join(report.folded_aliases.get(suspect, []))
         console.print(
-            f"  [red]![/red] SUSPECT fold: {suspect} ← {variants} — value sets are "
-            f"disjoint, so these may be different fields. If so, re-run with "
-            f"[bold]--no-fold {variants}[/bold] to keep them separate."
+            f"  [red]![/red] SUSPECT fold: {suspect} ← {variant_str} — value sets are disjoint:"
         )
+        _print_fold_evidence(suspect, report.fold_evidence.get(suspect, {}), indent="      ")
+        console.print(
+            f"      Same field (encoding variants)? keep it. Different fields? re-run "
+            f"with [bold]--no-fold {variant_str}[/bold] (or use [bold]--interactive[/bold])."
+        )
+    if no_fold:
+        flags = " ".join(f"--no-fold {n}" for n in no_fold)
+        # click.echo, not console.print: a copy-paste command must never soft-wrap
+        click.echo(f"\nReproducible: adef schema reshape {export_file} --platform {platform} {flags}")
     console.print(f"  Enums harvested: {len(report.enum_fields)} fields; typed: {len(report.typed_fields)}")
     for note in report.notes:
         console.print(f"  [yellow]![/yellow] {note}")
