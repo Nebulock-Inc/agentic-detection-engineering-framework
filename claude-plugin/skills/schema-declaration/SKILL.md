@@ -152,15 +152,16 @@ Suggest:
 3. Present recipe:
    > "Run this search in Splunk Web:
    > ```
-   > index=wineventlog earliest=-7d | fieldsummary | fields field | outputcsv fields.csv
+   > index=wineventlog earliest=-7d | fieldsummary | fields field
    > ```
-   > Export the CSV, then paste the contents here."
-4. User pastes CSV output
-5. Parse CSV → draft YAML
-6. Call `schema_lint_declaration` to validate
-7. Show drafted YAML, ask for approval
-8. Write file and call `schema_ingest`
-9. Confirm success, suggest next steps
+   > Wait for it to complete, click Export → CSV, download the file."
+4. User provides the downloaded CSV file
+5. Run `adef schema reshape fields.csv --platform splunk`
+6. Review transformation report with user
+7. Call `schema_lint_declaration` to validate
+8. Show drafted YAML, ask for approval
+9. Write file and call `schema_ingest`
+10. Confirm success, suggest next steps
 
 ## Multi-Source Scenarios
 

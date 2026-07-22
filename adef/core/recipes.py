@@ -28,18 +28,22 @@ RECIPES = {
         query_language="spl",
         command="""index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
 | fieldsummary maxvals=20
-| fields field count distinct_count numeric_count values
-| outputcsv fields.csv""",
+| fields field count distinct_count numeric_count values""",
         export_format="csv",
         export_instructions="""1. Run the search in Splunk Web (Search & Reporting app) — one search
    per sourcetype (one declaration per event shape; that's what `scope:` is for)
 2. Wait for search to complete
 3. Click "Export" → "CSV"
-4. Download fields.csv
+4. Browser downloads the results (typically as results.csv)
+5. Rename to fields.csv for the reshaping step
 
 Keep the count/distinct_count/numeric_count/values columns — they are what
 lets `adef schema reshape` harvest enum values, infer types, and detect
-mixed-shape exports.""",
+mixed-shape exports.
+
+Note: Don't use `| outputcsv fields.csv` in the query — that writes server-side
+to /opt/splunk/var/run/splunk/csv/ (inaccessible in Splunk Cloud). The UI
+Export button downloads directly to your browser.""",
         reshaping_guide="""adef schema reshape fields.csv --platform splunk
 
 # Applies the five reshape rules (drops _*/date_*/punct internals, folds
