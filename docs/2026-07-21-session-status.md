@@ -66,13 +66,25 @@ complete but untested. Closed same day:
   `pip install -e ".[mcp]"` prerequisite (previously the plugin pointed at an
   `adef-mcp` command that fails on import from a base install).
 
+## `adef schema reshape` shipped (2026-07-22) — closes §5 declaration-author
+
+The reshape step is no longer improvised: `adef schema reshape <export>
+--platform <p>` applies the five rules (internals filter, case-dupes →
+aliases, capped enum harvesting, type inference, mixed-shape guard) in one
+tested core module (22 tests) and prints a transformation report the human
+approves. Splunk recipe now exports the distribution columns the rules need;
+all seven per-platform reshaping scripts (recipes + siem-recipes.md copies)
+replaced with the command — four of them had been producing lint-failing
+declarations (`query_language: eql/udm/sumo/aql`). Scope literals
+(index/sourcetype) auto-fill; `platform:` is never inferred. E2E verified:
+export → reshape → lint → ingest. Suite at 254 passed / 2 skipped.
+
 ## Next up (see next-steps doc for detail)
 
 Coverage epic ✅ shipped (ATT&CK reference layer → `mitre-tagger` →
-coverage report + Navigator export). Remaining: `declaration-author` skill
-(§5 — the codified reshape step the `schema-declaration` skill currently
-improvises), check-report union collapse (§6), `adef sync` design doc (§7),
-v0.1.0 release framing (§9).
+coverage report + Navigator export); `declaration-author` ✅ shipped as
+`adef schema reshape` (§5). Remaining: check-report union collapse (§6),
+`adef sync` design doc (§7), v0.1.0 release framing (§9).
 
 ## Field-testing notes (Eric)
 

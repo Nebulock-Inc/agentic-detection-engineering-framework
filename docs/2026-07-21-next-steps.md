@@ -59,10 +59,16 @@ Ordered by what unblocks what.
       screenshot-into-Slack moment for a skeptical DE lead.
    Not a v0.1.0 blocker: everything shipped today works without ATT&CK
    knowledge, and the `no_mitre` queue accumulates correctly meanwhile.
-5. **`declaration-author` skill.** Performed manually twice this session
+5. ✅ *(done 2026-07-22 — shipped as `adef schema reshape`, a deterministic
+   command, not a skill; see ISA Decisions 2026-07-22)* **`declaration-author`
+   skill.** Performed manually twice this session
    against live Splunk exports; logic now fully specified: internals filter,
    case-dupe → aliases, enum harvesting with value-length caps, numeric/hex
    typing, and mixed-shape detection → "re-export per sourcetype" guard.
+   The five rules live once in `adef/core/reshape.py` (22 tests); the
+   `schema-declaration` skill drives the command and walks the human through
+   its transformation report. No separate sub-agent — the input is one export
+   file, not a 50-file sampling job.
 6. **`schema check` report polish.** Union-matched rules attribute a missing
    field to every matched source (`NotARealField` × 14 rows in the demo).
    Correct but noisy — collapse union findings into one row.
