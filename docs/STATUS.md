@@ -64,9 +64,23 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef schema check`** — cross-reference rule field usage vs. schemas.
 - **`adef schema show <source>`** — display a schema.
 - **`adef schema recipe [platform]`** — SIEM-specific field-extraction recipe
-  (7 platforms).
-- **`adef schema reshape`** — convert a raw SIEM field export into a draft
-  declaration.
+  (7 platforms). The Splunk query keeps distribution columns
+  (`fieldsummary maxvals=50`) and strips search-time meta
+  (`eventtype`/`tag`) before export.
+- **`adef schema reshape <export> [--platform p]`** — convert a raw SIEM field
+  export (Splunk fieldsummary CSV / Sentinel getschema CSV / Elastic `_mapping`
+  JSON / plain field list) into a draft declaration via the five reshape rules:
+  internals filter, case-dupes → aliases, capped enum harvesting (≤50 distinct),
+  type inference, mixed-shape guard (refuses multi-sourcetype exports). Prints a
+  transformation report (inferred scope, drops, folds, `[SUSPECT]` folds with
+  per-spelling value evidence). Folds that merge two different fields are split
+  with repeatable `--no-fold <name>` flags, or walk them with `--interactive`
+  (keep/split prompts + a reproducible-command echo). Platform is never
+  inferred; read from workspace config when omitted.
+
+All workspace-reading commands resolve the workspace identically
+(`adef/core/workspace.py`): explicit `--workspace` → `ADEF_WORKSPACE` →
+current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
 
 ### ATT&CK & coverage
 - **`adef attack info / show / refresh`** — ATT&CK reference layer (shipped

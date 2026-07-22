@@ -25,7 +25,13 @@ Keep it short — historical session logs are archived, not accumulated here.
 - `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra and `jinja2`
   were removed 2026-07-20 — don't reference them.
 - **Before pushing:** run the full gate (`pytest` / `ruff check adef/` /
-  `mypy adef/`). Currently green: 257 passed, ruff + mypy clean.
+  `mypy adef/`). Currently green: 283 passed / 2 skipped, ruff (adef/ + tests/)
+  + mypy clean.
+- Stale-metadata gotcha (bit twice on 2026-07-22): a stale repo-root
+  `agentic_detection_engineering_framework.egg-info/` can mask newly-registered
+  entry points (commands silently missing from `adef --help`). Fix:
+  `rm -rf *.egg-info && pip install -e . --force-reinstall --no-deps` (or
+  `scripts/fresh-install.sh`, dev-only tool).
 
 ## Who's building what
 
@@ -51,20 +57,23 @@ consumed across both people's features.
    the wipe-on-recatalog risk. Remaining follow-ups: fuzzy rename-match (step 4;
    UUID-less renames fall to `new` today — safe), staleness-aware reads (CLI/MCP
    "N commits behind"), richer commit-message harvest, CI action.
-2. **ADEF as a detection home (repo-less teams)** — **design doc written:**
+2. **ADEF as a detection home (repo-less teams)** — design doc:
    `docs/plans/2026-07-22-adef-as-detection-home-design.md`. Decision: ADEF
-   becomes a system of record for detections *authored* in it. Next (sequenced
-   in the doc): (1) **safety fix** — `origin: authored|catalogued` marker + sync
-   must skip authored records (today `sync` would orphan a repo-less team's own
-   detections — a live data bug); (2) git-friendly workspace docs. `adef export`
+   becomes a system of record for detections *authored* in it. Steps 1–2
+   **shipped 2026-07-22**: `origin: authored|catalogued` marker + sync skips
+   authored records (the orphaning data bug is closed), and the git-friendly
+   workspace guide (`docs/detection-home.md`). The README's "pick your
+   on-ramp" section now routes repo-less teams to both. `adef export`
    (records → rule files) **deferred** — speculative + hard to do right until
    teams actually author in ADEF. Read-only invariant over the *rule repo*
    unchanged.
 3. **Benchmark corpus in CI** — recognition/extraction rates per public repo
    (SigmaHQ, security_content, panther-analysis, Sentinel, elastic) as tracked
    numbers — the objective merge gate for community profiles.
-4. **v0.1.0 release framing** — gap to releasable is small: a README pass +
-   confirming `examples/` + the plugin are the launch story.
+4. **v0.1.0 release framing** — gap to releasable is small. The README pass
+   landed 2026-07-22 (on-ramps rework, all commands verified against the live
+   CLI, north-star labeled not-yet-built); remaining: confirm `examples/` + the
+   plugin are the launch story.
 
 ### Standing follow-ups (tracked, not scheduled)
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
