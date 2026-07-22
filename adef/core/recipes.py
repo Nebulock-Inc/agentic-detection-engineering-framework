@@ -27,6 +27,7 @@ RECIPES = {
         platform="Splunk",
         query_language="spl",
         command="""index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
+| fields - eventtype, tag, tag::*
 | fieldsummary maxvals=50
 | fields field count distinct_count numeric_count values""",
         export_format="csv",

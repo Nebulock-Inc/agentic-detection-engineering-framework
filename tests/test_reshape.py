@@ -114,6 +114,55 @@ def test_enum_skipped_when_value_exceeds_length_cap():
 
 
 # --------------------------------------------------------------------------- #
+# Rule 2 extensions: suspect folds + --no-fold vetoes
+# --------------------------------------------------------------------------- #
+def test_disjoint_value_fold_flagged_suspect():
+    """eventtype (Splunk meta) vs EventType (Sysmon field): disjoint values."""
+    fields, report = reshape_fields(
+        [
+            RawField("eventtype", total_count=100, distinct_count=3, values=["winsec", "os", "windows"]),
+            RawField("EventType", total_count=10, distinct_count=1, values=["SetValue"]),
+        ]
+    )
+    assert report.suspect_folds == ["eventtype"]
+    assert len(fields) == 1  # still folded — flagged for a human, never auto-split
+
+
+def test_overlapping_value_fold_not_suspect():
+    """user/User (CIM pair) share values — a correct fold, no flag."""
+    _, report = reshape_fields(
+        [
+            RawField("user", total_count=100, distinct_count=2, values=["alice", "bob"]),
+            RawField("User", total_count=40, distinct_count=2, values=["alice", "carol"]),
+        ]
+    )
+    assert report.folded_aliases == {"user": ["User"]}
+    assert report.suspect_folds == []
+
+
+def test_fold_without_values_not_suspect():
+    """No harvested values on one side = no evidence = no flag."""
+    _, report = reshape_fields(
+        [RawField("Name", total_count=100, values=["x"]), RawField("name", total_count=10)]
+    )
+    assert report.suspect_folds == []
+
+
+def test_no_fold_keeps_variant_separate():
+    fields, report = reshape_fields(
+        [
+            RawField("eventtype", total_count=100, distinct_count=1, values=["winsec"]),
+            RawField("EventType", total_count=10, distinct_count=1, values=["SetValue"]),
+        ],
+        no_fold=("EventType",),
+    )
+    names = {f["name"] for f in fields}
+    assert names == {"eventtype", "EventType"}
+    assert report.folded_aliases == {}
+    assert report.suspect_folds == []
+
+
+# --------------------------------------------------------------------------- #
 # Rule 4: type inference
 # --------------------------------------------------------------------------- #
 def test_numeric_population_typed_int():
@@ -246,6 +295,31 @@ def test_cli_reshape_writes_declaration_and_report(tmp_path, monkeypatch):
     assert "Dropped 5 internals" in result.output
     data = yaml.safe_load((tmp_path / "winlog-sources.yml").read_text(encoding="utf-8"))
     assert lint_declaration_dict(data)[0] == []
+
+
+def test_cli_reshape_suspect_marker_and_no_fold(tmp_path):
+    rows = list(SPLUNK_ROWS) + [
+        {"field": "eventtype", "count": 100, "distinct_count": 2, "numeric_count": 0,
+         "values": _vals(("winsec", 60), ("os", 40))},
+        {"field": "EventType", "count": 10, "distinct_count": 1, "numeric_count": 0,
+         "values": _vals(("SetValue", 10))},
+    ]
+    export = _splunk_csv(tmp_path, rows)
+    out = tmp_path / "d.yml"
+    result = CliRunner().invoke(schema_cli, ["reshape", str(export), "--platform", "splunk", "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "SUSPECT" in result.output
+    assert "--no-fold EventType" in result.output
+
+    out2 = tmp_path / "d2.yml"
+    result = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(export), "--platform", "splunk", "-o", str(out2), "--no-fold", "EventType"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "SUSPECT" not in result.output
+    names = {f["name"] for f in yaml.safe_load(out2.read_text())["sources"][0]["fields"]}
+    assert {"eventtype", "EventType"} <= names
 
 
 def test_cli_reshape_mixed_shape_exits_nonzero(tmp_path):

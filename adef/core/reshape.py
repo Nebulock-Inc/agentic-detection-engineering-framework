@@ -106,6 +106,10 @@ class RawField:
 class ReshapeReport:
     dropped_internals: list[str] = field(default_factory=list)
     folded_aliases: dict[str, list[str]] = field(default_factory=dict)
+    # canonical names whose fold merged variants with DISJOINT harvested value
+    # sets — the signature of two different fields colliding on spelling
+    # (eventtype vs EventType), not two spellings of one field (user/User).
+    suspect_folds: list[str] = field(default_factory=list)
     enum_fields: list[str] = field(default_factory=list)
     typed_fields: dict[str, str] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
@@ -279,8 +283,16 @@ def _coerce_enum(values: list[str], ftype: str | None) -> list:
     return list(values)
 
 
-def reshape_fields(raw_fields: list[RawField]) -> tuple[list[dict], ReshapeReport]:
-    """Apply the five rules to a parsed field inventory."""
+def reshape_fields(
+    raw_fields: list[RawField], no_fold: tuple[str, ...] = ()
+) -> tuple[list[dict], ReshapeReport]:
+    """Apply the five rules to a parsed field inventory.
+
+    ``no_fold`` names are exempt from rule 2: each keeps its own entry instead
+    of being case-folded into a sibling. This makes fold vetoes reproducible
+    inputs (re-run with ``--no-fold EventType``) rather than hand-edits of the
+    output that evaporate on the next reshape.
+    """
     report = ReshapeReport()
 
     # Rule 5: mixed-shape guard — refuse, never guess the split.
@@ -304,10 +316,12 @@ def reshape_fields(raw_fields: list[RawField]) -> tuple[list[dict], ReshapeRepor
         else:
             kept.append(raw)
 
-    # Rule 2: case-dupes → aliases. Canonical = highest event count, then first seen.
+    # Rule 2: case-dupes → aliases. Canonical = highest event count, then first
+    # seen. Names in no_fold form their own group (a vetoed fold).
     by_lower: dict[str, list[RawField]] = {}
     for raw in kept:
-        by_lower.setdefault(raw.name.lower(), []).append(raw)
+        key = f"\x00{raw.name}" if raw.name in no_fold else raw.name.lower()
+        by_lower.setdefault(key, []).append(raw)
 
     fields_out: list[dict] = []
     for group in by_lower.values():
@@ -315,6 +329,15 @@ def reshape_fields(raw_fields: list[RawField]) -> tuple[list[dict], ReshapeRepor
         aliases = [r.name for r in group if r is not canonical]
         if aliases:
             report.folded_aliases[canonical.name] = aliases
+            # Suspicion heuristic: same field under two spellings shares
+            # values; disjoint non-empty value sets mean two different fields.
+            canon_vals = set(canonical.values)
+            if canon_vals and any(
+                set(r.values) and not (set(r.values) & canon_vals)
+                for r in group
+                if r is not canonical
+            ):
+                report.suspect_folds.append(canonical.name)
 
         entry: dict = {"name": canonical.name}
         if aliases:
@@ -347,7 +370,10 @@ def reshape_fields(raw_fields: list[RawField]) -> tuple[list[dict], ReshapeRepor
 # Entry point
 # --------------------------------------------------------------------------- #
 def reshape_export(
-    export_path: Path, platform: str, source_name: str | None = None
+    export_path: Path,
+    platform: str,
+    source_name: str | None = None,
+    no_fold: tuple[str, ...] = (),
 ) -> ReshapeResult:
     """Parse a raw export for ``platform`` and build a draft declaration."""
     parser = _PARSERS.get(platform.lower(), _parse_text)
@@ -363,7 +389,7 @@ def reshape_export(
             if len(uniq) == 1:
                 scope[raw.name.lower()] = uniq[0]
 
-    fields_out, report = reshape_fields(raw_fields)
+    fields_out, report = reshape_fields(raw_fields, no_fold)
     if not fields_out:
         raise ReshapeError(f"{export_path.name}: every field was filtered as internal")
 

@@ -88,18 +88,41 @@ guidance (one declaration per event shape; that is what `scope:` is for).
 
 **Walk the user through the transformation report it prints** — inferred
 scope, dropped internals, folded aliases, harvested enums — and get their
-approval of the *transformations*, not a wall of YAML. If they veto a drop
-or a fold, edit the output YAML with them.
+approval of the *transformations*, not a wall of YAML.
 
-**The known veto case — folds that merge semantic strangers.** The case-fold
-rule is lexical; occasionally two *different* fields differ only by case.
-Real example (live Splunk XmlWinEventLog export): `eventtype ← EventType`
-merged Splunk's search-time event-typing metadata (lowercase, 26 tag names)
-with Sysmon's registry-event field (`EventType`, values like `SetValue`).
-When a fold pairs a Splunk search-time meta field (`eventtype`, `tag`) with
-a raw event field, split them back into two entries in the output YAML.
-CIM pairs like `user ← User` or `signature ← Signature` are the *correct*
-folds — same concept, two spellings — leave those alone.
+**Adjudicate `[SUSPECT]` folds.** The case-fold rule is lexical; occasionally
+two *different* fields differ only by case. Reshape flags a fold `SUSPECT`
+when the two variants' harvested value sets are disjoint — the signature of
+two different fields, since two spellings of one field share values. For each
+suspect fold, judge whether the pair is one concept or two (use the values as
+evidence plus what you know about the platform), confirm with the user, and
+encode the verdict as a **re-run**, not a YAML edit:
+
+```bash
+adef schema reshape <export> --platform <p> --no-fold EventType
+```
+
+`--no-fold <variant>` keeps that spelling as its own field; it's repeatable.
+Re-running with flags keeps the veto reproducible — a hand-edited YAML loses
+the fix the next time anyone reshapes a fresh export.
+
+A `SUSPECT` flag has two legitimate outcomes — read the values, don't assume:
+
+- **Different fields → split.** Live examples (Splunk XmlWinEventLog mixing
+  Security + Sysmon events): `eventtype ← EventType` (Splunk tag names vs
+  Sysmon's `SetValue`), `signature ← Signature` (event descriptions vs
+  code-signing publishers), `Name ← name` (provider names vs event
+  descriptions). Split with `--no-fold`.
+- **Same field, different encodings → keep the fold.** `user ← User` flags
+  because `SYSTEM` vs `NT AUTHORITY\SYSTEM` are disjoint *as strings*, but
+  one is the domain-stripped normalization of the other; `ProcessID ←
+  ProcessId` flags on decimal vs hex. When one variant's values are a
+  transformation of the other's, the fold is correct — approve it.
+
+(The Splunk recipe now strips `eventtype`/`tag` at query time, so that
+specific collision only appears in exports that bypassed the recipe. Mixed
+raw/CIM sourcetypes like XmlWinEventLog will flag many folds — that's the
+true state of the data, not noise.)
 
 Then finish the fields the command never guesses:
 - `platform:` — set from what the user tells you (windows/linux/network/cloud)

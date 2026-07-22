@@ -395,7 +395,8 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
 @click.option("--platform", default=None, help="Export format: splunk, sentinel, elastic (others: one field per line).")
 @click.option("--source", "source_name", default=None, help="Declared source name (default: derived from sourcetype/filename).")
 @click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Output declaration path (default: <source>-sources.yml).")
-def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None):
+@click.option("--no-fold", "no_fold", multiple=True, help="Field name to exempt from case-folding — it keeps its own entry. Repeatable. Use when a fold merged two different fields that collide on spelling.")
+def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...]):
     """Reshape a raw SIEM field export into a draft declaration.
 
     Applies the five reshape rules (internals filter, case-dupes to aliases,
@@ -419,7 +420,7 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         )
 
     try:
-        result = reshape_export(export_file, platform, source_name)
+        result = reshape_export(export_file, platform, source_name, no_fold)
     except ReshapeError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -442,8 +443,19 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         console.print(f"  Scope inferred from the export: {scope_str}")
     console.print(f"  Dropped {len(report.dropped_internals)} internals: {', '.join(report.dropped_internals) or '—'}")
     if report.folded_aliases:
-        folded = "; ".join(f"{k} ← {', '.join(v)}" for k, v in report.folded_aliases.items())
+        folded = "; ".join(
+            f"{k} ← {', '.join(v)}"
+            + (" [red][SUSPECT][/red]" if k in report.suspect_folds else "")
+            for k, v in report.folded_aliases.items()
+        )
         console.print(f"  Folded {len(report.folded_aliases)} case-dupes: {folded}")
+    for suspect in report.suspect_folds:
+        variants = ", ".join(report.folded_aliases.get(suspect, []))
+        console.print(
+            f"  [red]![/red] SUSPECT fold: {suspect} ← {variants} — value sets are "
+            f"disjoint, so these may be different fields. If so, re-run with "
+            f"[bold]--no-fold {variants}[/bold] to keep them separate."
+        )
     console.print(f"  Enums harvested: {len(report.enum_fields)} fields; typed: {len(report.typed_fields)}")
     for note in report.notes:
         console.print(f"  [yellow]![/yellow] {note}")

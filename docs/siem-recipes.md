@@ -33,9 +33,16 @@ Run this search in Splunk Web (Search & Reporting app):
 
 ```spl
 index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
+| fields - eventtype, tag, tag::*
 | fieldsummary maxvals=50
 | fields field count distinct_count numeric_count values
 ```
+
+The `| fields - eventtype, tag, tag::*` line strips Splunk *search-time*
+metadata before the summary — these aren't raw event fields, and lowercase
+`eventtype` is known to case-collide with raw fields like Sysmon's
+`EventType`. If your detections genuinely query `tag=`/`eventtype=`, drop
+that line and review the fold report carefully instead.
 
 **Adjust:**
 - `index=<your_index> sourcetype=<your_sourcetype>` — one search per
@@ -68,12 +75,15 @@ adef schema reshape fields.csv --platform splunk
 # Set `platform:` in the output YAML before ingesting — never inferred.
 ```
 
-**Review the fold list for semantic strangers.** The case-fold rule is
-lexical, and Splunk data can pair a search-time meta field with a raw event
-field that differs only by case. Real example: `eventtype ← EventType` —
-Splunk's event-typing metadata folded onto Sysmon's registry-event field.
-Split such pairs back into two entries in the output YAML. CIM pairs
-(`user ← User`, `signature ← Signature`) are correct folds — leave them.
+**Review `[SUSPECT]` folds.** Reshape flags a fold when the two variants'
+harvested values are disjoint — the signature of two different fields
+colliding on spelling. Real examples from a mixed Security+Sysmon
+sourcetype: `signature` (event descriptions) vs `Signature` (code-signing
+publishers), `Name` (provider) vs `name` (event description). Split those
+with a re-run: `adef schema reshape ... --no-fold Signature --no-fold name`.
+But disjoint values can also mean *one* field under two encodings —
+`user`/`User` (`SYSTEM` vs `NT AUTHORITY\SYSTEM`), `ProcessID`/`ProcessId`
+(decimal vs hex) — those folds are correct; approve them.
 
 ### Version Notes
 
