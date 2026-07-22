@@ -35,6 +35,7 @@ from adef.core.declaration import (
 )
 from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 from adef.core.reshape import ReshapeError, reshape_export
+from adef.core.workspace import config_path, platform_from_config, resolve_workspace
 from adef.core.rule_discovery import shape_literals
 from adef.core.rule_parser import (
     extract_cql_fields,
@@ -186,8 +187,7 @@ def check(workspace: Path | None, report_format: str | None):
     """
     from adef.core.catalog import Catalog
 
-    ws_default = os.getenv("ADEF_WORKSPACE") or str(Path.home() / "work" / "adef-workspace")
-    ws = Path(workspace or ws_default).expanduser().resolve()
+    ws = resolve_workspace(workspace)
     schema_dir = ws / "schema"
     cat = Catalog(ws)
 
@@ -352,19 +352,7 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
     """
     # If no platform specified, try to read from workspace config
     if not platform:
-        workspace_path = (
-            Path(workspace).expanduser().resolve()
-            if workspace
-            else Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-        )
-        config_file = workspace_path / "config" / ".adefconfig.yaml"
-
-        if config_file.exists():
-            try:
-                config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-                platform = config_data.get("platform")
-            except (OSError, yaml.YAMLError):
-                pass  # Fall through to interactive prompt
+        platform = platform_from_config(resolve_workspace(workspace))
 
         if not platform:
             # Interactive fallback
@@ -404,7 +392,8 @@ def _print_fold_evidence(canonical: str, evidence: dict[str, list[str]], indent:
 @click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Output declaration path (default: <source>-sources.yml).")
 @click.option("--no-fold", "no_fold", multiple=True, help="Field name to exempt from case-folding — it keeps its own entry. Repeatable. Use when a fold merged two different fields that collide on spelling.")
 @click.option("--interactive", "-i", is_flag=True, help="Walk each SUSPECT fold with its value evidence and ask keep or split.")
-def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...], interactive: bool):
+@click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=None, help="Workspace path (defaults to ADEF_WORKSPACE, current dir, or ~/work/adef-workspace/).")
+def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...], interactive: bool, workspace: Path | None):
     """Reshape a raw SIEM field export into a draft declaration.
 
     Applies the five reshape rules (internals filter, case-dupes to aliases,
@@ -414,18 +403,14 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     per-SIEM export command.
     """
     if not platform:
-        workspace_path = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-        config_file = workspace_path / "config" / ".adefconfig.yaml"
-        if config_file.exists():
-            try:
-                platform = (yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}).get("platform")
-            except (OSError, yaml.YAMLError):
-                pass
-    if not platform:
-        raise click.ClickException(
-            "No platform given or configured — pass --platform, or run "
-            "`adef init --interactive`."
-        )
+        ws = resolve_workspace(workspace)
+        platform = platform_from_config(ws)
+        if not platform:
+            raise click.ClickException(
+                f"No platform given or configured — looked in {config_path(ws)}. "
+                "Pass --platform, point --workspace/ADEF_WORKSPACE at your "
+                "workspace, or run `adef init --interactive`."
+            )
 
     try:
         result = reshape_export(export_file, platform, source_name, no_fold)

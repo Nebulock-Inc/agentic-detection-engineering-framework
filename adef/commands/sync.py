@@ -26,18 +26,9 @@ from adef.core.journal import Journal
 from adef.core.profiles import load_user_profiles
 from adef.core.reconcile import Action, reconcile
 from adef.core.rule_discovery import walk_outcomes
+from adef.core.workspace import resolve_workspace as _resolve_workspace
 
 console = Console()
-
-
-def _resolve_workspace(explicit: Path | None) -> Path:
-    import os
-
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    return Path(
-        os.getenv("ADEF_WORKSPACE") or Path.home() / "work" / "adef-workspace"
-    ).expanduser().resolve()
 
 
 @click.command()

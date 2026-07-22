@@ -24,11 +24,12 @@ Profile seams (ISA 2026-07-20):
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import click
 from rich.console import Console
+
+from adef.core.workspace import resolve_workspace as _resolve_workspace
 
 from adef.core.catalog import Catalog, record_from_discovered
 from adef.core.journal import Journal
@@ -47,19 +48,6 @@ console = Console()
 
 # Fields whose extraction rates the --profile scoreboard reports.
 _RATE_FIELDS = ("title", "query", "mitre", "uuid", "data_source", "platform")
-
-
-def _resolve_workspace(explicit: Path | None) -> Path:
-    """Resolve the workspace: explicit arg → ADEF_WORKSPACE → cwd → default."""
-    if explicit is not None:
-        ws = explicit
-    elif env := os.environ.get("ADEF_WORKSPACE"):
-        ws = Path(env)
-    elif (Path.cwd() / "catalog").is_dir() or (Path.cwd() / "journals").is_dir():
-        ws = Path.cwd()
-    else:
-        ws = Path.home() / "work" / "adef-workspace"
-    return ws.expanduser().resolve()
 
 
 def _inherit_platforms(discovered: list, ws: Path) -> int:

@@ -97,16 +97,9 @@ def register(server: Any) -> None:
         """
         # If no platform provided, try to read from workspace config
         if not platform:
-            workspace_path = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-            config_file = workspace_path / "config" / ".adefconfig.yaml"
+            from adef.core.workspace import platform_from_config, resolve_workspace
 
-            if config_file.exists():
-                try:
-                    config_data = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-                    platform = (config_data or {}).get("platform")
-                except (OSError, yaml.YAMLError):
-                    platform = None
-
+            platform = platform_from_config(resolve_workspace(None))
             if not platform:
                 # No silent default: guessing splunk would hand a Sentinel user SPL.
                 return {

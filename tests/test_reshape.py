@@ -390,6 +390,30 @@ def test_cli_reshape_no_platform_errors(tmp_path, monkeypatch):
     assert "--platform" in result.output
 
 
+def test_cli_reshape_platform_from_cwd_workspace(tmp_path, monkeypatch):
+    """Running from inside an init'd workspace picks up its config — the
+    `adef init --interactive` platform must work without --platform or env."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / ".adefconfig.yaml").write_text(
+        yaml.safe_dump({"platform": "splunk"}), encoding="utf-8"
+    )
+    (tmp_path / "journals").mkdir()  # what marks a directory as a workspace
+    monkeypatch.delenv("ADEF_WORKSPACE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    export = _splunk_csv(tmp_path, SPLUNK_ROWS)
+    result = CliRunner().invoke(schema_cli, ["reshape", str(export)])
+    assert result.exit_code == 0, result.output
+
+
+def test_cli_reshape_no_platform_error_names_the_config_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path))  # no config here
+    export = _splunk_csv(tmp_path, SPLUNK_ROWS)
+    result = CliRunner().invoke(schema_cli, ["reshape", str(export)])
+    assert result.exit_code != 0
+    assert ".adefconfig.yaml" in result.output  # says where it looked
+
+
 def test_cli_reshape_platform_from_config(tmp_path, monkeypatch):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
