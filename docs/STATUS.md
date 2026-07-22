@@ -106,6 +106,12 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
   catalog; getting them into the user's rules repo is deferred (options weighed
   in `ISA.md`).
 - **Evolve data seam** — `adef detection stats --results` for FP/volume data.
+- **Per-alias values + namespace preference (v2)** — a folded field keeps only
+  the canonical spelling's `values`; pairing the alias spelling with those
+  values (`Status=failure`) is legal per schema but matches nothing in the
+  SIEM. Until v2: author with the canonical spelling, or split
+  encoding-variant folds with `--no-fold` (each spelling then keeps its own
+  vocabulary).
 - **Data-model schemas (v2)** — declarations model the index namespace;
   Splunk `tstats` rules query data-model fields (`Processes.process_name`)
   that never appear in a `fieldsummary` export, so `schema check` union-misses

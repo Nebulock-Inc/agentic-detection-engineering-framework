@@ -129,6 +129,27 @@ infers types — and prints a transformation report so you approve the
 transformations instead of hand-auditing YAML. Re-ingest anytime: your hand
 corrections survive, drift is reported.
 
+**The mental model behind the merge step.** SIEMs often expose one underlying
+fact as *two* fields with *two* value formats. In Splunk, a single logon
+failure carries both the raw event field and its CIM-normalized sibling:
+
+```
+Status = 0xc000006d        # raw field: NTSTATUS codes
+status = failure           # normalized field, derived from Status
+```
+
+`reshape` merges such pairs into one declared field with `aliases:`, so a rule
+written against *either* spelling passes `adef schema check`. But in your SIEM
+each spelling only matches **its own** values — `status=failure` and
+`Status=0xc000006d` both fire; `Status=failure` is a syntactically fine query
+that matches nothing, forever. Two rules follow: pair values with the spelling
+they were harvested from, and when reshape marks a merge `[SUSPECT]` (the two
+spellings' observed values have nothing in common), read the values it shows —
+same information in two formats (`SYSTEM` vs `NT AUTHORITY\SYSTEM`) means one
+field, keep the merge; different information (code-signing publishers vs event
+descriptions) means two unrelated fields that collide on spelling — split them
+with `--no-fold`, or let `--interactive` walk you through each pair.
+
 ## See your coverage — honestly
 
 ```bash

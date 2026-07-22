@@ -418,12 +418,25 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         raise click.ClickException(str(exc)) from exc
 
     if interactive and result.report.suspect_folds:
-        console.print(f"\n[bold]{len(result.report.suspect_folds)} suspect fold(s)[/bold] — disjoint value sets. Same field under two spellings shares values; two different fields don't.\n")
+        console.print(
+            f"\n[bold]{len(result.report.suspect_folds)} merged pair(s) need review.[/bold] "
+            "Each pair below differs only by upper/lowercase, so it was merged into one "
+            "field — but the values observed under each spelling have nothing in common, "
+            "which can mean they are two unrelated fields.\n\n"
+            "For each pair, compare the values:\n"
+            "  • Same information in two formats (e.g. 'SYSTEM' vs 'NT AUTHORITY\\SYSTEM')"
+            " → one field: keep the merge.\n"
+            "  • Different information (e.g. publisher names vs event descriptions)"
+            " → two fields: split them.\n"
+        )
         split: list[str] = []
         for canonical in result.report.suspect_folds:
             variants = result.report.folded_aliases.get(canonical, [])
             _print_fold_evidence(canonical, result.report.fold_evidence.get(canonical, {}))
-            if not click.confirm(f"  Same field — keep the fold {canonical} ← {', '.join(variants)}?", default=True):
+            if not click.confirm(
+                f"  Keep {canonical} and {', '.join(variants)} merged as one field?",
+                default=True,
+            ):
                 split.extend(variants)
             console.print()
         if split:
@@ -458,12 +471,14 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     for suspect in report.suspect_folds:
         variant_str = ", ".join(report.folded_aliases.get(suspect, []))
         console.print(
-            f"  [red]![/red] SUSPECT fold: {suspect} ← {variant_str} — value sets are disjoint:"
+            f"  [red]![/red] SUSPECT merge: {suspect} + {variant_str} were merged "
+            f"(names differ only by case), but their observed values have nothing in common:"
         )
         _print_fold_evidence(suspect, report.fold_evidence.get(suspect, {}), indent="      ")
         console.print(
-            f"      Same field (encoding variants)? keep it. Different fields? re-run "
-            f"with [bold]--no-fold {variant_str}[/bold] (or use [bold]--interactive[/bold])."
+            f"      Same information in two formats → one field, keep the merge. "
+            f"Different information → two fields: re-run with "
+            f"[bold]--no-fold {variant_str}[/bold] (or use [bold]--interactive[/bold])."
         )
     if no_fold:
         flags = " ".join(f"--no-fold {n}" for n in no_fold)

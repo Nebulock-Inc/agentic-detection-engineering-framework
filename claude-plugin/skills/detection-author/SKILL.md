@@ -84,6 +84,65 @@ with what's been observed. Replace the scaffold's `<condition>` placeholder.
 Explain each clause to the engineer in terms of the behavior from step 1 — the
 query should be legible as "this is how we catch that hypothesis."
 
+#### Field-namespace discipline — values pair with the spelling they came from
+
+SIEMs expose the same fact under multiple field names with **different value
+vocabularies** (raw `Status=0xc000006d` vs normalized `status=failure` on the
+same Splunk event). A schema field's `values` were harvested from its
+**canonical name only** — its `aliases` are valid names but the schema does
+NOT record their vocabularies. Three rules, all platforms:
+
+1. **Author with the field's canonical name** — it's the only spelling whose
+   `values` are known-good. Name + value from the same spelling = a query
+   that fires.
+2. **Never pair an alias name with the schema's values.** `Status=failure`
+   passes `schema check` (the name exists) and matches nothing in the SIEM,
+   forever — the worst detection is one that never fires and never errors.
+   If the engineer wants the alias spelling, get its real values from them,
+   or have them split the merge (`adef schema reshape ... --no-fold <name>`)
+   so each spelling carries its own vocabulary in the schema.
+3. **Team convention beats canonical.** Canonical is chosen by event count,
+   not policy — if the team authors CIM-first (or raw-first) and canonical
+   went the other way, recommend the `--no-fold` split rather than fighting
+   the schema per-rule.
+
+Platform-specific traps (verified against vendor docs, 2026-07-22):
+
+- **Splunk (SPL):** raw and CIM fields coexist per event with distinct
+  vocabularies (`User=SUDOSHIPPING\grace.ssh` vs `user=grace.ssh`;
+  `Direction=%%14592` vs `direction=inbound`). Also: `tstats`/data-model
+  fields (`Processes.process_name`) are a third namespace that index schemas
+  don't contain — don't ground a `tstats` query in an index-derived schema.
+- **Sentinel (KQL):** ASIM normalized fields (`ActorUsername`) exist only
+  inside parser functions (`_Im_ProcessCreate`) — they are not columns on raw
+  tables, so never mix ASIM names into a `SecurityEvent` query or raw column
+  names into an ASIM query. Vocabularies differ in shape: ASIM *concatenates*
+  (`ActorUsername = DOMAIN\user`) where the raw table *splits*
+  (`SubjectUserName` + `SubjectDomainName`). String `==` is case-sensitive,
+  `=~` is not — choose deliberately. `dynamic` (JSON) columns hide nested
+  keys from `getschema`, so the schema may not list every addressable path.
+- **Elastic:** ECS fields (`user.name`) and raw passthroughs
+  (`winlog.event_data.SubjectUserName`) may both exist — but raw retention is
+  **integration-specific** (some ingest pipelines delete `winlog.event_data.*`);
+  trust the declared schema over assumptions. ECS splits `user.name` /
+  `user.domain` (never concatenated), and omits them entirely when SID
+  resolution fails. `keyword` fields are case-sensitive exact-match by
+  default; `text` vs `.keyword` sub-field choice changes matching semantics.
+- **Chronicle (UDM):** one namespace, but *placement* replaces spelling: the
+  same entity lands under `principal.*` vs `target.*` vs `src.*` by event
+  role — a rule scoped to the wrong noun silently misses. Values are
+  decomposed (`userid` bare; domain a separate field). YARA-L strings are
+  case-sensitive without `nocase` (and `nocase` is illegal on enum fields).
+- **Sumo Logic:** vendor-parsed fields and Cloud SIEM's normalized schema
+  attributes are distinct vocabularies (values normalized in the pipeline,
+  e.g. email → username); the raw value survives in `_raw`, not under the
+  normalized name.
+- **QRadar (AQL):** DSM-normalized properties (`username`) vs Custom Event
+  Properties are distinct layers, and the username form (bare vs
+  domain-qualified) **varies by DSM** — trust the schema's observed values.
+  CEP names with spaces must be double-quoted (`"Parent Process Path"`);
+  `=`/`LIKE` are case-sensitive (`ILIKE` for insensitive).
+
 ### 5. Capture the context in the journal
 
 Fill the journal's **Find** section with what you drew out in step 1: the gap/

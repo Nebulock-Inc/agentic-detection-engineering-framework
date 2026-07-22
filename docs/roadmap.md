@@ -19,6 +19,14 @@ The minimum viable framework: FORGE methodology, journal memory, twelve wrapped 
 
 The first autonomous agent loops.
 
+- **Per-alias values + namespace preference.** A folded field stores only the
+  canonical spelling's value vocabulary today; the alias's is discarded, so an
+  agent pairing the alias spelling with harvested values (`Status=failure`)
+  writes a legal-per-schema query that never matches. v2: each spelling keeps
+  its own `values` inside one folded entry, plus a `prefer: cim|raw` key so
+  schema-grounded authoring follows team convention instead of the
+  canonical-by-count accident — together they enable a value-aware
+  `schema check` that catches the never-fires class.
 - **Data-model schemas (the third field namespace).** Declarations currently
   model the *index* namespace (raw + CIM alias fields from a `fieldsummary`
   export). Splunk `tstats` rules reference accelerated data-model fields

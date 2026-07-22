@@ -76,6 +76,11 @@ consumed across both people's features.
    plugin are the launch story.
 
 ### Standing follow-ups (tracked, not scheduled)
+- **v2: per-alias values + namespace preference.** Folded fields keep only the
+  canonical spelling's vocabulary → alias-spelling + harvested-value queries
+  never fire and no gate catches them; canonical-by-count also can't express a
+  CIM-first/raw-first team convention. Sketch in roadmap v0.2.0; evidence +
+  today's mitigations in ISA Decisions 2026-07-22.
 - **v2: data-model schemas.** `tstats`/datamodel rules use a third field
   namespace (`Processes.process_name`) absent from index `fieldsummary`
   exports — ~39% of ESCU's active detections. Declaring a data model as a
