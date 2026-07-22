@@ -439,6 +439,45 @@ in `schema.py`). Out of scope for the catalog work; leave unless you own that fi
 
 ## Session log
 
+### 2026-07-21 (later) — Browse + coverage commands to spec (Josh + Claude)
+
+Story 7393 / coverage epic — brought the three detection browsing & coverage
+commands into line with the reworked catalog + ATT&CK layer. Three small,
+per-command commits (`5490fd1`, `e1aabf2`, `0151ed1`), each with tests; ruff +
+mypy clean on touched files.
+
+- **`adef detection list` (`5490fd1`)** — added `--tactic` and `--engine`
+  filters (spec was platform/tactic/engine/status; platform+status already
+  existed). Tactics aren't stored on records — resolved from each detection's
+  technique IDs via `attack_reference()` (accepts shortname or display name,
+  parent-technique fallback). `--report json` gained `engine` + a derived
+  `tactics` array. Existing filters (`--rule-format`, `--stage`,
+  `--needs-review`) kept, not trimmed.
+- **`adef detection show` (`e1aabf2`)** — was already mostly aligned; added a
+  derived **tactics** line (same resolution as `list`) and a **`support`** line
+  shown only when `!= supported`, so recognized-but-unsupported records
+  (external logic / empty query, e.g. Panther) explain themselves instead of
+  silently dropping the Query section.
+- **`adef coverage` (`0151ed1`)** — it reported coverage *quality* but never
+  *gaps*. Added the denominator side: `build_coverage` now computes
+  `total_techniques` + per-tactic `tactic_totals` from the ATT&CK reference
+  (revoked/deprecated excluded), `Coverage.tactic_gaps()`, and
+  `uncovered_by_tactic()`. New default "Coverage gaps" section (N-of-M headline
+  + per-tactic covered/total, blind tactics flagged) and an opt-in `--gaps`
+  flag that lists uncovered technique IDs by tactic. Existing quality /
+  log-source / Navigator output untouched. Added the first CLI-level tests for
+  the command (`tests/test_coverage_command.py`).
+
+**Verification:** targeted suites green (`test_detection_browse.py` 13,
+coverage core+CLI 13); full suite **169 passed / 2 skipped** *minus four
+`sqlglot`-dependent modules that don't import in this WSL fallback interpreter
+(`rule_parser`, `declaration`, `recipes`, `review_reasons` — none touched
+here)* — re-run those via the `.venv`/CI before merge. Anti-goal guards green.
+
+**Small follow-up available (not done):** tactic-resolution logic is duplicated
+inline in `list` and `show` (~8 lines); could DRY into one helper as its own
+cleanup commit.
+
 ### 2026-07-21 (later) — Line-ending normalization / `.gitattributes` (Josh + Claude)
 - Onboarded a WSL-on-Windows checkout. `git status` showed ~120 files "modified"
   with equal insertions/deletions and nothing under `--ignore-all-space` — pure
