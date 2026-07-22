@@ -14,6 +14,9 @@ brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
   the Claude plugin: skills, sub-agents, extraction profiles.
 - **[2026-07-20-schema-declaration-design.md](2026-07-20-schema-declaration-design.md)** —
   the declaration-driven schema model (`adef schema *`) + scope.
+- **[2026-07-22-adef-sync-design.md](2026-07-22-adef-sync-design.md)** —
+  `adef sync`: staleness detection, the identity/reconciliation cascade, and
+  out-of-band journal harvesting. *Proposed; no code yet.*
 
 ## Where else to look
 

@@ -356,6 +356,15 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 - 2026-07-21 — **MCP `schema_recipe` never guesses the platform.** When called with no platform and none configured, the tool returns an error + the supported-platform list instead of silently defaulting to `splunk` (the original behavior). Rationale: a silent guess hands a Sentinel user SPL; the calling assistant should ask. The CLI already had the honest path (interactive prompt) — this brings the MCP surface to parity.
 
+- 2026-07-22 — **`adef sync` design locked (design-before-build; no code yet)** — `docs/plans/2026-07-22-adef-sync-design.md`. Addresses the biggest unaddressed trust risk (stale catalogs) and the concrete durability hole our enrichment now sits over (re-catalog assigns fresh IDs → orphans MITRE tags, authored drafts, journals). Design decisions:
+  - **Governing principle: ADEF is never in the write path.** `sync` *observes* changes; it never mediates them. Catalog = disposable index (pure derivation, re-derive freely); journals = the only durable data. The one hard problem is **identity** — when a rule changes, which `D-XXXX` is it?
+  - **Identity cascade** (first match wins): embedded UUID → content-hash unchanged → same-path-new-hash (modified) → fuzzy title/query (renamed, attach `needs_review`) → no match (new) → source gone (**orphaned, never deleted** — the "why" outlives the rule). **Enrichment fields (`mitre`/`status`/`stage`/`owner`/journal) are preserved across re-derivation; only derived fields update** — this is the fix for the wipe-on-recatalog hole.
+  - **Persist three identity fields** the record lacks today: `rule_uuid` (already on `DiscoveredRule`, just not written — smallest/highest-value change, worth doing on its own), `source_hash` (SHA-256 of source bytes), `catalog_sha` (repo HEAD at catalog time, git only).
+  - **Lean on git**: `catalog_sha` vs HEAD = one-shot staleness check; `git diff --name-status` gives adds/mods/deletes+renames (kills the fuzzy-match need for git repos). Hash-diffing is the fallback for non-git (SIEM exports). No config — detect the git work tree.
+  - **Every read path is staleness-aware** (CLI banner, MCP `stale`/`commits_behind` annotation) — a confident AI answer from a stale catalog is the exact trust-killer this exists to prevent.
+  - **Out-of-band edits become a feature**: modified rules auto-append a journal entry with the diff + harvested git commit message/PR ref — journals accumulate rationale even for teams who never manually journal.
+  - **CI, not discipline**: `adef sync` on merge, or `--check` PR comments; same seam off a scheduled SIEM export. Command surface: `adef sync [--check] [--dry-run]`, reusing `discover_rules` + `Catalog` (sync = catalog + a `reconcile()` core, not a parallel walker). Open questions (catalog-becomes-sync?, fuzzy threshold, sha granularity, orphan surfacing) enumerated in the doc. Read-only invariant unchanged.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
