@@ -15,7 +15,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from adef.core.coverage import Tier, build_coverage, navigator_layer
+from adef.core.coverage import Tier, build_coverage, navigator_layer, uncovered_by_tactic
 
 console = Console()
 
@@ -42,7 +42,16 @@ def _workspace_from(workspace: Path | None) -> Path:
     help="Also write a MITRE Navigator layer (scored by coverage quality) to this path.",
 )
 @click.option("--name", default="ADEF coverage", help="Layer name for the Navigator export.")
-def coverage(workspace: Path | None, navigator: Path | None, name: str) -> None:
+@click.option(
+    "--gaps",
+    "list_gaps",
+    is_flag=True,
+    default=False,
+    help="Also list the uncovered technique IDs, grouped by tactic.",
+)
+def coverage(
+    workspace: Path | None, navigator: Path | None, name: str, list_gaps: bool
+) -> None:
     """Report coverage quality across the catalog (trust, log-source risk, depth)."""
     from adef.core.catalog import Catalog
 
@@ -107,6 +116,42 @@ def coverage(workspace: Path | None, navigator: Path | None, name: str) -> None:
                 f"[green]{counts[Tier.SOLID]} solid[/green], "
                 f"[yellow]{counts[Tier.FRAGILE]} fragile[/yellow]"
             )
+
+    # Coverage gaps — the other half of "coverage": what ATT&CK says you're missing.
+    gaps = cov.tactic_gaps()
+    if cov.total_techniques:
+        covered = len(cov.techniques)
+        pct = 100 * covered // cov.total_techniques
+        console.print(
+            f"\n[bold]Coverage gaps[/bold] — detections cover "
+            f"[bold]{covered}[/bold] of {cov.total_techniques} ATT&CK techniques ({pct}%)"
+        )
+        for tactic, covd, total in gaps:
+            missing = total - covd
+            if missing <= 0:
+                continue
+            if covd == 0:
+                console.print(f"  [red]{tactic:<22}[/red] {covd}/{total} covered  ← blind")
+            else:
+                plural = "s" if missing != 1 else ""
+                console.print(
+                    f"  [yellow]{tactic:<22}[/yellow] {covd}/{total} covered  "
+                    f"({missing} gap{plural})"
+                )
+
+    if list_gaps:
+        uncovered = uncovered_by_tactic(cov)
+        if uncovered:
+            console.print("\n[bold]Uncovered techniques by tactic[/bold]")
+            for tactic, _covd, _total in gaps:  # biggest-gap tactics first
+                techs = uncovered.get(tactic)
+                if not techs:
+                    continue
+                console.print(f"\n  [bold]{tactic}[/bold] — {len(techs)} uncovered")
+                for tid, tname in techs[:15]:
+                    console.print(f"    [dim]{tid}[/dim] {tname}")
+                if len(techs) > 15:
+                    console.print(f"    … and {len(techs) - 15} more")
 
     if navigator is not None:
         layer = navigator_layer(cov, name=name)

@@ -76,6 +76,10 @@ class Coverage:
     techniques: dict[str, TechniqueCoverage] = field(default_factory=dict)
     invalid_mappings: dict[str, list[str]] = field(default_factory=dict)  # bad id -> detection ids
     dominant_source: tuple[str, int] | None = None
+    # Denominator from the ATT&CK reference (revoked/deprecated excluded): the
+    # "what could exist" side that turns a coverage report into a gap report.
+    total_techniques: int = 0
+    tactic_totals: dict[str, int] = field(default_factory=dict)  # tactic display name -> technique count
 
     def by_tier(self) -> dict[Tier, list[str]]:
         out: dict[Tier, list[str]] = {t: [] for t in Tier}
@@ -99,6 +103,23 @@ class Coverage:
             for tactic in tc.tactics:
                 roll[tactic][tc.tier] += 1
         return dict(roll)
+
+    def tactic_gaps(self) -> list[tuple[str, int, int]]:
+        """(tactic, covered, total) per tactic, largest gap (total - covered) first.
+
+        ``covered`` counts techniques with at least one detection; ``total`` is
+        the reference denominator (revoked/deprecated excluded)."""
+        covered: collections.Counter[str] = collections.Counter()
+        for tc in self.techniques.values():
+            for tactic in tc.tactics:
+                covered[tactic] += 1
+        rows = [
+            (tactic, covered.get(tactic, 0), total)
+            for tactic, total in self.tactic_totals.items()
+        ]
+        rows.sort(key=lambda r: r[0])                        # name asc, then…
+        rows.sort(key=lambda r: r[2] - r[1], reverse=True)   # …gap desc (stable)
+        return rows
 
 
 def build_coverage(records: Iterable[dict]) -> Coverage:
@@ -135,7 +156,39 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
 
     if source_counter:
         cov.dominant_source = source_counter.most_common(1)[0]
+
+    # Denominator: every live technique in the reference, grouped by tactic. This
+    # is what "gap" is measured against — revoked/deprecated IDs don't count as
+    # missing coverage because you shouldn't be writing detections for them.
+    for entry in ref.techniques.values():
+        if entry.get("revoked") or entry.get("deprecated"):
+            continue
+        cov.total_techniques += 1
+        for sn in entry.get("tactics", []):
+            display = ref.tactics.get(sn, sn)
+            cov.tactic_totals[display] = cov.tactic_totals.get(display, 0) + 1
     return cov
+
+
+def uncovered_by_tactic(cov: Coverage) -> dict[str, list[tuple[str, str]]]:
+    """Live techniques with no detection, grouped by tactic display name.
+
+    Each value is a sorted list of ``(technique_id, name)``. Revoked/deprecated
+    techniques and anything already covered are excluded."""
+    ref = attack_reference()
+    out: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
+    for tid, entry in ref.techniques.items():
+        if entry.get("revoked") or entry.get("deprecated"):
+            continue
+        if tid.strip().upper() in cov.techniques:
+            continue
+        name = entry.get("name", "")
+        for sn in entry.get("tactics", []):
+            display = ref.tactics.get(sn, sn)
+            out[display].append((tid.strip().upper(), name))
+    for techs in out.values():
+        techs.sort()
+    return dict(out)
 
 
 def navigator_layer(cov: Coverage, name: str = "ADEF coverage") -> dict:
@@ -173,4 +226,11 @@ def navigator_layer(cov: Coverage, name: str = "ADEF coverage") -> dict:
     }
 
 
-__all__ = ["Coverage", "TechniqueCoverage", "Tier", "build_coverage", "navigator_layer"]
+__all__ = [
+    "Coverage",
+    "TechniqueCoverage",
+    "Tier",
+    "build_coverage",
+    "navigator_layer",
+    "uncovered_by_tactic",
+]

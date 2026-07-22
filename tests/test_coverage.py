@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from adef.core.coverage import Tier, build_coverage, navigator_layer
+from adef.core.coverage import (
+    Tier,
+    build_coverage,
+    navigator_layer,
+    uncovered_by_tactic,
+)
 
 
 def _rec(tid_list, needs_review=False, data_source="src_a", status="draft"):
@@ -72,6 +77,40 @@ def test_source_concentration():
     assert cov.dominant_source == ("thrunt", 3)
     # techniques whose every detection is one source
     assert set(cov.single_source_techniques()) == {"T1003.001", "T1059.001", "T1071"}
+
+
+def test_totals_exclude_revoked_deprecated():
+    from adef.core.attack import attack_reference
+
+    ref = attack_reference()
+    cov = build_coverage([_rec(["T1059.001"])])
+    assert cov.total_techniques > 500
+    # Strictly fewer than every entry → revoked/deprecated IDs were dropped.
+    assert cov.total_techniques < len(ref.techniques)
+    assert cov.tactic_totals  # per-tactic denominator populated
+
+
+def test_tactic_gaps_reports_covered_vs_total():
+    cov = build_coverage([_rec(["T1059.001"])])  # PowerShell → Execution
+    gaps = {tactic: (covd, total) for tactic, covd, total in cov.tactic_gaps()}
+    assert "Execution" in gaps
+    covd, total = gaps["Execution"]
+    assert covd == 1
+    assert total > covd  # Execution has techniques we don't cover
+    # Ordering: largest gap (total - covered) first.
+    ordered = cov.tactic_gaps()
+    diffs = [total - covd for _t, covd, total in ordered]
+    assert diffs == sorted(diffs, reverse=True)
+
+
+def test_uncovered_by_tactic_lists_missing():
+    cov = build_coverage([_rec(["T1059.001"])])
+    uncovered = uncovered_by_tactic(cov)
+    exec_ids = {tid for tid, _name in uncovered.get("Execution", [])}
+    assert exec_ids                      # Execution has uncovered techniques
+    assert "T1059.001" not in exec_ids   # the one we cover isn't listed
+    all_ids = {tid for techs in uncovered.values() for tid, _ in techs}
+    assert "T1143" not in all_ids        # revoked IDs never listed as a gap
 
 
 def test_navigator_layer_scores_by_tier():
