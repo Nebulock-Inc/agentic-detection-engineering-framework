@@ -190,6 +190,7 @@ profile-author sub-agent.
 pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
 /plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
 /plugin install adef
+/reload-plugins           # skills + MCP load on reload, not on install
 ```
 
 MCP alone works with Cursor/Copilot; the plugin is the Claude-native layer.

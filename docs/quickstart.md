@@ -179,6 +179,7 @@ The install is user-level, so it follows you into your own detections repo:
 # from a local checkout (works pre-release):
 /plugin marketplace add /path/to/agentic-detection-engineering-framework
 /plugin install adef@adef-marketplace
+/reload-plugins        # required — skills + MCP load on reload, not on install
 
 # or once you have the repo remote handy:
 /plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
