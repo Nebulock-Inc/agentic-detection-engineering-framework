@@ -162,6 +162,18 @@ def _workspace_from(workspace: Path | None) -> Path:
     help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
 )
 @click.option("--platform", default=None, help="Filter by platform (e.g. windows).")
+@click.option(
+    "--tactic",
+    default=None,
+    help="Filter by ATT&CK tactic, resolved from each detection's technique IDs. "
+    "Accepts the tactic shortname (e.g. defense-evasion) or display name "
+    "(e.g. 'Defense Evasion').",
+)
+@click.option(
+    "--engine",
+    default=None,
+    help="Filter by internal engine (sigma, sql, sch_sql, composite).",
+)
 @click.option("--rule-format", "rule_format", default=None, help="Filter by source format (sigma, spl, <profile>).")
 @click.option("--status", default=None, help="Filter by status (draft, ready, tuning, deprecated).")
 @click.option("--stage", default=None, help="Filter by FORGE stage (find … evolve).")
@@ -185,6 +197,8 @@ def _workspace_from(workspace: Path | None) -> Path:
 def list_cmd(
     workspace: Path | None,
     platform: str | None,
+    tactic: str | None,
+    engine: str | None,
     rule_format: str | None,
     status: str | None,
     stage: str | None,
@@ -203,10 +217,41 @@ def list_cmd(
         # Pre-rework records: boolean only — treat as one opaque structural reason.
         return ["legacy"] if data.get("needs_review") else []
 
+    # Tactics aren't stored on records — resolve them from each detection's
+    # technique IDs via the ATT&CK reference. Only load the snapshot when a
+    # caller actually needs tactics (the --tactic filter or JSON output).
+    ref = None
+    if tactic or report_format == "json":
+        from adef.core.attack import attack_reference
+
+        ref = attack_reference()
+
+    def _norm(value: str) -> str:
+        # ATT&CK tactic shortnames are the lowercased, hyphenated display names,
+        # so normalizing either input form to the same shape matches both.
+        return value.strip().lower().replace(" ", "-").replace("_", "-")
+
+    def _tactics_of(data: dict) -> list[str]:
+        """Display names of the tactics this detection's techniques cover."""
+        assert ref is not None  # only called once the snapshot is loaded
+        display: list[str] = []
+        for tid in data.get("mitre") or []:
+            names = ref.tactics_for(tid)
+            if not names and "." in tid:  # sub-technique w/o its own tactics → parent
+                names = ref.tactics_for(tid.split(".")[0])
+            for name in names:
+                if name not in display:
+                    display.append(name)
+        return display
+
+    want_tactic = _norm(tactic) if tactic else None
+
     ws = _workspace_from(workspace)
     records = []
     for det_id, _path, data in Catalog(ws).iter_records():
         if platform and data.get("platform") != platform:
+            continue
+        if engine and data.get("engine") != engine:
             continue
         if rule_format and data.get("format") != rule_format:
             continue
@@ -214,6 +259,9 @@ def list_cmd(
             continue
         if stage and data.get("stage") != stage:
             continue
+        if want_tactic is not None:
+            if want_tactic not in {_norm(t) for t in _tactics_of(data)}:
+                continue
         reasons = _reasons(data)
         if needs_review == "any":
             if not (structural_reasons(reasons) or "legacy" in reasons):
@@ -226,11 +274,16 @@ def list_cmd(
 
     if report_format == "json":
         keys = (
-            "id", "title", "platform", "format", "query_language", "data_source",
-            "mitre", "status", "stage", "owner", "needs_review", "review_reasons",
-            "rule_ref",
+            "id", "title", "platform", "engine", "format", "query_language",
+            "data_source", "mitre", "status", "stage", "owner", "needs_review",
+            "review_reasons", "rule_ref",
         )
-        click.echo(_json.dumps([{k: d.get(k) for k in keys} for d in records], indent=2))
+        payload = []
+        for d in records:
+            row: dict = {k: d.get(k) for k in keys}
+            row["tactics"] = _tactics_of(d)  # derived, not stored
+            payload.append(row)
+        click.echo(_json.dumps(payload, indent=2))
         return
 
     if not records:

@@ -103,3 +103,51 @@ def test_show_unknown_id_fails(ws, catalogued):
     result = CliRunner().invoke(detection_cli, ["show", "D-9999"])
     assert result.exit_code != 0
     assert "not found" in result.output
+
+
+def test_list_filter_engine(ws, catalogued):
+    # Sigma folds to engine `sigma`; the .conf SPL rule folds to `sql`.
+    result = CliRunner().invoke(detection_cli, ["list", "--engine", "sigma"])
+    assert result.exit_code == 0, result.output
+    assert "Sigma windows rule" in result.output
+    assert "Broad hunt" not in result.output
+
+
+def test_list_filter_tactic_display_name(ws, catalogued):
+    # Tactic is derived from the technique ID (T1218.005); resolve the real
+    # display name from the shipped snapshot rather than hardcoding a guess.
+    from adef.core.attack import attack_reference
+
+    tactics = attack_reference().tactics_for("T1218.005")
+    assert tactics, "expected the shipped ATT&CK snapshot to know T1218.005"
+    result = CliRunner().invoke(detection_cli, ["list", "--tactic", tactics[0]])
+    assert result.exit_code == 0, result.output
+    assert "Sigma windows rule" in result.output
+    assert "Broad hunt" not in result.output  # raw SPL has no MITRE → no tactic
+
+
+def test_list_filter_tactic_shortname(ws, catalogued):
+    # The shortname form (lowercased/hyphenated display name) matches too.
+    from adef.core.attack import attack_reference
+
+    shortname = attack_reference().tactics_for("T1218.005")[0].lower().replace(" ", "-")
+    result = CliRunner().invoke(detection_cli, ["list", "--tactic", shortname])
+    assert result.exit_code == 0, result.output
+    assert "Sigma windows rule" in result.output
+
+
+def test_list_tactic_no_match(ws, catalogued):
+    result = CliRunner().invoke(detection_cli, ["list", "--tactic", "impact"])
+    assert result.exit_code == 0, result.output
+    assert "No detections match" in result.output
+
+
+def test_list_json_includes_engine_and_tactics(ws, catalogued):
+    data = json.loads(
+        CliRunner().invoke(detection_cli, ["list", "--report", "json"]).output
+    )
+    sigma = next(d for d in data if d["format"] == "sigma")
+    assert sigma["engine"] == "sigma"
+    assert sigma["tactics"]  # derived from T1218.005
+    spl = next(d for d in data if d["format"] == "spl")
+    assert spl["tactics"] == []  # no MITRE → no tactics
