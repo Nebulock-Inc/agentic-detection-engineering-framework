@@ -106,6 +106,10 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
   catalog; getting them into the user's rules repo is deferred (options weighed
   in `ISA.md`).
 - **Evolve data seam** — `adef detection stats --results` for FP/volume data.
+- **Data-model schemas (v2)** — declarations model the index namespace;
+  Splunk `tstats` rules query data-model fields (`Processes.process_name`)
+  that never appear in a `fieldsummary` export, so `schema check` union-misses
+  them (~39% of ESCU). Future seam: declare a data model as a source.
 
 ## Anti-goals (CI-enforced — will never ship)
 

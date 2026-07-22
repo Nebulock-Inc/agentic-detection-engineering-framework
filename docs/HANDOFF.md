@@ -76,6 +76,11 @@ consumed across both people's features.
    plugin are the launch story.
 
 ### Standing follow-ups (tracked, not scheduled)
+- **v2: data-model schemas.** `tstats`/datamodel rules use a third field
+  namespace (`Processes.process_name`) absent from index `fieldsummary`
+  exports — ~39% of ESCU's active detections. Declaring a data model as a
+  source is the seam (roadmap v0.2.0 has the sketch; ISA Decisions 2026-07-22
+  has the evidence).
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
 - `schema list` + per-detection `schema validate`; `detection search`.
 - Deploy-prep flow for SIEM-stored teams (prepare-don't-push + drift on export).
