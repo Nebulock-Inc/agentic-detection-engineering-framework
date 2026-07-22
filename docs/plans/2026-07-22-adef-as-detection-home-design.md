@@ -83,12 +83,13 @@ sync design open Q6 — authored records are simply excluded, same as §2.)
 
 The workspace is already markdown + YAML — a text tree git handles perfectly.
 
-- **Git-friendly workspace.** Document (and have `adef init` optionally
-  scaffold) `git init` on the *workspace* — `journals/` + `catalog/` +
-  `schema/` get version history, blame, and backup for free. This is the
-  Journey-B team's system-of-record durability, using the tool they'd use
-  anyway. No bespoke backup machinery (a snapshot command would just reinvent
-  git for a text tree).
+- **Git-friendly workspace.** Document `git init` on the *workspace* —
+  `journals/` + `catalog/` + `schema/` get version history, blame, and backup
+  for free. This is the Journey-B team's system-of-record durability, using the
+  tool they'd use anyway. **Docs only, no code:** native git covers it
+  end-to-end; an ADEF flag would just wrap three git commands (built and removed,
+  2026-07-22). No bespoke backup machinery either (a snapshot command would
+  reinvent git for a text tree).
 
 ### 5. Export / deployment — deliberately deferred
 
@@ -127,7 +128,12 @@ records, not purely a layer. That's the decision above, logged in `ISA.md`.
    `reconcile()` skips `authored` records so `adef sync` never orphans them;
    surfaced in `list --origin` / `show`. Proved E2E: an authored rule survives a
    `sync` against a repo that doesn't contain it.
-2. **Git-friendly workspace docs** + optional `adef init --git`.
+2. ✅ **Git-friendly workspace docs** (done 2026-07-22) — user guide
+   `docs/detection-home.md` covers the repo-less workflow: version the workspace
+   with **native git** (it's plain markdown + YAML), author here, sync-is-safe,
+   deploy by hand. An `adef init --git` convenience flag was built then removed
+   — it only wrapped `git init && git add && git commit`, which native git does
+   directly; the doc carries the value (ISA 2026-07-22).
 3. *(deferred — §5)* `adef export` + per-SIEM deployment docs. Not now.
 
 ## Open questions

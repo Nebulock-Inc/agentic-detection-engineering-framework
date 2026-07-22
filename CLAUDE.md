@@ -31,8 +31,11 @@ adef --help                         # List all commands
 ### Workspace Initialization
 ```bash
 adef init                           # Create workspace at ~/work/adef-workspace/
-adef init --path /custom/path       # Create workspace at custom location
+adef init /custom/path              # Create workspace at custom location
+adef init --interactive             # + prompt for SIEM/platform (drives schema recipes)
 ```
+Using ADEF as your detection home (no repo)? Version the workspace with native
+git — it's plain markdown + YAML. See `docs/detection-home.md`.
 
 ### Detection Lifecycle (FORGE)
 ```bash
