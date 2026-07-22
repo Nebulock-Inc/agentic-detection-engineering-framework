@@ -1,612 +1,69 @@
 # ADEF Feature-Branch Handoff — `feature/adef-v1-design`
 
-**Last updated:** 2026-07-21
-**Audience:** the two of us collaborating on this branch, and any future Claude
-Code session that needs cross-session context.
-**Keep this current.** When you finish a chunk of work on this branch, add a
-dated entry under "Session log" and update "Current state" + "Open threads".
+**Living pointer doc.** Where the branch stands, how to run it, and what's next.
+Keep it short — historical session logs are archived, not accumulated here.
 
-> This doc is the *branch collaboration* view. For the broader v0.1.0 inventory
-> see `docs/v0.1.0-current-state.md`; for the catalog spec see
-> `docs/plans/2026-07-15-catalog-design.md`; for schema see
-> `docs/superpowers/specs/2026-07-14-schema-storage-design.md`. The system of
-> record for decisions is `ISA.md`.
+- **What actually works:** `docs/STATUS.md`
+- **Why decisions were made (system of record):** `ISA.md` (`## Decisions` / `## Verification`)
+- **Command reference:** `CLAUDE.md`
+- **Hands-on walkthrough:** `docs/quickstart.md`
+- **Prior session logs:** `docs/archive/` (the full pre-2026-07-22 HANDOFF + dated session docs)
 
----
-
-## Who's building what
-
-| Area | Owner | Shortcut | Status |
-|------|-------|----------|--------|
-| Schema storage (`adef schema *`) | co-worker (Eric) | Epic 6996 / story 7396 | **reworked 2026-07-20**: declaration-driven (`ingest/lint/check/show` + scope); old rules-derived model removed |
-| Cataloging (`adef catalog`) | Jarrett | Epic 6996 / stories 7387, 7388, 7389 | shipped + extraction profiles, review_reasons, platform inheritance |
-| Browsing (`adef detection list/show`) | Jarrett | story 7393 | **shipped 2026-07-21** (`adef coverage` still deferred → coverage epic) |
-| Claude plugin (`claude-plugin/`) | Jarrett | — | shipped (catalog-onboarding skill + profile-author agent; repo doubles as marketplace) |
-
-Both features share one module — see "The shared seam" below. Coordinate before
-changing `adef/core/rule_discovery.py`, the catalog record shape, or the schema
-YAML shape, because each is consumed by the other's feature.
+**Last updated:** 2026-07-22.
 
 ---
 
 ## The environment (read this first if commands fail)
 
-- There is **no committed virtualenv**. This session created `.venv/` (gitignored)
-  from pyenv Python **3.11.11**, which is the only interpreter here with `adef`
-  editable-installed + `pytest`.
-- Run tests with: `.venv/bin/python -m pytest -q`
-- Run the CLI with: `.venv/bin/adef ...`
-- If `.venv` is missing, recreate: `~/.pyenv/versions/3.11.11/bin/python -m venv .venv && .venv/bin/pip install -e ".[dev]"`
-- `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra
-  (`anthropic`/`openai`) was **removed 2026-07-20** with the old schema model —
-  don't reference it. `jinja2` was also dropped (unused).
-
----
-
-## Using the test corpora (catalog + schema)
-
-Three open-source rule repos live under `test-rules/` (gitignored — not ours to
-commit). They're **samples for exercising the tool, not the spec.** If they're
-missing, re-clone:
-
-```bash
-mkdir -p test-rules && cd test-rules
-git clone --depth 1 https://github.com/splunk/security_content.git
-git clone --depth 1 https://github.com/panther-labs/panther-analysis.git
-# (osquery-configuration was dropped — not a good detection-repo example)
-```
-
-**Where the real rules live** (point `adef catalog` here, not at the repo root):
-- Splunk: `test-rules/security_content/detections/` — 2,124 ESCU detections
-  (`.yml` with a `search:` SPL query + metadata). `detections/deprecated/` exists.
-- Panther: `test-rules/panther-analysis/rules/` — 877 rules (`.yml` metadata +
-  sibling `.py` logic; catalogued as `recognized_unsupported`, query deferred).
-
-**Catalog a corpus** (workspace is any dir; use a scratch one outside the repo):
-
-```bash
-export ADEF_WORKSPACE=~/work/adef-catalog-demo
-mkdir -p "$ADEF_WORKSPACE/journals"
-
-# Dry-run first to see counts/formats without writing:
-.venv/bin/adef catalog test-rules/security_content/detections --dry-run
-
-# Real run → writes catalog/<platform>/D-XXXX-*.yml + INDEX.yml + journals:
-.venv/bin/adef catalog test-rules/security_content/detections
-.venv/bin/adef catalog test-rules/panther-analysis/rules
-```
-
-Expected: Splunk → 2,124 records (`format: splunk-escu`, inline `query:` SPL);
-Panther → 877 records (`format: panther`, `support: recognized_unsupported`,
-empty `query`). **Both flag `needs_review` heavily** — platform/MITRE inference is
-weak on these formats (Phase 2 work). Inspect a record:
-`cat "$ADEF_WORKSPACE"/catalog/*/D-0001-*.yml` and the reverse maps in
-`catalog/INDEX.yml` (`by_data_source`, `by_engine`, `by_status`).
-
-**Schema from the cataloged rules:**
-
-```bash
-# Rules-only schemas grouped by (data_source, query_language); Sigma/Panther
-# excluded from field extraction (no single query language we parse yet):
-.venv/bin/adef schema from-catalog
-ls "$ADEF_WORKSPACE"/schema/     # e.g. one per Splunk data_source
-```
-
-Note: schema-from-catalog produces **rules-only** schemas (`in_data: false`);
-populating data-side fields needs `adef schema update`, still a stub. Also expect
-`data_source` fragmentation on Splunk (free-text values like `AWS CloudTrail`
-vs `AWS CloudTrail ConsoleLogin` → many near-duplicate schemas) — the raw-literal
-tradeoff, now visible on real data.
-
-The `~/work/adef-catalog-demo/` workspace is scratch (outside the repo, not
-committed); delete anytime with `rm -rf ~/work/adef-catalog-demo`.
-
----
-
-## Current state (as of 2026-07-15)
-
-**Everything from the cataloging session is UNCOMMITTED** (working tree only).
-`git status` shows new files + modifications; nothing is staged/committed yet.
-
-Full suite: **106 passed** (73 pre-existing schema/core tests + 33 new).
-Anti-goal guards green: `test_schema_parity` (no `detections/` writes),
-`test_no_new_engine_types` (engine stays 4-value).
-
-### New files (catalog feature)
-- `adef/core/rule_discovery.py` — **shared** read-only repo walk. Public API:
-  `discover_rules()`, `sniff_format()`, `scan_rule_fields()`, `DiscoveredRule`.
-- `adef/core/catalog.py` — `CatalogRecord`, `Catalog` (`.write`, `.rebuild_index`,
-  `.next_id`), `record_from_discovered`, `catalog_dir`.
-- `adef/commands/catalog.py` — the `adef catalog <rule-root>` command.
-- `tests/test_rule_discovery.py`, `tests/test_catalog.py`,
-  `tests/test_catalog_command.py`, `tests/test_rule_field_scan.py`.
-- `docs/plans/2026-07-15-catalog-design.md` — the spec.
-
-### Modified files
-- `adef/commands/schema.py` — the stubbed rule scanner (`rule_fields = set()`) is
-  replaced with `scan_rule_fields(rule_root, query_language)`. **This closed the
-  schema feature's documented v1 gap.**
-- `adef/commands/init.py` — `adef init` now creates `catalog/`.
-- `pyproject.toml` — registered `catalog` entry point.
-- `AGENTS.md`, `CLAUDE.md`, `ISA.md`, `docs/development/schema-feature-progress.md`
-  — doc updates.
-- `.gitignore` — added `.venv/`.
-
----
-
-## What `adef catalog` does
-
-`adef catalog /path/to/rules` walks a detection repo read-only, recognizes each
-file's format by **content signature** (not just extension), and writes:
-- `catalog/<platform>/D-XXXX-<slug>.yml` — enrichment record referencing the
-  source via `rule_ref` (+ absolute `original_path`), with the detection logic
-  captured **inline** in `query` (block scalar; empty when logic is external like
-  Panther `.py`). Never modifies the source.
-- `catalog/INDEX.yml` — generated lookup: `detections` + `by_platform`/`by_tactic`
-  /`by_engine`/`by_status`/`by_data_source`.
-- a paired skeleton journal per rule (shared `D-XXXX` ID space with journals).
-
-**Formats recognized (as of Phase 1):** Sigma, Splunk ESCU YAML, Panther,
-raw `.sql`/`.kql`/`.cql`, Splunk `savedsearches.conf`. Recognition is
-general-shape-first ("has a query/logic + detection metadata"); vendor signatures
-are hints, not a closed list. Every file resolves to one of three outcomes via
-the `support` field: `supported` (parsed) · `recognized_unsupported` (format
-known, extractor pending, e.g. Panther) · `not_a_rule` (config/docs/pack/story —
-skipped, never silently dropped from the *rule* set).
-
-Rules whose platform/MITRE can't be inferred get `needs_review: true` (we never
-prompt mid-run — "infer and flag"; auto-detect only, no format question).
-`--dry-run` previews without writing.
-
-**Record fields worth knowing:**
-- `engine` vs `format` — `engine` stays in ADEF's internal 4-value taxonomy
-  (`sigma|sql|sch_sql|composite`) so `test_no_new_engine_types.py` keeps guarding
-  it; `format` carries the true source (`sigma|splunk-escu|panther|spl|kql|cql|sql`),
-  lossless. The 4 engines are an internal convention, not a limit on a user's repo.
-- `query` — the detection logic verbatim (added end of 2026-07-17).
-- `data_source` — raw table/index/logsource literal, verbatim (schema-from-catalog
-  grouping key).
-- `support` — the three-outcome enum above.
-
----
-
-## Strategic feedback & direction (captured 2026-07-17)
-
-> **Status: input, not decisions.** This section is external design feedback
-> plus the usage scenarios we want to support. It's captured verbatim-in-spirit
-> so we can make design decisions *from* it. Nothing here is committed until it's
-> agreed and logged in `ISA.md`. When we adopt a point, note the decision there
-> and link back to it here.
-
-### Why this matters
-
-The bar to judge v0.1 against: **what does a skeptical detection-engineering lead
-get in the first 15 minutes with zero manual journaling?** Right now the honest
-answer is "an index." The feedback below is mostly about turning that into
-"things I'd screenshot into Slack" — i.e. deriving value from what we can extract
-*without* human input, and never putting ADEF in the human write-path.
-
-### A. Design feedback on the current build
-
-The core bet — a read-only enrichment layer over wherever rules already live — is
-right; it's the only architecture that doesn't force migration, and the anti-goals
-(no vendor connectors, no new YAML format, no web UI) are correctly chosen. Where
-the current design works against adoption:
-
-1. **Cold-start value inversion (biggest risk).** `adef catalog` over 600 rules
-   yields 600 blank skeleton journals + an index — a graveyard, not a wow moment.
-   The compelling first-ten-minutes features are exactly the ones derivable with
-   zero human input: a **coverage summary**, a **MITRE Navigator layer export**, a
-   **duplicate / near-duplicate report** (we already have the similarity agent —
-   run it across the whole catalog, not just per-detection at Refine), and a
-   "what you have vs. don't" gap view. **`adef catalog` should end with a printed
-   report, not just files.** Navigator layers especially are community currency —
-   cheap to generate from what we already extract, instantly shareable.
-
-2. **Staleness will kill trust faster than any missing feature.** The catalog is a
-   snapshot; rule repos change weekly. Stale metadata is *worse* than none when an
-   AI assistant answers from it confidently ("you already have a detection for
-   that" — except it was deprecated last month). Even before full reconciliation:
-   store a **content hash of each source file at catalog time and flag mismatches
-   on read.** The assistant should know what it can't trust. (Expanded in section
-   B — this is the deferred `adef sync` thread, reframed.)
-
-3. **Journal placement fights the workflow.** DEs live in PRs. With journals in
-   `~/work/adef-workspace/` and rules in the repo, journal updates never appear in
-   review, never travel with the rule, and quietly stop happening. Consider a
-   **journals-in-repo mode** (`journals/` inside the rules repo, or sidecar `.md`
-   next to each rule) so rationale rides the same commit and reviewers see it. The
-   workspace default is fine for the SIEM-stored crowd; for git-based teams,
-   co-location is what makes the habit stick. **Incentive flip:** if the journal
-   ID lands in deployed alert metadata, *responders* start reading journals — and
-   journals that get read get written.
-
-4. **Schema-from-queries has a built-in blind spot.** Inferring schema from
-   existing rules only surfaces fields detections *already use* — precisely the
-   wrong dataset for suggesting *new* detections, since gaps live in fields nobody
-   queries yet. It's a fine bootstrap (and `--results -` sampling is the right
-   complement), but frame it that way and consider layering in **known mappings
-   (ECS, OCSF, Splunk CIM, Sysmon/Sentinel table docs)** so the schema knows what
-   *could* exist, not just what's used. (Directly relevant to the schema-from-
-   catalog work we just shipped, which is rules-only today.)
-
-5. **Evolve needs a data seam.** Tuning/deprecation recommendations without FP
-   rates, alert volumes, or outcome data are speculation. No connectors needed —
-   reuse the paste/import pattern from schema sampling:
-   `adef detection stats D-0042 --results alerts.csv`. That single seam makes the
-   whole back half of FORGE real.
-
-6. **The SIEM-only (less-mature) segment is where the pain is worst**, and we've
-   deferred export-from-tool. Cheap bridge: **documented export recipes per SIEM**
-   ("export Splunk `savedsearches.conf` like this, then `adef catalog`") — no
-   code, just docs; our `.conf` sniffer already handles the result.
-
-**Two smaller design notes (hardening):**
-- Sequential `D-XXXX` IDs will **merge-conflict** when two engineers catalog
-  concurrently.
-- `rule_ref` **breaks on file renames**. A content hash or the rule's own UUID as
-  a stable secondary key hardens both. (See the identity cascade in section B.)
-- `adef detection list/show` (deferred, story 7393) is **table stakes** — people
-  can't trust a catalog they can't browse.
-
-### B. Sync / staleness strategy (reframe of the deferred `adef sync`)
-
-The reframe: **ADEF must never require being in the write path.** The moment value
-depends on engineers remembering to run `adef` when they edit a rule, we've lost.
-Design ADEF to *observe* changes, not mediate them.
-
-- **Catalog = disposable index; journals = the only durable data.** Catalog
-  records are pure derivations of the source repo, so "staying current" is just
-  "re-derive and reconcile," not state management. Re-running `catalog` / `sync`
-  is cheap and safe. The only hard problem is **identity**: when a rule changes,
-  which `D-XXXX` is it?
-- **Identity matching cascade**, in order: (1) embedded rule UUID — Sigma rules
-  carry `id:`, a gift; primary key when present. (2) content hash match →
-  unchanged. (3) same path, new hash → modified. (4) fuzzy match on title/query
-  for renamed+edited rules → attach with `needs_review`. (5) no match → new rule.
-  (6) rule gone → mark journal **orphaned, never delete**. Same shape as
-  detection-as-code / Terraform drift handling.
-- **Lean on git — it solves most of this for free.** For repo-based teams, store
-  the **commit SHA at catalog time**; staleness is one comparison against HEAD,
-  and `git diff --name-status <sha>..HEAD` yields adds/modifies/deletes *and
-  renames* (git's rename detection kills matching problem #4). Hash-diffing is the
-  fallback for non-git sources (SIEM exports).
-- **Every read path is staleness-aware.** CLI and especially the MCP server check
-  the SHA per query and either auto-resync (cheap) or annotate: "catalog is 14
-  commits behind." A confident AI answer from a stale catalog is the trust-killer.
-- **Out-of-band edits become a feature.** When sync detects an external change,
-  auto-append a journal entry: timestamp, diff summary, old/new hash — and pull
-  the **git commit message(s) + PR reference** for that file into the entry.
-  Commit messages are the "why" corpus teams already have; harvesting them means
-  journals accumulate rationale even for teams who never manually journal. Later,
-  an agent can draft an Evolve-stage note from the diff + commit message for human
-  approval. Edits that bypass ADEF **don't lose value — ADEF becomes the change
-  historian regardless of where the change happened.**
-- **Close the loop with CI, not discipline.** One-step GitHub Action: `adef sync`
-  on merge to main (commit the updated catalog), or `--check` mode that comments
-  on PRs. Currency becomes automatic for the git crowd; the same seam works off a
-  scheduled export for SIEM-stored rules.
-
-Net effect: **humans are never the sync mechanism.** Journal entries are
-enrichment on top of an automatically-current baseline, not the baseline itself.
-
-### C. Usage scenarios we want to support
-
-**Option 1 — Rules repo (git-based teams):**
-1. Install ADEF into your repo; `adef catalog` + journal.
-2. Journals live in git alongside PRs — history/rationale travels with the rule.
-3. The pitch: having the history and reasoning *in git* is the value.
-
-**Option 2 — No repo, SIEM-stored rules:**
-1. Export rules from the SIEM → you now have a rules repo.
-2. `adef catalog` + journal it.
-3. CI/CD: TBD.
-4. Sync: TBD (this is where section B's export + scheduled-sync seam applies).
-
-These two shape the priorities: Option 1 wants **journals-in-repo + git-SHA sync +
-CI**; Option 2 wants **export recipes + the disposable-index/re-derive model**.
-
-### How this maps to what's already tracked
-
-- Cold-start report (A.1) is new — no story yet; touches `adef catalog` output.
-- Staleness/sync (A.2, B) = the deferred **`adef sync`** thread (Open threads #2).
-- Browse commands (A.7) = **story 7393** (deferred, called out as table stakes).
-- Schema blind spot (A.4) refines the **schema-from-catalog** work just shipped.
-- Evolve data seam (A.5) and SIEM export recipes (A.6) are new seams to scope.
-- ID collisions + `rule_ref` rename fragility (smaller notes) fold into B's
-  identity cascade.
-
----
-
-## Test corpora & what they revealed (2026-07-17)
-
-Three open-source rule repos are cloned under `test-rules/` (gitignored — not
-ours to commit) to exercise catalog/schema on real data:
-- `panther-labs/panther-analysis` — Panther detections
-- `palantir/osquery-configuration` — osquery configs
-- `splunk/security_content` — Splunk ESCU detections
-
-**Running `adef catalog --dry-run` against them exposed that our sniffer is
-effectively Sigma-shaped-YAML-only, and brittle on `.conf`:**
-
-| Repo | Result | Why |
-|------|--------|-----|
-| splunk/security_content | **0 found** (should be ~1000s) | Detections are `.yml` with a `search:` (SPL) + `mitre_attack_id` + `type` + `datamodel` — a **Splunk-YAML schema**, not Sigma. Our `.yml` sniff only matches Sigma (`detection:` + `logsource:`). |
-| panther-labs/panther-analysis | **0 found** | `.yml` metadata (`AnalysisType`, `RuleID`, `LogTypes`) paired with a sibling `.py` holding the logic — **Panther schema**. Not Sigma; logic isn't even in the YAML. |
-| palantir/osquery-configuration | **2 found, both false positives** | osquery `.conf` files matched our naive Splunk `.conf` sniff (just `[` + `search`). They're configs, not detections. |
-
-**Takeaways for the roadmap:**
-1. **Format coverage is the real gap, not polish.** "Multi-format" today means
-   "Sigma YAML + raw .sql/.kql/.cql + a fragile .conf guess." The rule formats
-   teams actually have (Splunk ESCU YAML, Panther YAML+py, Elastic, etc.) each
-   have their *own* schema — the sniffer needs per-vendor recognizers, not one
-   Sigma-YAML check. This is a pluggable-parser shape, not a one-off fix.
-2. **YAML is ambiguous by extension.** `.yml` can be Sigma, Splunk ESCU, Panther,
-   a pack/story file, or CI config. Sniffing must key on *content signature*
-   (which keys are present), and we need a "recognized-but-unsupported" outcome
-   distinct from "not a rule" so we can report coverage honestly.
-3. **`.conf` false positives** mean the sniffer needs a stronger signal than
-   `[` + `search` (osquery `.conf`, app `.conf`, and Splunk `savedsearches.conf`
-   all differ).
-4. **Logic-not-in-the-file** (Panther's sibling `.py`) breaks the assumption that
-   query text lives in the catalogued file — affects both `rule_ref` and schema
-   field extraction.
-
-Reproduce: `ADEF_WORKSPACE=$(mktemp -d) .venv/bin/adef catalog test-rules/<repo> --dry-run`
-
----
-
-## The shared seam (why the two features touch)
-
-The schema feature needs to scan a rule repo for field names; cataloging needs to
-walk the same repo. Both now go through **`adef/core/rule_discovery.py`** so there
-is one repo-walker, not two that drift.
-
-- `scan_rule_fields(rule_root, language)` → `set[str]` field names for one query
-  language. Used by `adef schema init --rule-root`.
-- `discover_rules(rule_root)` → `DiscoveredRule` per file (format, query_text,
-  best-effort platform/MITRE/kind). Used by `adef catalog`.
-
-Schema ignores Sigma (structured YAML, not a query language); catalog handles all
-formats. If you extend the walker, keep both callers working.
-
----
-
-## Open threads (decide before building)
-
-### 1. Generate schema *from the catalog* (✅ IMPLEMENTED 2026-07-16)
-Built as designed. `data_source` is now inferred at catalog time (raw literal)
-and carried on `CatalogRecord`; `adef schema from-catalog` groups by
-`(data_source, query_language)` into `schema/<source>.yml`, un-inferred rules
-pool by language. 119 tests pass. See ISA.md for the verification entry.
-Remaining follow-ups from this thread: (a) `adef schema update`/`rescan` are
-still stubs — from-catalog writes rules-only schemas (`in_data: false`), so
-piping data to populate types/populations depends on `update` being finished;
-(b) raw-literal fragmentation watch (below) if source naming proves inconsistent.
-
-<details><summary>Original decision (kept for context)</summary>
-Today `adef schema init` re-walks the raw repo and makes you pick one
-`query_language`. The catalog already inventoried those rules. The ask: drive
-schema generation from the catalog instead of a second raw walk.
-
-**The crux:** a schema is per-data-source (`schema/edr_process.yml`), but catalog
-records carry `format`, **not** which data source a rule queries. So catalog→schema
-needs a mapping.
-
-**RESOLVED 2026-07-16 (design agreed, not yet built).** Hybrid of the three
-options discussed (A: group-by-language, B: capture data_source at catalog time,
-C: named per-source). See `ISA.md` Decisions for the authoritative entry. Shape:
-
-- **Capture `data_source` on `CatalogRecord`** (B's mechanism), inferred during
-  discovery from the **raw table/index/logsource literal, verbatim — no
-  normalization**: Sigma `logsource` value, KQL lead table, SQL `FROM` table,
-  SPL `index=`. When no literal is resolvable, `data_source` stays empty and the
-  record keeps `needs_review: true` (reuses the existing flag).
-- **`adef schema from-catalog`** (new command) reads the catalog/INDEX and writes
-  one `schema/<data_source>.yml` per confident `(data_source, query_language)`
-  group. Rules with **no** inferred source **fall back to pool-by-language**
-  (`schema/sql.yml`, `schema/kql.yml`, …) — Option A as the catch-all, so fields
-  are never lost; the coarse bucket is the triage queue.
-
-**Why hybrid:** serves both drift detection (fields captured regardless of source)
-and authoring grounding (per-source accuracy where we're confident), while the
-un-inferrable tail degrades to coarse pooling instead of a false-confident schema.
-
-**Known tradeoff (flag for co-worker):** raw-literal source names can fragment the
-same logical source if the repo isn't consistent (`cloudtrail` vs `aws_cloudtrail`
-vs `CloudTrail` → three schema files). Accepted to avoid guessing. Upgrade path if
-messy: a normalization/alias map later; nothing here blocks it.
-
-**Status:** design locked in writing; **no code written yet.** Next step when
-building: add `data_source` to `CatalogRecord` + inference in `rule_discovery`,
-then the `from-catalog` command, TDD. Coordinate with co-worker before changing
-`CatalogRecord` since schema consumes it.
-
-</details>
-
-### 2. Deferred catalog work (not started)
-- `adef detection list/show` + `adef coverage` browsing (story 7393).
-- Reconciliation / `adef sync` when the source repo changes externally.
-- Export-from-tool ingestion (the second ingestion path; v1 is point-at-a-repo).
-- Slim-ADS enrichment fields (goal/strategy/blind_spots/…) filled via FORGE stages.
-
-### 3. Pre-existing lint (not ours, don't fix blindly)
-`ruff check adef/` reports ~11 errors in files we didn't author for this feature
-(`cli.py`, `data_sampler.py`, `journal.py`, `schema_tools.py`, and unused imports
-in `schema.py`). Out of scope for the catalog work; leave unless you own that file.
-
----
-
-## Session log
-
-### 2026-07-21 (later) — Browse + coverage commands to spec (Josh + Claude)
-
-Story 7393 / coverage epic — brought the three detection browsing & coverage
-commands into line with the reworked catalog + ATT&CK layer. Three small,
-per-command commits (`5490fd1`, `e1aabf2`, `0151ed1`), each with tests; ruff +
-mypy clean on touched files.
-
-- **`adef detection list` (`5490fd1`)** — added `--tactic` and `--engine`
-  filters (spec was platform/tactic/engine/status; platform+status already
-  existed). Tactics aren't stored on records — resolved from each detection's
-  technique IDs via `attack_reference()` (accepts shortname or display name,
-  parent-technique fallback). `--report json` gained `engine` + a derived
-  `tactics` array. Existing filters (`--rule-format`, `--stage`,
-  `--needs-review`) kept, not trimmed.
-- **`adef detection show` (`e1aabf2`)** — was already mostly aligned; added a
-  derived **tactics** line (same resolution as `list`) and a **`support`** line
-  shown only when `!= supported`, so recognized-but-unsupported records
-  (external logic / empty query, e.g. Panther) explain themselves instead of
-  silently dropping the Query section.
-- **`adef coverage` (`0151ed1`)** — it reported coverage *quality* but never
-  *gaps*. Added the denominator side: `build_coverage` now computes
-  `total_techniques` + per-tactic `tactic_totals` from the ATT&CK reference
-  (revoked/deprecated excluded), `Coverage.tactic_gaps()`, and
-  `uncovered_by_tactic()`. New default "Coverage gaps" section (N-of-M headline
-  + per-tactic covered/total, blind tactics flagged) and an opt-in `--gaps`
-  flag that lists uncovered technique IDs by tactic. Existing quality /
-  log-source / Navigator output untouched. Added the first CLI-level tests for
-  the command (`tests/test_coverage_command.py`).
-
-**Verification:** targeted suites green (`test_detection_browse.py` 13,
-coverage core+CLI 13); full suite **169 passed / 2 skipped** *minus four
-`sqlglot`-dependent modules that don't import in this WSL fallback interpreter
-(`rule_parser`, `declaration`, `recipes`, `review_reasons` — none touched
-here)* — re-run those via the `.venv`/CI before merge. Anti-goal guards green.
-
-**Small follow-up available (not done):** tactic-resolution logic is duplicated
-inline in `list` and `show` (~8 lines); could DRY into one helper as its own
-cleanup commit.
-
-### 2026-07-21 (later) — Line-ending normalization / `.gitattributes` (Josh + Claude)
-- Onboarded a WSL-on-Windows checkout. `git status` showed ~120 files "modified"
-  with equal insertions/deletions and nothing under `--ignore-all-space` — pure
-  CRLF churn, no content changes. Committed blobs were already LF (macOS/Linux
-  team baseline); the WSL working tree had picked up CRLF (`core.autocrlf`/`eol`
-  both unset, no `.gitattributes`).
-- Added `.gitattributes` with `* text=auto eol=lf` (+ defensive `binary` rules
-  for image/archive types; none tracked today). This pins LF as the single source
-  of truth in git **and** in every working tree, repo-wide, independent of anyone's
-  personal git config — so the lone Windows checkout aligns to the macOS majority
-  instead of the other way around.
-- Renormalized (`git add --renormalize .` → no real index changes, blobs already
-  LF) and physically rewrote the working tree to LF (delete tracked files +
-  `git checkout -- .`). Verified: 0 tracked files contain CR; `git status` clean.
-- No source/behavior changes; docs/tooling only.
-
-### 2026-07-20/21 — Profiles, plugin, schema rework, browse, examples (Jarrett + Claude)
-
-Fourteen commits, `b489c02..7116ed2`. The short version — full detail in
-`docs/2026-07-21-session-status.md`, `docs/2026-07-21-next-steps.md`, and the
-ISA decision entries for both dates (co-worker signed off 2026-07-21).
-
-- **Extraction profiles** (`adef/core/profiles.py`): in-house rule formats
-  taught with YAML (signature + dot-path map), user profiles checked before
-  built-ins; `adef catalog --report json` (UNCLAIMED clustering) /
-  `--profile` (per-field extraction-rate scoreboard) / `adef profile lint`.
-  Guide: `docs/creating-extraction-profiles.md`.
-- **Claude plugin** (`claude-plugin/` + root marketplace manifest):
-  catalog-onboarding skill + profile-author sub-agent + adef-mcp wiring.
-  NOTE: inactive until `/plugin install` — quickstart step 5b.
-- **Schema rework (team decision)**: rules demoted from schema *source* to
-  *consumer*. Users provide `adef-sources.yml` declarations → `schema
-  ingest/lint/check/show`; `schema_version: 2`, `declared|corrected`
-  provenance, drift on re-ingest; `scope` handles many-shapes-per-container
-  (most-specific-match, union on ties); SPL `sourcetype=` shape literals.
-  Old model **deleted** (init wizard, from-catalog, data_sampler, llm_client,
-  core/schema.py, `.[llm]` extra). This supersedes the
-  `docs/superpowers/specs/2026-07-14-schema-storage-design.md` spec.
-- **Browse shipped** (story 7393): `adef detection list` (filters +
-  `--report json`) / `show`.
-- **needs_review rework**: `review_reasons`
-  (`malformed|external_logic|no_platform|no_mitre`); structural reasons drive
-  warnings; `no_mitre` = quiet enrichment queue; **platform inherited from
-  declared schemas at catalog time**. Demo went 8/9 flagged → 1/9.
-- **E2E-driven fixes**: rule-root-relative `rule_ref`; data_source fallback
-  for profile rules (+ SQL comment stripping, reserved-word skip);
-  `query_language` persisted on records (check now covers ESCU + profile
-  rules); INDEX `by_tactic` → `by_technique` (honesty rename).
-- **Examples + docs**: `examples/` (demo rules, thrunt declaration from a
-  real Splunk fieldsummary export, fake in-house format + its profile);
-  `docs/quickstart.md` (source install — **ADEF is not on PyPI**; every demo
-  command sandbox-executed); `docs/declaring-data-sources.md`; workspace
-  operator `AGENTS.md` scaffolded by `adef init` (package data,
-  `--force` refreshes).
-- **MITRE/coverage**: deferred by decision — sequenced in next-steps §4
-  (ATT&CK reference layer first, then mitre-tagger, then coverage report).
-- **OPEN (the one blocker)**: local `pytest` / `ruff` / `mypy` have never run
-  on any of this — sandbox lacks the tooling; ~30 new tests
-  (test_profiles, test_profile_cli, test_declaration, test_detection_browse,
-  test_review_reasons) await their first real run. Everything is
-  sandbox-smoke-verified + exact corpora regression (Splunk 2124 /
-  Panther 877 / osquery 0).
-
-### 2026-07-17 (end of day) — Inline query field + readable YAML (Jarrett + Claude)
-- Jarrett spotted the catalog record had **no query** — discovery extracted it,
-  but `record_from_discovered`/`to_yaml_dict` dropped it. Real gap.
-- Added `query` to `CatalogRecord` + YAML, populated from `DiscoveredRule.query_text`
-  (empty for external logic like Panther `.py`). Records are now self-contained
-  *and* traceable (kept `rule_ref`/`original_path`). Matches the architecture-doc
-  record shape.
-- Multi-line queries render as literal block scalars (`query: |`) via a
-  catalog-scoped YAML dumper — SPL reads like SPL. Scoped so it doesn't touch the
-  schema feature's YAML.
-- 141 tests pass (+2). Guards green, ruff clean.
-- **STOPPING POINT for this session** — uncommitted work to commit + push:
-  inline-query change (`catalog.py`, `test_catalog.py`), doc updates (this file,
-  `docs/plans/2026-07-15-catalog-design.md`, ISA.md). Next up (Phase 2 candidates):
-  platform inference (everything's `multi-platform`/`needs_review`) and
-  `data_source` normalization (fragmentation on Splunk).
-
-### 2026-07-17 (later still) — Format-detection Phase 1 built (Jarrett + Claude)
-- Implemented the recognizer registry + three-outcome `support` model + Splunk
-  ESCU and Panther recognizers/extractors. `discover_rules` now uses `recognize()`
-  and no longer silently drops recognized-but-unsupported rules.
-- **Real-corpus result: Splunk `detections/` 0→2124, Panther `rules/` 0→877.**
-- Full suite **139 passed** (+20). Guards green, ruff clean. `support` on
-  `CatalogRecord` + YAML.
-- Follow-up for Phase 2: Splunk platform inference is weak (most rules flag
-  `needs_review` — no OS platform on a tstats query). Metadata-extraction polish.
-
-### 2026-07-17 (later) — Test corpora + format-detection plan (Jarrett + Claude)
-- Cloned 3 open-source rule repos into `test-rules/` (gitignored). `adef catalog`
-  found ~0 in Splunk/Panther and false-positived on osquery → confirmed the
-  sniffer is Sigma-shaped-YAML-only. Findings in "Test corpora" section above.
-- Direction set (Jarrett): **format-agnostic detection is the foundation**;
-  correct the Sigma bias; extension ≠ format.
-- Wrote `docs/plans/2026-07-17-format-detection-plan.md` — content-signature
-  recognizer registry, recognize-all/parse-incrementally, phased (framework →
-  Splunk ESCU → Panther). **Proposed, awaiting co-worker review before building**
-  (reshapes shared `rule_discovery` + likely `CatalogRecord`).
-
-### 2026-07-17 — Strategic feedback captured (Jarrett + Claude)
-- Recorded external design feedback + sync strategy + usage scenarios (Option 1
-  repo / Option 2 SIEM) in the new "Strategic feedback & direction" section above,
-  and a "Known adoption risks" summary in `docs/v0.1.0-current-state.md`.
-- Framed as **input, not decisions** — drives upcoming design work; nothing in
-  `ISA.md` yet. Next: triage which points become decisions + first work items
-  (cold-start report, git-SHA sync + identity cascade, journals-in-repo mode).
-
-### 2026-07-16 (later) — Schema-from-catalog implemented (Jarrett + Claude)
-- Built the agreed design TDD: `data_source` inference in `rule_discovery`,
-  carried onto `CatalogRecord` (+ `by_data_source` in INDEX), new
-  `adef schema from-catalog` command (group by source, pool-by-language fallback,
-  Sigma excluded).
-- Full suite **119 passed** (was 106). Guards green. End-to-end verified.
-- Follow-up: `adef schema update`/`rescan` still stubs → from-catalog writes
-  rules-only schemas until `update` populates data fields.
-
-### 2026-07-16 — Schema-from-catalog design agreed (Jarrett + Claude)
-- Resolved open thread #1. Hybrid design (capture raw-literal `data_source` at
-  catalog time; `adef schema from-catalog` groups by `(data_source, language)`;
-  un-inferred rules pool by language as the fallback). Logged in `ISA.md`.
-- No code yet — awaiting co-worker sign-off on the `CatalogRecord` change and the
-  raw-literal fragmentation tradeoff.
-
-### 2026-07-15 — Cataloging v1 (Jarrett + Claude)
-- Built `adef catalog` (discovery → catalog records + INDEX + skeleton journals).
-- Introduced `adef/core/rule_discovery.py` as the shared repo-walk; wired it into
-  `adef schema init`, closing schema's stubbed-scanner gap.
-- Kept `engine` in the internal 4-set; added lossless `format` field.
-- 106 tests pass. Work is uncommitted on `feature/adef-v1-design`.
-- Paused on "schema from catalog" (open thread #1) pending co-worker alignment.
+- No committed virtualenv. `.venv/` (gitignored) is built from pyenv Python
+  **3.11.11** — the only interpreter with `adef` editable-installed + `pytest`.
+- Run tests: `.venv/bin/python -m pytest -q`
+- Run the CLI: `.venv/bin/adef ...`
+- Recreate `.venv` if missing:
+  `~/.pyenv/versions/3.11.11/bin/python -m venv .venv && .venv/bin/pip install -e ".[dev]"`
+  (or `scripts/fresh-install.sh`).
+- `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra and `jinja2`
+  were removed 2026-07-20 — don't reference them.
+- **Before pushing:** run the full gate (`pytest` / `ruff check adef/` /
+  `mypy adef/`). Currently green: 257 passed, ruff + mypy clean.
+
+## Who's building what
+
+| Area | Owner | Status |
+|------|-------|--------|
+| Schema (`adef schema *`) — declaration-driven | Eric | shipped: ingest/lint/check/show/recipe/reshape |
+| Cataloging (`adef catalog`) + profiles | Jarrett | shipped |
+| Browse (`adef detection list/show`) | Jarrett | shipped |
+| Coverage epic (attack layer / mitre-tagger / coverage report + gaps) | Jarrett | shipped |
+| Authoring (`detection new --source` + detection-author skill) | Jarrett | shipped |
+| Claude plugin (`claude-plugin/`) | shared | shipped (4 skills + profile-author agent) |
+
+**Shared seam — coordinate before changing:** `adef/core/rule_discovery.py`, the
+catalog record shape (`adef/core/catalog.py`), or the schema YAML shape — each is
+consumed across both people's features.
+
+## Open threads (roadmap)
+
+1. **`adef sync` design doc** — the biggest unaddressed trust risk: stale
+   catalogs. Designed verbally: identity cascade (rule UUID → content hash →
+   path → fuzzy), git-SHA diffing with rename detection, staleness-aware reads
+   (CLI + MCP annotate or auto-resync), auto-journaling of out-of-band edits
+   with harvested commit messages. Now more pressing: authored records +
+   MITRE-tag enrichment live in the catalog a re-catalog would clobber. Write
+   the doc before v0.1.0; implementation can follow.
+2. **Repo write-back for authored rules** — authored rules land in the ADEF
+   catalog only; getting them into the user's repo is deferred (PR / branch /
+   emit-and-copy options weighed in `ISA.md`).
+3. **Benchmark corpus in CI** — recognition/extraction rates per public repo
+   (SigmaHQ, security_content, panther-analysis, Sentinel, elastic) as tracked
+   numbers — the objective merge gate for community profiles.
+4. **v0.1.0 release framing** — gap to releasable is small: a README pass +
+   confirming `examples/` + the plugin are the launch story.
+
+### Standing follow-ups (tracked, not scheduled)
+- Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
+- `schema list` + per-detection `schema validate`; `detection search`.
+- Deploy-prep flow for SIEM-stored teams (prepare-don't-push + drift on export).
+- Shape-literal extractors beyond SPL `sourcetype=` (CQL `#event_simpleName`,
+  Elastic `event.dataset`) — upgrades a platform from union- to exact-matching
+  in `schema check`.
