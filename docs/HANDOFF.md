@@ -51,9 +51,15 @@ consumed across both people's features.
    the wipe-on-recatalog risk. Remaining follow-ups: fuzzy rename-match (step 4;
    UUID-less renames fall to `new` today — safe), staleness-aware reads (CLI/MCP
    "N commits behind"), richer commit-message harvest, CI action.
-2. **Repo write-back for authored rules** — authored rules land in the ADEF
-   catalog only; getting them into the user's repo is deferred (PR / branch /
-   emit-and-copy options weighed in `ISA.md`).
+2. **ADEF as a detection home (repo-less teams)** — **design doc written:**
+   `docs/plans/2026-07-22-adef-as-detection-home-design.md`. Decision: ADEF
+   becomes a system of record for detections *authored* in it. Next (sequenced
+   in the doc): (1) **safety fix** — `origin: authored|catalogued` marker + sync
+   must skip authored records (today `sync` would orphan a repo-less team's own
+   detections — a live data bug); (2) git-friendly workspace docs. `adef export`
+   (records → rule files) **deferred** — speculative + hard to do right until
+   teams actually author in ADEF. Read-only invariant over the *rule repo*
+   unchanged.
 3. **Benchmark corpus in CI** — recognition/extraction rates per public repo
    (SigmaHQ, security_content, panther-analysis, Sentinel, elastic) as tracked
    numbers — the objective merge gate for community profiles.
