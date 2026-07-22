@@ -28,10 +28,6 @@ coverage.xml
 # Third-party rule corpora for local testing of catalog/schema (not ours to commit)
 /test-rules/
 
-# Real SIEM field exports (Splunk fieldsummary CSVs etc.) for local testing of
-# schema reshape/ingest — contain harvested environment values, never commit
-/test-exports/
-
 # Local workspace artifacts users may create at the root (root-anchored only)
 /journals/
 /config/
