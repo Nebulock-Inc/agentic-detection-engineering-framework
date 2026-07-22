@@ -86,6 +86,9 @@ class CatalogRecord:
     kind: str              # atomic | correlation | composite
     engine: str            # sigma | sql | sch_sql | composite (internal taxonomy)
     format: str            # sigma | spl | kql | cql | sql | <profile name> (true source format)
+    rule_uuid: str = ""    # embedded rule UUID (Sigma `id:`, profile uuid) — the
+                           # primary identity key for `adef sync` reconciliation
+                           # (survives file renames); empty when the format has none.
     query_language: str = ""  # language of `query` (spl|kql|cql|sql) — drives `schema check`
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
@@ -108,6 +111,7 @@ class CatalogRecord:
             "title": self.title,
             "rule_ref": self.rule_ref,
             "original_path": self.original_path,
+            "rule_uuid": self.rule_uuid,
             "query": self.query,
             "platform": self.platform,
             "kind": self.kind,
@@ -169,6 +173,7 @@ def record_from_discovered(
         title=title,
         rule_ref=rule_ref,
         original_path=str(abs_path),
+        rule_uuid=disc.rule_uuid,
         query=disc.query_text,
         platform=platform,
         kind=disc.kind,

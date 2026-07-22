@@ -75,6 +75,25 @@ def test_record_from_discovered_maps_fields(rule_repo, workspace):
     assert rec.status == "draft"
     assert rec.stage == "find"
     assert rec.needs_review is False
+    # Sigma `id:` is persisted as the identity key for `adef sync` reconciliation.
+    assert rec.rule_uuid == "03cc0c25-389f-4bf8-b48d-11878079f1ca"
+
+
+def test_rule_uuid_round_trips_through_yaml(rule_repo, workspace):
+    """The embedded UUID survives serialization (sync's primary identity key)."""
+    from adef.core.rule_discovery import discover_rules
+
+    disc = next(iter(discover_rules(rule_repo)))
+    rec = record_from_discovered("D-0001", disc, workspace=workspace)
+    assert rec.to_yaml_dict()["rule_uuid"] == "03cc0c25-389f-4bf8-b48d-11878079f1ca"
+    # A format with no embedded UUID stays empty, not None.
+    from adef.core.catalog import CatalogRecord
+
+    bare = CatalogRecord(
+        id="D-2", title="t", rule_ref="r", original_path="/p",
+        platform="x", kind="atomic", engine="sql", format="spl",
+    )
+    assert bare.to_yaml_dict()["rule_uuid"] == ""
 
 
 def test_record_carries_data_source(rule_repo, workspace):
