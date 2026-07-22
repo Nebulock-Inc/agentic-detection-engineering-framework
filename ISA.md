@@ -364,6 +364,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 (populated at VERIFY — evidence per ISC)
 
+- 2026-07-22 — **`schema check` union collapse (next-steps §6)**. `missing` keyed by matched-source group tuple instead of fanned out per source; union miss = one finding for the group in terminal ("missing from all N union-matched schemas") and JSON (group key `"a, b"`). Single-match keys unchanged — existing scope tests pass untouched. New regression test `test_check_union_missing_field_is_one_finding`. Demo verified E2E (fresh workspace → ingest thrunt declaration → catalog demo-rules → check): `NotARealField` 14 rows → 1 group row. Suite **255 passed / 2 skipped**; ruff (adef/ + tests/) and mypy clean. Side finding while verifying, tracked separately: SPL extractor emits `| fields a b c` as one space-joined token (`src_ip dest_ip dest_port` as a single "field" on D-0002). Also hit ISA risk #1 live: stale egg-info masked the catalog/attack/coverage/profile entry points until `pip install -e .` was re-run.
+
 - 2026-07-22 — **`adef schema reshape` (declaration-author, next-steps §5)**. Evidence:
   - `adef/core/reshape.py` (parsers: Splunk `fieldsummary` CSV, Sentinel `getschema` CSV, Elastic `_mapping` JSON, plain-text fallback) + `reshape` subcommand in `adef/commands/schema.py`.
   - `tests/test_reshape.py` — **22 tests**, one per rule behavior (internals dropped+reported, all-internals error, canonical-by-count alias folding, enum caps by cardinality and value length, int/hex/float/type-hint inference, mixed-shape refusal with guidance, single-sourcetype → `scope:`) + parser tests + CLI (report output, mixed-shape exit≠0, config platform fallback, no-platform error) + the invariant *reshape output always lints clean*.

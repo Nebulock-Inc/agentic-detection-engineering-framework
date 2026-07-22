@@ -311,6 +311,22 @@ def test_check_container_only_rule_matches_union(ws, tmp_path):
     assert "index" not in all_missing          # meta pseudo-field ignored
 
 
+def test_check_union_missing_field_is_one_finding(ws, tmp_path):
+    """A field missing from a union is reported once, against the group —
+    not duplicated under every matched source (next-steps §6)."""
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(tmp_path, "union", "index=wineventlog BogusField=1")
+    report = _check_report(ws)
+    entries = [
+        (group, fields)
+        for group, fields in report["missing_from_schema"].items()
+        if "BogusField" in fields
+    ]
+    assert len(entries) == 1
+    group, _ = entries[0]
+    assert group == "sysmon_operational, windows_dns"
+
+
 def test_check_shape_pinned_rule_narrows(ws, tmp_path):
     """A rule that pins sourcetype= matches only that source — a field from
     the sibling shape is now a finding (most-specific match wins)."""

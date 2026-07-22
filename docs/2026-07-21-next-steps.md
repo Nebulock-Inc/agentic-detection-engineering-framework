@@ -69,9 +69,12 @@ Ordered by what unblocks what.
    `schema-declaration` skill drives the command and walks the human through
    its transformation report. No separate sub-agent — the input is one export
    file, not a 50-file sampling job.
-6. **`schema check` report polish.** Union-matched rules attribute a missing
+6. ✅ *(done 2026-07-22)* **`schema check` report polish.** Union-matched rules attribute a missing
    field to every matched source (`NotARealField` × 14 rows in the demo).
-   Correct but noisy — collapse union findings into one row.
+   Correct but noisy — collapse union findings into one row. Done: `missing`
+   is keyed by the matched-source group; a union miss is one finding against
+   the whole group ("rule fields missing from all N union-matched schemas"),
+   in both terminal and JSON output. Demo verified: 14 rows → 1.
 
 ## Strategic — design before build
 

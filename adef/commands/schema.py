@@ -181,7 +181,8 @@ def check(workspace: Path | None, report_format: str | None):
     shape literals like SPL ``sourcetype=``). **Most-specific match wins**:
     sources matching the most literals are kept; ties keep all (the union) —
     correct, because a query filtered only by container could see any of
-    those event shapes.
+    those event shapes. A field missing from a union is one finding reported
+    against the whole group, not one row per matched source.
     """
     from adef.core.catalog import Catalog
 
@@ -203,7 +204,9 @@ def check(workspace: Path | None, report_format: str | None):
             for literal in address_literals(data):
                 addressed_by.setdefault(literal, set()).add(name)
 
-    missing: dict[str, dict[str, list[str]]] = {}  # source -> field -> [rule ids]
+    # matched-source group -> field -> [rule ids]. Group of 1 = a normal match;
+    # >1 = a union tie — one finding for the group, not one row per source.
+    missing: dict[tuple[str, ...], dict[str, list[str]]] = {}
     used: dict[str, set[str]] = {s: set() for s in schemas}
     rules_checked = 0
     for det_id, _path, data in cat.iter_records():
@@ -236,8 +239,7 @@ def check(workspace: Path | None, report_format: str | None):
                     if f in schemas[source]:
                         used[source].add(f)
             else:
-                for source in matched:
-                    missing.setdefault(source, {}).setdefault(f, []).append(det_id)
+                missing.setdefault(tuple(matched), {}).setdefault(f, []).append(det_id)
 
     unused = {
         source: sorted(declared_fields[source] - used[source])
@@ -252,8 +254,8 @@ def check(workspace: Path | None, report_format: str | None):
                     "rules_checked": rules_checked,
                     "sources_with_schemas": sorted(schemas),
                     "missing_from_schema": {
-                        s: {f: ids for f, ids in sorted(fields.items())}
-                        for s, fields in sorted(missing.items())
+                        ", ".join(group): {f: ids for f, ids in sorted(fields.items())}
+                        for group, fields in sorted(missing.items())
                     },
                     "unused_by_rules": unused,
                 },
@@ -275,8 +277,14 @@ def check(workspace: Path | None, report_format: str | None):
     if not missing and not unused:
         console.print("[green]No findings.[/green]")
         return
-    for source, fields in sorted(missing.items()):
-        console.print(f"[bold]{source}[/bold] — rule fields missing from schema:")
+    for group, fields in sorted(missing.items()):
+        label = ", ".join(group)
+        suffix = (
+            f" — rule fields missing from all {len(group)} union-matched schemas:"
+            if len(group) > 1
+            else " — rule fields missing from schema:"
+        )
+        console.print(f"[bold]{label}[/bold]{suffix}")
         for fname, ids in sorted(fields.items()):
             console.print(f"  [yellow]?[/yellow] {fname}  (used by {', '.join(sorted(ids))})")
     for source, unused_fields in sorted(unused.items()):

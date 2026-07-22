@@ -83,8 +83,11 @@ export → reshape → lint → ingest. Suite at 254 passed / 2 skipped.
 
 Coverage epic ✅ shipped (ATT&CK reference layer → `mitre-tagger` →
 coverage report + Navigator export); `declaration-author` ✅ shipped as
-`adef schema reshape` (§5). Remaining: check-report union collapse (§6),
-`adef sync` design doc (§7), v0.1.0 release framing (§9).
+`adef schema reshape` (§5); check-report union collapse ✅ shipped (§6,
+2026-07-22 — demo's `NotARealField` × 14 rows now one group finding).
+Remaining: `adef sync` design doc (§7), v0.1.0 release framing (§9).
+Known small bug spotted in the demo output, tracked separately: the SPL
+field extractor emits `| fields a b c` lists as one space-joined token.
 
 ## Field-testing notes (Eric)
 
