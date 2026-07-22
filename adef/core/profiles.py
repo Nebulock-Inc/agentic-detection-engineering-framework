@@ -34,7 +34,7 @@ PROFILE_SCHEMA_VERSION = 1
 # Containers the schema admits. v1 implements yaml/json; the rest are
 # schema-valid but rejected by lint until their parsers exist.
 CONTAINERS = ("yaml", "json", "toml", "conf", "raw")
-IMPLEMENTED_CONTAINERS = ("yaml", "json")
+IMPLEMENTED_CONTAINERS = ("yaml", "json", "toml")  # toml needs Python 3.11+ (tomllib)
 
 QUERY_LANGUAGES = ("spl", "kql", "cql", "sql", "none")
 
@@ -220,7 +220,17 @@ def parse_container(container: str, text: str) -> list[dict]:
         except (ValueError, TypeError):
             return []
         return [doc] if isinstance(doc, dict) else []
-    return []  # conf / toml / raw / ndjson: later phases
+    if container == "toml":
+        try:
+            import tomllib  # stdlib on 3.11+; absent on 3.10 → skip gracefully
+        except ImportError:
+            return []
+        try:
+            doc = tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return []
+        return [doc] if isinstance(doc, dict) else []
+    return []  # conf / raw / ndjson: later phases
 
 
 # --------------------------------------------------------------------------- #

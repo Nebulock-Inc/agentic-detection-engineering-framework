@@ -112,14 +112,17 @@ so the fix differs.
 
 ## Priority-ordered plan (grounded in the three categories)
 
-**P1 — Container support (unlocks the biggest dark corpora).** Implement the
-already-declared-but-unbuilt `toml` container in profiles (`IMPLEMENTED_CONTAINERS`
-today = yaml/json). That alone makes **Elastic's 2,015 TOML rules** profileable —
-their fields (`rule.name`, `rule.query`, `rule.threat[].technique`) are clean
-paths once the container parses. `conf` (SPL savedsearches) is the next
-container. YARA-L (Chronicle) is a *DSL*, not a data format — genuinely harder;
-defer or treat as a specialized built-in. **This is the highest-leverage work:
-one container parser unlocks a whole major repo.**
+**P1 — Container support (unlocks the biggest dark corpora). ✅ DONE 2026-07-22
+(TOML).** Implemented the `toml` container in profiles via stdlib `tomllib`
+(3.11+; graceful skip on 3.10 — the file simply isn't claimed). Proven: with
+`examples/profiles/elastic-detection-rules.yml`, **Elastic went from 2,017
+not_a_rule (100% dark) → 2,015 claimed** — title 100%, uuid 100%, mitre 94%,
+query 94% — via a *user profile*, no built-in. Their fields (`rule.name`,
+`rule.query`, `rule.threat[].technique[].id`) are clean paths once TOML parses.
+`conf` (SPL savedsearches) is the next container, still unimplemented. YARA-L
+(Chronicle) is a *DSL*, not a data format — genuinely harder; defer or treat as
+a specialized built-in. **This validated the whole thesis: profiles are the
+scaling mechanism; they just needed the container.**
 
 **P2 — Profiles catch unknown-but-YAML formats (cheap).** Azure-Sentinel (483
 unclaimed) is already YAML with clean top-level fields — a profile with today's

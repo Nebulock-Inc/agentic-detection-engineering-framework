@@ -93,7 +93,7 @@ def test_lint_accepts_valid_profile():
         (lambda d: d.pop("name"), "name"),
         (lambda d: d.update(version=2), "version"),
         (lambda d: d["map"].pop("query"), "map.query"),
-        (lambda d: d["signature"].update(container="toml"), "not implemented"),
+        (lambda d: d["signature"].update(container="conf"), "not implemented"),
         (lambda d: d["signature"].update(container="pdf"), "container"),
         (lambda d: d.update(query_language="powershell"), "query_language"),
         (lambda d: d["map"].update(title="$..name"), "dot-path"),
@@ -156,6 +156,20 @@ def test_parse_container_returns_document_list():
     assert parse_container("json", '{"a": 1}') == [{"a": 1}]
     assert parse_container("yaml", "- just\n- a list\n") == []
     assert parse_container("conf", "[stanza]\nsearch = x") == []  # later phase
+
+
+def test_parse_container_toml():
+    import sys
+
+    import pytest
+
+    if sys.version_info < (3, 11):
+        pytest.skip("tomllib requires Python 3.11+")
+    # Elastic-shaped TOML: nested tables become nested dicts.
+    doc = parse_container("toml", '[rule]\nname = "X"\nquery = "process where true"\n')
+    assert doc == [{"rule": {"name": "X", "query": "process where true"}}]
+    # Invalid TOML → [] (profile simply doesn't claim the file).
+    assert parse_container("toml", "this is = not [valid toml") == []
 
 
 # --------------------------------------------------------------------------- #

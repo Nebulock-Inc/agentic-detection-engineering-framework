@@ -35,7 +35,7 @@ Open two or three sample files from one cluster and fill in the map:
 name: nebulock-scheduled-sql          # kebab-case, unique
 version: 1
 signature:                            # how ADEF recognizes the format
-  container: yaml                     # yaml | json (v1)
+  container: yaml                     # yaml | json | toml (toml needs Python 3.11+)
   all_keys: [query, schedule]         # top-level keys EVERY file of this format has
   none_keys: [composite_of]           # keys that identify near-misses to EXCLUDE
   extension: [.yml, .yaml]            # hint only
@@ -102,7 +102,14 @@ the unclaimed files, has the profile-author sub-agent draft profiles from
 samples, validates them with the same scoreboard, and asks you to approve
 before installing. Same artifact, no hand-authoring.
 
-## Worked example
+## Worked examples
+
+- `examples/profiles/nebulock-hunt.yml` — a YAML in-house format.
+- `examples/profiles/elastic-detection-rules.yml` — a **TOML** format
+  (`elastic/detection-rules`). Shows a non-YAML container + nested-table/array
+  paths (`rule.threat[].technique[].id`); validated at 2015/2015 rules claimed.
+  TOML support needs Python 3.11+ (stdlib `tomllib`); on 3.10 a TOML profile
+  simply claims nothing.
 
 The repo's Panther corpus has 95 scheduled-query files no built-in claims —
 two formats (`Query:` vs `SnowflakeQuery:`), so two profiles. See

@@ -1,0 +1,24 @@
+# Extraction profile for elastic/detection-rules (TOML rules).
+#
+# A worked example of a **TOML-container** profile (container support added
+# 2026-07-22). Elastic's rules are .toml, not YAML — a built-in extractor can't
+# read them, but a user profile can once the container parses. Validated against
+# the real repo: 2015/2015 rules claimed — title 100%, uuid 100%, mitre 94%,
+# query 94%. See docs/creating-extraction-profiles.md.
+#
+# Usage:  adef catalog /path/to/detection-rules/rules --profile examples/profiles/elastic-detection-rules.yml
+name: elastic-detection-rules
+version: 1
+signature:
+  container: toml            # requires Python 3.11+ (stdlib tomllib)
+  all_keys: [rule]           # every Elastic rule has a [rule] table
+  extension: [.toml]
+query_language: kql          # Elastic uses kql/eql/lucene; kql is the closest we model
+map:
+  title: rule.name
+  query: rule.query
+  uuid: rule.rule_id
+  description: rule.description
+  mitre: rule.threat[].technique[].id   # nested tables + arrays — `[]` iterates
+platform:
+  path: rule.language        # eql | kql | lucene — the query language, as a stand-in
