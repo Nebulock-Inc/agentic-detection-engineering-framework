@@ -34,6 +34,7 @@ from adef.core.declaration import (
     read_schema_v2,
 )
 from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
+from adef.core.reshape import ReshapeError, reshape_export
 from adef.core.rule_discovery import shape_literals
 from adef.core.rule_parser import (
     extract_cql_fields,
@@ -379,3 +380,62 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
         click.echo(json.dumps(output, indent=2))
     else:
         console.print(render_recipe_markdown(recipe_obj))
+
+
+@schema.command()
+@click.argument("export_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--platform", default=None, help="Export format: splunk, sentinel, elastic (others: one field per line).")
+@click.option("--source", "source_name", default=None, help="Declared source name (default: derived from sourcetype/filename).")
+@click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Output declaration path (default: <source>-sources.yml).")
+def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None):
+    """Reshape a raw SIEM field export into a draft declaration.
+
+    Applies the five reshape rules (internals filter, case-dupes to aliases,
+    capped enum harvesting, type inference, mixed-shape guard) and prints a
+    transformation report — approve the transformations, then
+    `adef schema ingest` the result. Run `adef schema recipe` first for the
+    per-SIEM export command.
+    """
+    if not platform:
+        workspace_path = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
+        config_file = workspace_path / "config" / ".adefconfig.yaml"
+        if config_file.exists():
+            try:
+                platform = (yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}).get("platform")
+            except (OSError, yaml.YAMLError):
+                pass
+    if not platform:
+        raise click.ClickException(
+            "No platform given or configured — pass --platform, or run "
+            "`adef init --interactive`."
+        )
+
+    try:
+        result = reshape_export(export_file, platform, source_name)
+    except ReshapeError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    errors, warnings = lint_declaration_dict(result.declaration)
+    if errors:  # reshape output must always lint clean — this is a bug, not user error
+        raise click.ClickException("reshape produced an invalid declaration: " + "; ".join(errors))
+
+    src = result.declaration["sources"][0]
+    out_path = output or Path(f"{src['name']}-sources.yml")
+    out_path.write_text(
+        yaml.safe_dump(result.declaration, default_flow_style=False, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    report = result.report
+    console.print(f"[green]✓[/green] Wrote [bold]{out_path}[/bold] — {len(src['fields'])} fields declared\n")
+    console.print("[bold]Transformation report[/bold] (approve these, not the YAML):")
+    console.print(f"  Dropped {len(report.dropped_internals)} internals: {', '.join(report.dropped_internals) or '—'}")
+    if report.folded_aliases:
+        folded = "; ".join(f"{k} ← {', '.join(v)}" for k, v in report.folded_aliases.items())
+        console.print(f"  Folded {len(report.folded_aliases)} case-dupes: {folded}")
+    console.print(f"  Enums harvested: {len(report.enum_fields)} fields; typed: {len(report.typed_fields)}")
+    for note in report.notes:
+        console.print(f"  [yellow]![/yellow] {note}")
+    for warning in warnings:
+        console.print(f"  [yellow]![/yellow] lint: {warning}")
+    console.print(f"\nNext: review, then [bold]adef schema ingest {out_path}[/bold]")

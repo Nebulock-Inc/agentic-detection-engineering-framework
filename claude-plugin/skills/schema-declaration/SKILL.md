@@ -63,63 +63,55 @@ schema_recipe platform="<platform>"
 This returns:
 - `command`: Exact query to run in their SIEM
 - `export_instructions`: How to save the output
-- `reshaping_guide`: Python script to convert to ADEF format
+- `reshaping_guide`: The `adef schema reshape` invocation for this platform
 - `recipe_markdown`: Full formatted guide
 
 **Present the recipe to the user:**
 - Show the command they need to run
 - Explain where to run it (UI, CLI, API)
-- Tell them to paste the output when ready
+- Tell them to save the export to a file (do NOT hand-reshape pasted output)
 
-### 4. Assist with Reshaping
+### 4. Reshape with the deterministic command
 
-When user provides raw SIEM output:
+Never draft the declaration by hand — `adef schema reshape` applies the five
+reshape rules in tested code and reports every transformation:
 
-1. **Parse their output** based on platform:
-   - CSV: Parse as CSV
-   - JSON: Parse as JSON
-   - Text: Parse line-by-line
+```bash
+adef schema reshape <export-file> --platform <platform> --source <name>
+```
 
-2. **Draft declaration YAML**:
-   ```yaml
-   version: 1
-   sources:
-     - name: <source_name>
-       platform: <windows|linux|network|cloud>
-       query_language: <spl|kql|sql|cql|udm>
-       description: "Description"
-       fields:
-         - name: <field_name>
-           type: <string|int|float|bool|datetime|ip>
-   ```
+The rules it applies: internals filter (`_*`, `date_*`, `punct`, routing
+fields), case-duplicates folded into `aliases`, enum values harvested for
+low-cardinality fields (length-capped), int/float type inference, and a
+mixed-shape guard — a multi-sourcetype export is refused with re-export
+guidance (one declaration per event shape; that is what `scope:` is for).
 
-3. **Validate with MCP tool**:
-   ```
-   schema_lint_declaration content="<yaml_content>"
-   ```
+**Walk the user through the transformation report it prints** — dropped
+internals, folded aliases, harvested enums — and get their approval of the
+*transformations*, not a wall of YAML. If they veto a drop or a fold, edit
+the output YAML with them.
 
-4. **Show user the drafted YAML** for approval:
-   - Highlight any warnings
-   - Ask if field names/types look correct
-   - Suggest adjustments if needed
+Then finish the fields the command never guesses:
+- `platform:` — set from what the user tells you (windows/linux/network/cloud)
+- `query_language:` — only if the source is queried in spl/kql/cql/sql
+- `description:` — one line on what the source is
+
+Re-validate after manual edits:
+```
+schema_lint_declaration content="<yaml_content>"
+```
 
 ### 5. Write and Ingest Declaration
 
-Once user approves:
+Once user approves (`adef schema reshape` already wrote the file — move it
+into the workspace if it isn't there):
 
-1. Write declaration to workspace:
-   ```bash
-   cat > ~/work/adef-workspace/<platform>-sources.yml <<'EOF'
-   <yaml_content>
-   EOF
-   ```
-
-2. Ingest using MCP tool:
+1. Ingest using MCP tool:
    ```
    schema_ingest declaration_path="~/work/adef-workspace/<platform>-sources.yml"
    ```
 
-3. Confirm schemas created:
+2. Confirm schemas created:
    ```bash
    ls -la ~/work/adef-workspace/schema/
    adef schema show <source_name>
@@ -139,8 +131,12 @@ Suggest:
 - Try to derive schemas from rules (declaration-driven only)
 - Guess at fields — user must provide real SIEM output
 - Add fields the user didn't mention (no hallucinating schema fields)
+- Hand-reshape an export into YAML — `adef schema reshape` does it in tested
+  code and its transformation report is the human-approval artifact
+- Guess `platform:` — always confirmed with the user, never inferred
 
 **✅ Do:**
+- Use `adef schema reshape` for the export → declaration step
 - Use MCP tools (`schema_recipe`, `schema_lint_declaration`, `schema_ingest`)
 - Validate before writing any files
 - Ask for confirmation before ingesting

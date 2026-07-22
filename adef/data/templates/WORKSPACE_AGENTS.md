@@ -49,6 +49,7 @@ adef catalog /path/to/rules                           # records + journals + IND
 
 # Data schemas (user-provided declarations, never inferred from rules)
 adef schema recipe [platform]                # per-SIEM field-extraction command
+adef schema reshape <export> --platform p    # export -> draft declaration + report
 adef schema ingest adef-sources.yml          # drift reported on re-ingest
 adef schema lint adef-sources.yml
 adef schema show <source>
@@ -72,14 +73,15 @@ in the ADEF repo.
 
 **Declaring data sources** — if the human doesn't have a field inventory
 yet, `adef schema recipe [platform]` prints the exact SIEM command to
-produce one. When they provide the inventory
-(Splunk `| fieldsummary`, KQL `| getschema`, a vendor data dictionary),
-reshape it into a declaration: drop platform internals (`_*`, `punct`,
-`date_*`, `splunk_server`), fold case-duplicates into `aliases`, keep top
-values for low-cardinality fields, one source per event *shape* with
-`scope: {index: ..., sourcetype: ...}` when a container holds several.
-`adef schema lint` before ingesting. If one export mixes shapes, ask for
-per-sourcetype re-exports rather than guessing the split.
+produce one. When they save the export (Splunk `| fieldsummary`, KQL
+`| getschema`, an Elastic `_mapping`, or a plain field list), do NOT
+reshape it by hand: run `adef schema reshape <export> --platform <p>` —
+it drops platform internals, folds case-duplicates into `aliases`,
+harvests capped enum values, infers types, and refuses mixed-shape
+exports with re-export guidance (one source per event *shape*; that is
+what `scope:` is for). Walk the human through its transformation report,
+then set `platform:` (never inferred) and `description:` in the output,
+`adef schema lint`, and ingest.
 
 **Review triage** — `needs_review` carries reasons: `malformed` and
 `external_logic` are structural (investigate); `no_platform` usually means

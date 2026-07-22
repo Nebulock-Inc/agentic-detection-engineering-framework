@@ -8,18 +8,22 @@ means, and everything downstream (query-authoring assistance, `adef schema
 check`, drift reporting) lights up.
 
 ```bash
-adef schema recipe <platform>         # generate SIEM-specific extraction recipe (NEW)
-adef schema lint adef-sources.yml     # validate
-adef schema ingest adef-sources.yml   # build schema/<source>.yml per source
-adef schema check                     # cross-reference your rules against it
+adef schema recipe <platform>                   # SIEM-specific extraction recipe
+adef schema reshape <export> --platform <p>     # export -> draft declaration + report
+adef schema lint adef-sources.yml               # validate
+adef schema ingest adef-sources.yml             # build schema/<source>.yml per source
+adef schema check                               # cross-reference your rules against it
 ```
 
-**NEW: Platform-specific recipes.** ADEF now ships with per-SIEM recipes showing
-exactly what command to run to extract field inventories and how to reshape the
-output. Run `adef schema recipe <platform>` to get started — the recipe includes
-the command, export instructions, and a Python reshaping script tailored to your
-platform's output format. See [`siem-recipes.md`](./siem-recipes.md) for detailed
-guides covering Splunk, Sentinel, Elastic, Chronicle, Sumo Logic, QRadar, and
+**Platform-specific recipes + deterministic reshaping.** `adef schema recipe
+<platform>` prints exactly what command to run in your SIEM to extract a field
+inventory; `adef schema reshape` then converts that export into a draft
+declaration in tested code — filtering platform internals, folding
+case-duplicates into `aliases`, harvesting capped enum values, inferring
+types, and refusing mixed-shape exports with re-export guidance. It prints a
+transformation report so you approve the transformations rather than
+hand-auditing YAML. See [`siem-recipes.md`](./siem-recipes.md) for guides
+covering Splunk, Sentinel, Elastic, Chronicle, Sumo Logic, QRadar, and
 generic SQL platforms.
 
 ## The format
@@ -66,17 +70,21 @@ Full semantics: `docs/plans/2026-07-20-schema-declaration-design.md`.
 
 ## Four ways to produce one
 
-1. **Use `adef schema recipe`** (easiest for supported platforms). Generate a
-   platform-specific recipe with the exact command to run, export instructions,
-   and reshaping script:
+1. **Use `adef schema recipe` + `adef schema reshape`** (easiest for supported
+   platforms). The recipe gives you the exact command to run in your SIEM;
+   reshape converts the export deterministically:
    ```bash
    adef schema recipe splunk     # or sentinel, elastic, chronicle, sumo, qradar, other
+   # run the printed command in your SIEM, save the export, then:
+   adef schema reshape fields.csv --platform splunk
    ```
-   The recipe output includes a Python script that converts your SIEM's field
-   export into valid ADEF declaration YAML. Copy the command, run it in your
-   SIEM, paste the output into the script, and you're done.
-   **Supported platforms:** Splunk, Microsoft Sentinel, Elastic/Kibana, Google
-   Chronicle, Sumo Logic, IBM QRadar, and generic SQL-based systems.
+   Reshape applies the five reshape rules (internals filter, case-dupes →
+   aliases, capped enums, type inference, mixed-shape guard), prints a
+   transformation report, and writes a declaration that lints clean. Set
+   `platform:` and `description:` in the output, then ingest.
+   **Deterministic parsers:** Splunk `fieldsummary` CSV, Sentinel `getschema`
+   CSV, Elastic `_mapping` JSON; any other platform via a plain field list
+   (one per line).
    **Detailed guides:** [`siem-recipes.md`](./siem-recipes.md)
 
 2. **Reshape an inventory export manually.** Every platform can emit a field

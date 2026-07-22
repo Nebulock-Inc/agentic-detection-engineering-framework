@@ -8,10 +8,17 @@ ADEF's schema system requires a **data source declaration** — a YAML file list
 
 **Quick start:**
 ```bash
-adef schema recipe <platform>  # Generate platform-specific recipe
-adef schema lint sources.yml   # Validate your declaration
-adef schema ingest sources.yml # Build schemas
+adef schema recipe <platform>                        # the export command for your SIEM
+adef schema reshape <export> --platform <platform>   # export -> draft declaration + report
+adef schema lint sources.yml                         # validate your declaration
+adef schema ingest sources.yml                       # build schemas
 ```
+
+`reshape` applies the five reshape rules in tested code — internals filter,
+case-duplicates → `aliases`, capped enum harvesting, type inference, and a
+mixed-shape guard — and prints a transformation report so you approve the
+transformations, not a wall of YAML. It never guesses `platform:`; set that
+(and `description:`) before ingesting.
 
 ---
 
@@ -25,15 +32,21 @@ adef schema ingest sources.yml # Build schemas
 Run this search in Splunk Web (Search & Reporting app):
 
 ```spl
-index=<your_index> earliest=-7d latest=now
-| fieldsummary
-| fields field
+index=<your_index> sourcetype=<your_sourcetype> earliest=-7d latest=now
+| fieldsummary maxvals=20
+| fields field count distinct_count numeric_count values
 | outputcsv fields.csv
 ```
 
 **Adjust:**
-- `index=<your_index>` — Your target index(es)
+- `index=<your_index> sourcetype=<your_sourcetype>` — one search per
+  sourcetype: one declaration per event *shape* (`adef schema reshape`
+  refuses mixed-sourcetype exports)
 - `earliest=-7d` — Time range (larger = more fields discovered, but slower)
+
+Keep the `count`/`distinct_count`/`numeric_count`/`values` columns — they are
+what lets `adef schema reshape` harvest enum values, infer types, and detect
+mixed-shape exports.
 
 ### Export
 
@@ -43,39 +56,14 @@ index=<your_index> earliest=-7d latest=now
 
 ### Reshaping
 
-Convert the CSV to ADEF declaration format:
+```
+adef schema reshape fields.csv --platform splunk
 
-```python
-import csv
-import yaml
-
-# Read Splunk fieldsummary output
-with open('fields.csv', 'r') as f:
-    reader = csv.DictReader(f)
-    fields = [{'name': row['field']} for row in reader]
-
-# Create declaration structure
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': 'wineventlog',  # Choose a meaningful name
-        'platform': 'windows',   # windows, linux, network, cloud, etc.
-        'query_language': 'spl',
-        'description': 'Windows event logs via Universal Forwarder',
-        'scope': {
-            'index': 'wineventlog',
-            'sourcetype': 'XmlWinEventLog'  # Optional: narrows scope
-        },
-        'fields': fields
-    }]
-}
-
-# Write YAML
-with open('splunk-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created splunk-sources.yml")
-print("Next: adef schema lint splunk-sources.yml")
+# Applies the five reshape rules (drops _*/date_*/punct internals, folds
+# case-duplicates into aliases, harvests capped enum values, infers int/float
+# types, refuses mixed-sourcetype exports) and prints a transformation report.
+# scope: (index/sourcetype) is filled in from the export automatically.
+# Set `platform:` in the output YAML before ingesting — never inferred.
 ```
 
 ### Version Notes
@@ -118,56 +106,13 @@ SecurityEvent
 
 ### Reshaping
 
-Convert Sentinel `getschema` output to ADEF format:
+```
+# One reshape per exported table:
+adef schema reshape SecurityEvent-schema.csv --platform sentinel --source securityevent
 
-```python
-import csv
-import yaml
-
-# Map KQL types to ADEF types
-TYPE_MAP = {
-    'string': 'string',
-    'int': 'int',
-    'long': 'int',
-    'real': 'float',
-    'datetime': 'datetime',
-    'bool': 'bool',
-    'dynamic': 'object',
-}
-
-def convert_table_schema(table_name, csv_path):
-    """Convert one Sentinel table schema to ADEF source."""
-    with open(csv_path, 'r') as f:
-        reader = csv.DictReader(f)
-        fields = [
-            {
-                'name': row['ColumnName'],
-                'type': TYPE_MAP.get(row['DataType'], 'string')
-            }
-            for row in reader
-        ]
-
-    return {
-        'name': table_name.lower(),
-        'platform': 'windows',  # Adjust per table
-        'query_language': 'kql',
-        'description': f'{table_name} table from Sentinel',
-        'fields': fields
-    }
-
-# Process all tables
-sources = [
-    convert_table_schema('SecurityEvent', 'SecurityEvent-schema.csv'),
-    convert_table_schema('Syslog', 'Syslog-schema.csv'),
-    # Add more tables...
-]
-
-declaration = {'version': 1, 'sources': sources}
-
-with open('sentinel-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created sentinel-sources.yml")
+# KQL DataType maps to ADEF field types automatically. Set `platform:` in the
+# output YAML before ingesting — never inferred. To declare several tables in
+# one file, reshape each and merge the `sources:` lists.
 ```
 
 ### Version Notes
@@ -203,71 +148,13 @@ GET <index-pattern>/_mapping
 
 ### Reshaping
 
-Convert Elasticsearch `_mapping` to ADEF format:
+```
+adef schema reshape mapping.json --platform elastic --source <index_name>
 
-```python
-import json
-import yaml
-
-# Map Elasticsearch types to ADEF types
-TYPE_MAP = {
-    'keyword': 'string',
-    'text': 'string',
-    'long': 'int',
-    'integer': 'int',
-    'short': 'int',
-    'byte': 'int',
-    'double': 'float',
-    'float': 'float',
-    'boolean': 'bool',
-    'date': 'datetime',
-    'ip': 'ip',
-    'object': 'object',
-    'nested': 'array',
-}
-
-def extract_fields(properties, prefix=''):
-    """Recursively extract fields from Elastic mapping."""
-    fields = []
-    for name, spec in properties.items():
-        field_name = f'{prefix}{name}' if prefix else name
-        field_type = spec.get('type', 'string')
-
-        fields.append({
-            'name': field_name,
-            'type': TYPE_MAP.get(field_type, 'string')
-        })
-
-        # Recurse into nested objects (flatten for ADEF)
-        if 'properties' in spec:
-            fields.extend(extract_fields(spec['properties'], f'{field_name}.'))
-
-    return fields
-
-with open('mapping.json', 'r') as f:
-    mapping = json.load(f)
-
-# Extract from first index in response
-index_name = list(mapping.keys())[0]
-properties = mapping[index_name]['mappings']['properties']
-
-fields = extract_fields(properties)
-
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': index_name.replace('*', '').strip('-'),
-        'platform': 'linux',  # Adjust based on your data
-        'query_language': 'eql',
-        'description': f'Elastic index {index_name}',
-        'fields': fields
-    }]
-}
-
-with open('elastic-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created elastic-sources.yml")
+# Walks the _mapping properties (nested objects flattened to dotted names)
+# and maps Elasticsearch types to ADEF field types. Set `platform:` in the
+# output YAML before ingesting; `query_language` is left unset because ADEF's
+# schema check does not parse EQL/ES|QL yet.
 ```
 
 ### Version Notes
@@ -298,46 +185,14 @@ Chronicle doesn't expose a direct schema query. Use the **UDM Search reference d
 
 ### Reshaping
 
-Manually create declaration from UDM docs:
+```
+# Save the UDM field names for your log_type as a plain text file,
+# one field per line (e.g. principal.process.command_line), then:
+adef schema reshape udm-fields.txt --platform chronicle --source windows_sysmon
 
-```python
-import yaml
-
-# Example for WINDOWS_SYSMON log type
-# Field paths from Chronicle UDM docs
-fields = [
-    {'name': 'metadata.event_timestamp', 'type': 'datetime'},
-    {'name': 'metadata.event_type', 'type': 'string'},
-    {'name': 'metadata.product_log_id', 'type': 'string'},
-    {'name': 'principal.hostname', 'type': 'string'},
-    {'name': 'principal.process.command_line', 'type': 'string'},
-    {'name': 'principal.process.file.full_path', 'type': 'string'},
-    {'name': 'principal.process.pid', 'type': 'int'},
-    {'name': 'target.process.command_line', 'type': 'string'},
-    {'name': 'target.process.file.full_path', 'type': 'string'},
-    {'name': 'target.process.pid', 'type': 'int'},
-    {'name': 'target.user.userid', 'type': 'string'},
-    # Add all fields you actually query...
-]
-
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': 'windows_sysmon',
-        'platform': 'windows',
-        'query_language': 'udm',
-        'description': 'Windows Sysmon logs via Chronicle UDM',
-        'scope': {
-            'log_type': 'WINDOWS_SYSMON'  # Critical for Chronicle
-        },
-        'fields': fields
-    }]
-}
-
-with open('chronicle-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created chronicle-sources.yml")
+# In the output YAML, add `scope: {log_type: WINDOWS_SYSMON}` and set
+# `platform:` before ingesting. `query_language` stays unset — ADEF's schema
+# check does not parse UDM search yet.
 ```
 
 ### Version Notes
@@ -377,29 +232,13 @@ _sourceCategory=<your_category>
 
 ### Reshaping
 
-```python
-import csv
-import yaml
+```
+# Save the exported field column as plain text, one field per line
+# (drop the CSV header row), then:
+adef schema reshape fields.txt --platform sumo --source <source_category>
 
-with open('fields.csv', 'r') as f:
-    reader = csv.DictReader(f)
-    fields = [{'name': row['field']} for row in reader]
-
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': 'your_source_category',
-        'platform': 'linux',  # Adjust based on data
-        'query_language': 'sumo',
-        'description': 'Sumo Logic source category',
-        'fields': fields
-    }]
-}
-
-with open('sumo-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created sumo-sources.yml")
+# Set `platform:` in the output YAML before ingesting. `query_language`
+# stays unset — ADEF's schema check does not parse Sumo query language yet.
 ```
 
 ### Version Notes
@@ -438,29 +277,13 @@ LAST 7 DAYS
 
 ### Reshaping
 
-```python
-import csv
-import yaml
+```
+# Save the propertyname column as plain text, one field per line
+# (drop the CSV header row), then:
+adef schema reshape qradar-fields.txt --platform qradar --source <log_source>
 
-with open('qradar-fields.csv', 'r') as f:
-    reader = csv.DictReader(f)
-    fields = [{'name': row['propertyname']} for row in reader]
-
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': 'your_log_source_name',
-        'platform': 'network',  # Adjust based on data
-        'query_language': 'aql',
-        'description': 'QRadar log source',
-        'fields': fields
-    }]
-}
-
-with open('qradar-sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created qradar-sources.yml")
+# Set `platform:` in the output YAML before ingesting. `query_language`
+# stays unset — ADEF's schema check does not parse AQL yet.
 ```
 
 ### Version Notes
@@ -494,39 +317,13 @@ WHERE table_name = '<your_table>';
 
 ### Reshaping
 
-```python
-import yaml
-
-# List all fields you query
-fields = [
-    {'name': 'timestamp', 'type': 'datetime'},
-    {'name': 'event_type', 'type': 'string'},
-    {'name': 'source_ip', 'type': 'ip'},
-    {'name': 'destination_ip', 'type': 'ip'},
-    {'name': 'username', 'type': 'string'},
-    {'name': 'result', 'type': 'string'},
-    # Add all your fields...
-]
-
-declaration = {
-    'version': 1,
-    'sources': [{
-        'name': 'your_data_source',
-        'platform': 'linux',  # windows, network, cloud, etc.
-        'query_language': 'sql',  # or whatever you use
-        'description': 'Description of your data source',
-        'fields': fields
-    }]
-}
-
-with open('sources.yml', 'w') as f:
-    yaml.dump(declaration, f, default_flow_style=False, sort_keys=False)
-
-print("Created sources.yml")
-print("Next: adef schema lint sources.yml")
 ```
+# Save your field names as a plain text file, one per line, then:
+adef schema reshape fields.txt --platform other --source <source_name>
 
----
+# In the output YAML, set `platform:` and — if you query this source with
+# spl/kql/cql/sql — `query_language:` before ingesting.
+```
 
 ## Next Steps
 
