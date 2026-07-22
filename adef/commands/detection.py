@@ -337,7 +337,22 @@ def show(detection_id: str, workspace: Path | None) -> None:
     for key in ("platform", "format", "query_language", "data_source", "kind", "engine"):
         if record.get(key):
             console.print(f"  {key:<15} {record[key]}")
-    console.print(f"  {'mitre':<15} {', '.join(record.get('mitre') or []) or '-'}")
+    mitre_ids = record.get("mitre") or []
+    console.print(f"  {'mitre':<15} {', '.join(mitre_ids) or '-'}")
+    if mitre_ids:  # tactics are derived from the technique IDs, not stored on the record
+        from adef.core.attack import attack_reference
+
+        ref = attack_reference()
+        tactics: list[str] = []
+        for tid in mitre_ids:
+            names = ref.tactics_for(tid)
+            if not names and "." in tid:  # sub-technique w/o its own tactics → parent
+                names = ref.tactics_for(tid.split(".")[0])
+            for name in names:
+                if name not in tactics:
+                    tactics.append(name)
+        if tactics:
+            console.print(f"  {'tactics':<15} {', '.join(tactics)}")
     console.print(
         f"  {'lifecycle':<15} stage={record.get('stage')} status={record.get('status')}"
         + (f" owner={record['owner']}" if record.get("owner") else "")
@@ -347,6 +362,12 @@ def show(detection_id: str, workspace: Path | None) -> None:
         console.print(f"  [yellow]needs_review[/yellow]   {reasons}")
     if record.get("rule_ref"):
         console.print(f"  {'source':<15} {record['rule_ref']}")
+    support = record.get("support")
+    if support and support != "supported":
+        console.print(
+            f"  [yellow]{'support':<15}[/yellow] {support} "
+            "(format recognized; logic not parsed — e.g. external file)"
+        )
     if record.get("query"):
         console.print("\n[bold]Query[/bold]")
         for line in record["query"].splitlines():

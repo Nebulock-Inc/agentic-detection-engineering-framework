@@ -151,3 +151,43 @@ def test_list_json_includes_engine_and_tactics(ws, catalogued):
     assert sigma["tactics"]  # derived from T1218.005
     spl = next(d for d in data if d["format"] == "spl")
     assert spl["tactics"] == []  # no MITRE → no tactics
+
+
+def test_show_includes_tactics(ws, catalogued):
+    # show should surface the tactic derived from the technique ID (T1218.005).
+    from adef.core.attack import attack_reference
+
+    listing = json.loads(
+        CliRunner().invoke(detection_cli, ["list", "--report", "json"]).output
+    )
+    sigma_id = next(d["id"] for d in listing if d["format"] == "sigma")
+    tactic = attack_reference().tactics_for("T1218.005")[0]
+    result = CliRunner().invoke(detection_cli, ["show", sigma_id])
+    assert result.exit_code == 0, result.output
+    assert "tactics" in result.output
+    assert tactic in result.output
+
+
+def test_show_flags_recognized_unsupported(ws):
+    # A recognized-but-unsupported record (external logic, empty query) should
+    # explain itself via a `support` line instead of silently omitting Query.
+    from adef.core.catalog import Catalog, CatalogRecord
+
+    rec = CatalogRecord(
+        id="D-0001",
+        title="External-logic rule",
+        rule_ref="panther/x.yml",
+        original_path="/tmp/panther/x.yml",
+        platform="cloud-aws",
+        kind="atomic",
+        engine="composite",
+        format="panther",
+        support="recognized_unsupported",
+        review_reasons=["external_logic"],
+        needs_review=True,
+    )
+    Catalog(ws).write(rec)
+    result = CliRunner().invoke(detection_cli, ["show", "D-0001"])
+    assert result.exit_code == 0, result.output
+    assert "support" in result.output
+    assert "recognized_unsupported" in result.output
