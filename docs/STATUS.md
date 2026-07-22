@@ -42,6 +42,11 @@ Everything below is implemented, tested, and exercised end-to-end.
   journals. `--dry-run`, `--report json` (unclaimed clustering), `--profile`
   (extraction-rate scoreboard for in-house formats).
 - **`adef profile lint`** — validate an extraction profile for an in-house format.
+- **`adef sync <rule-root>`** — reconcile the catalog after the repo changes:
+  identity cascade (`rule_uuid` → `source_hash` → path → new; gone → orphaned,
+  never deleted); refreshes derived fields, **preserves enrichment** (mitre /
+  status / owner / journal); journals out-of-band edits. `--dry-run` /`--check`
+  (CI). Fuzzy rename-match deferred (falls to `new`, never mis-attributes).
 
 ### Browse
 - **`adef detection list`** — filter by `--platform / --rule-format / --status /
@@ -75,9 +80,11 @@ Everything below is implemented, tested, and exercised end-to-end.
 
 ## Not built yet (roadmap)
 
-- **`adef sync`** — reconcile the catalog when the source repo changes
-  (identity cascade + git-SHA diff + staleness-aware reads). The biggest open
-  trust risk; design doc pending. See `docs/HANDOFF.md`.
+- **Staleness-aware reads** — `adef sync` reconciles on demand; the CLI/MCP read
+  paths don't yet auto-warn "catalog is N commits behind" (sync design doc §
+  staleness-aware reads). The `catalog_sha` needed for it is already stored.
+- **Fuzzy rename-match in sync** — UUID-less renamed+edited rules show as `new`
+  today (safe: a duplicate a human merges, never a silent mis-attribution).
 - **Repo write-back for authored rules** — authored rules land in the ADEF
   catalog; getting them into the user's rules repo is deferred (options weighed
   in `ISA.md`).

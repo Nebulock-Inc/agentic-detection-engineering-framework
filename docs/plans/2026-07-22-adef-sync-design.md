@@ -1,7 +1,9 @@
 # ADEF Sync — Design (staleness & reconciliation)
 
 **Date:** 2026-07-22
-**Status:** Proposed (design-before-build; no code yet)
+**Status:** Steps 1–3 implemented (`adef sync` ships; core in
+`adef/core/reconcile.py`). Remaining: fuzzy rename-match (step 4 of the cascade)
+and staleness-aware reads. Sequencing tracked at the bottom.
 **Supersedes the verbal sketch** captured in `docs/archive/2026-07-21-handoff-full.md`
 §B and the deferred `adef sync` open thread.
 
@@ -162,13 +164,17 @@ both `sync` and a future `catalog` that reconciles by default.
    vs. treats-as-new? Start conservative (high threshold → prefer "new +
    needs_review" over a wrong merge); a wrong identity merge is worse than a
    duplicate.
-3. **`catalog_sha` granularity.** One SHA for the whole catalog run, or per
-   record? Per-record is more precise if rules come from multiple repos; one is
-   simpler for the common single-repo case. Lean per-record (matches how
-   `rule_ref` is already per-record).
-4. **Orphan surfacing.** New `review_reason` (`orphaned`) vs. a distinct
-   `status`? Leaning `status: deprecated` + an `orphaned: true` marker so it
-   drops out of coverage math but stays browsable.
+3. ✅ **`catalog_sha` granularity** — resolved: per-record (one HEAD per run,
+   stamped on every record), matching how `rule_ref` is per-record.
+4. ✅ **Orphan surfacing** — resolved: `status: deprecated` + `orphaned: true`
+   on the record (drops out of coverage math, stays browsable, never deleted).
+5. **Fuzzy-match threshold (cascade step 4).** Still open — not yet built. When
+   added, start conservative (high title/query-similarity threshold; prefer
+   "new + needs_review" over a wrong merge — a wrong identity merge is worse
+   than a duplicate). Until then, UUID-less renamed+edited rules fall to `new`.
+6. **Should `catalog` become `sync` under the hood?** A first `catalog` is
+   `sync` against an empty catalog. Unifying avoids two code paths; risk is
+   surprising the "fresh catalog" mental model. Deferred — they coexist for now.
 
 ## Sequencing
 
@@ -176,11 +182,18 @@ both `sync` and a future `catalog` that reconciles by default.
    on its own; hardens identity immediately.
 2. ✅ **Add `source_hash` + `catalog_sha`** at catalog time (done 2026-07-22) —
    all identity data now captured; the reconciler has what it needs.
-3. **`reconcile()` core + `adef sync` / `--dry-run` / `--check`.**
-4. **Staleness-aware reads** (CLI banner, MCP annotation).
-5. **Out-of-band journal harvesting** (git commit-message pull).
-6. **CI action** (docs + a sample workflow).
+3. ✅ **`reconcile()` core + `adef sync` / `--dry-run` / `--check`** (done
+   2026-07-22) — `adef/core/reconcile.py` (pure cascade, UUID→hash→path→new→
+   orphaned; enrichment preserved) + `adef/commands/sync.py`. Modified rules get
+   a journal note; orphaned records marked `deprecated`+`orphaned`, never
+   deleted. Fuzzy step 4 not yet built (falls to `new`).
+4. **Fuzzy rename-match** (cascade step 4) — the one remaining cascade step.
+5. **Staleness-aware reads** (CLI banner, MCP annotation) — `catalog_sha` is
+   already stored; this reads it on every query.
+6. **Out-of-band journal harvesting upgrade** — `sync` journals *that* a rule
+   changed; harvesting the git commit message/PR for the "why" is a follow-up.
+7. **CI action** (docs + a sample workflow).
 
-Steps 1–2 are cheap and unlock everything else; they can land before the full
-reconciler. Nothing here changes the read-only invariant — `sync` still only
-ever writes under `catalog/` and `journals/`, never to the user's rules.
+Steps 1–3 ship the core value: re-sync safely without losing enrichment.
+Nothing here changes the read-only invariant — `sync` only ever writes under
+`catalog/` and `journals/`, never to the user's rules.

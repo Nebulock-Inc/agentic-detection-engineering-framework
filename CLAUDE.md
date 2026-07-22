@@ -69,6 +69,22 @@ source rule. The `mitre-tagger` skill orchestrates this over the whole queue.
 adef hunt-promote H-0042            # Promote ATHF hunt to draft detection
 ```
 
+### Sync (reconcile the catalog with the source repo)
+```bash
+adef sync /path/to/rules            # reconcile: refresh changed rules, keep enrichment
+adef sync /path/to/rules --dry-run  # show the plan (unchanged/modified/new/orphaned), write nothing
+adef sync /path/to/rules --check    # CI/PR mode: exit 1 if behind, write nothing
+```
+Re-walks the repo and matches each rule to its record via the identity cascade
+(`rule_uuid` → `source_hash` → `rule_ref` path → new; missing source →
+**orphaned, never deleted**). On a match, **derived** fields (query, platform,
+hashes…) are refreshed while **enrichment** (`mitre`, `status`, `stage`, `owner`,
+journal) is preserved — re-syncing never loses your work. Modified rules get a
+journal note recording the out-of-band change. Read-only on the source repo.
+Core: `adef/core/reconcile.py` (pure cascade) + `adef/commands/sync.py`. Fuzzy
+rename-match (UUID-less renamed+edited rules) is deferred → such a rule shows as
+`new` for a human to merge, never a silent mis-attribution.
+
 ### Cataloging Existing Rules
 ```bash
 adef catalog /path/to/rules             # Walk a rule repo → catalog/ + INDEX.yml + skeleton journals

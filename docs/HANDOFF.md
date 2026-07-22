@@ -44,13 +44,13 @@ consumed across both people's features.
 
 ## Open threads (roadmap)
 
-1. **`adef sync`** — the biggest unaddressed trust risk: stale catalogs.
-   **Design doc written:** `docs/plans/2026-07-22-adef-sync-design.md` (identity
-   cascade, git-SHA diffing, staleness-aware reads, out-of-band journal
-   harvesting, CI seam). Next: implement — sequencing in the doc (persist
-   `rule_uuid` + `source_hash` + `catalog_sha` first, then the reconciler).
-   Urgent because authored records + MITRE-tag enrichment live in the catalog a
-   re-catalog would clobber.
+1. **`adef sync`** — **core shipped** (`docs/plans/2026-07-22-adef-sync-design.md`,
+   steps 1–3): identity fields persisted (`rule_uuid`/`source_hash`/`catalog_sha`),
+   `reconcile()` cascade + `adef sync [--dry-run] [--check]` — refreshes changed
+   rules, **preserves enrichment**, orphans deleted rules (never deletes). Closes
+   the wipe-on-recatalog risk. Remaining follow-ups: fuzzy rename-match (step 4;
+   UUID-less renames fall to `new` today — safe), staleness-aware reads (CLI/MCP
+   "N commits behind"), richer commit-message harvest, CI action.
 2. **Repo write-back for authored rules** — authored rules land in the ADEF
    catalog only; getting them into the user's repo is deferred (PR / branch /
    emit-and-copy options weighed in `ISA.md`).
