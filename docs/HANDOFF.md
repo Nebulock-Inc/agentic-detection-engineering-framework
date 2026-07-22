@@ -25,7 +25,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 - `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra and `jinja2`
   were removed 2026-07-20 — don't reference them.
 - **Before pushing:** run the full gate (`pytest` / `ruff check adef/` /
-  `mypy adef/`). Currently green: 283 passed / 2 skipped, ruff (adef/ + tests/)
+  `mypy adef/`). Currently green: 295 passed / 3 skipped, ruff (adef/ + tests/)
   + mypy clean.
 - Stale-metadata gotcha (bit twice on 2026-07-22): a stale repo-root
   `agentic_detection_engineering_framework.egg-info/` can mask newly-registered
