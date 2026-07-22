@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from adef.agents.deprecation_recommender import DeprecationRecommenderAgent
 from adef.agents.hypothesis_from_intel import HypothesisFromIntelAgent

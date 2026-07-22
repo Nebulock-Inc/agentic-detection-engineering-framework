@@ -21,7 +21,7 @@ import textwrap
 
 import pytest
 
-from adef.core.rule_discovery import DiscoveredRule, discover_rules, sniff_format
+from adef.core.rule_discovery import discover_rules, sniff_format
 
 
 # --------------------------------------------------------------------------- #
