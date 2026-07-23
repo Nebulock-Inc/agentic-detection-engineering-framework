@@ -162,6 +162,24 @@ def _make_stage_command(stage: str) -> click.Command:
         else:
             console.print(f"[green]{detection_id} → {stage}[/green]")
 
+        # Mirror the stage onto the paired catalog record — the journal is
+        # authoritative for lifecycle, but `detection list --stage` filters on
+        # the record; leaving it behind made it lie (found live: D-1470
+        # advanced to observe, record stuck at find). Runs on the idempotent
+        # path too, so records desynced before this fix self-heal on re-run.
+        from adef.core.catalog import Catalog, _now_iso
+
+        cat = Catalog(journals_dir.parent)
+        found = cat.find_record(detection_id)
+        if found is not None:
+            rec_path, rec_data = found
+            if rec_data.get("stage") != stage:
+                rec_data["stage"] = stage
+                rec_data["updated"] = _now_iso()
+                cat.write_raw(rec_path, rec_data)
+                cat.rebuild_index()
+                console.print(f"  catalog record stage → {stage}")
+
         if stage == "refine":
             from adef.orchestration.refine_chain import run_refine_chain
 

@@ -268,3 +268,47 @@ def test_search_finds_by_record_and_journal(ws, catalogued):
     # No match → clean message, exit 0.
     r3 = CliRunner().invoke(detection_cli, ["search", "nomatchxyzzy"])
     assert r3.exit_code == 0 and "No detections match" in r3.output
+
+
+def test_stage_advance_mirrors_onto_catalog_record(tmp_path, monkeypatch):
+    """Lifecycle lives in the journal, but `list --stage` and the INDEX filter
+    on the record — advancing must mirror the stage there (live finding:
+    D-1470 advanced to observe, record stuck at find)."""
+    import yaml
+    from click.testing import CliRunner
+
+    from adef.commands.detection import detection as detection_cli
+
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    runner = CliRunner()
+
+    # Authored record + journal via detection new (journal-only would have no record).
+    schema_dir = ws / "schema"
+    schema_dir.mkdir()
+    (schema_dir / "src.yml").write_text(
+        yaml.safe_dump(
+            {"schema_version": 2, "source": "src", "platform": "network",
+             "query_language": "spl", "scope": {"index": "x"},
+             "fields": [{"name": "f", "type": "string", "description": "",
+                          "values": [], "aliases": [], "provenance": "declared"}]}
+        ),
+        encoding="utf-8",
+    )
+    r = runner.invoke(detection_cli, ["new", "T", "--source", "src", "--workspace", str(ws)])
+    assert r.exit_code == 0, r.output
+
+    r = runner.invoke(detection_cli, ["observe", "D-0001", "--workspace", str(ws), "--note", "n"])
+    assert r.exit_code == 0, r.output
+
+    rec = next((ws / "catalog").rglob("D-0001*.yml"))
+    data = yaml.safe_load(rec.read_text(encoding="utf-8"))
+    assert data["stage"] == "observe"
+    assert data["updated"] >= data["created"]
+
+    # the browse filter reads the record — it must see the new stage
+    r = runner.invoke(
+        detection_cli, ["list", "--stage", "observe", "--workspace", str(ws)]
+    )
+    assert "D-0001" in r.output
