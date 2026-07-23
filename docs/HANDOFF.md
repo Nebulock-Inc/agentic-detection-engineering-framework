@@ -81,6 +81,13 @@ consumed across both people's features.
    the public — apply public-safe URLs or flip the repo public; (b) confirm
    `examples/` + the plugin are the launch story. Real push is on hold until v1
    is further along. Full runbook: `docs/publishing.md`.
+   **Pre-release polish push (2026-07-23, feature-freeze):** CLI hardening
+   (filter validation, clean errors, `schema list`, `init` env-var precedence,
+   `catalog --force` warning) + canonical `docs/cli-reference.md` + a
+   `catalog-sync` skill / `schema-declaration` trigger rewrite /
+   `docs/skills-reference.md` all landed. README reshape **proposed**
+   (`docs/plans/2026-07-23-readme-reshape-proposal.md`); README rework + broad
+   E2E remain. Full detail: ISA Decisions 2026-07-23.
 
 ### Standing follow-ups (tracked, not scheduled)
 - **v2: per-alias values + namespace preference.** Folded fields keep only the
@@ -100,10 +107,11 @@ consumed across both people's features.
   Skill carries interim guidance (edit-is-OK for `origin: authored` + bump
   `updated:`) as of 2026-07-23.
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
-- `schema list`; `detection search`. (Per-detection validation shipped
-  2026-07-23 as `schema check --detection D-XXXX` — a scope flag, not a
-  separate command; a distinct `schema validate` verb was rejected as
-  check-duplication. CLI-design positions on this + sync namespacing are in
+- ✅ *(shipped 2026-07-23)* `adef schema list` (browse declared sources) and
+  `adef detection search` (BM25 CLI over journals + records). (Per-detection
+  validation shipped 2026-07-23 as `schema check --detection D-XXXX` — a scope
+  flag, not a separate command; a distinct `schema validate` verb was rejected
+  as check-duplication. CLI-design positions on this + sync namespacing are in
   the 2026-07-23 Slack thread with Josh.)
 - Deploy-prep flow for SIEM-stored teams (prepare-don't-push + drift on export).
 - Shape-literal extractors beyond SPL `sourcetype=` (CQL `#event_simpleName`,

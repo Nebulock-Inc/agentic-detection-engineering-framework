@@ -66,6 +66,9 @@ Everything below is implemented, tested, and exercised end-to-end.
   --stage / --tactic / --engine / --needs-review`; `--report json`.
 - **`adef detection show D-XXXX`** — record + query + derived ATT&CK tactics +
   paired-journal stage history.
+- **`adef detection search "<query>"`** — BM25 over journal reasoning (the *why*)
+  and the catalog record (title / MITRE / platform / query — the *what*);
+  read-only. Also the `memory_search` MCP tool.
 
 ### Schema (declaration-driven)
 - **`adef schema ingest adef-sources.yml`** — build `schema/<source>.yml`
@@ -77,6 +80,7 @@ Everything below is implemented, tested, and exercised end-to-end.
   check to specific rules — the authoring-loop validator ("check the rule I
   just wrote"); suppresses the whole-catalog unused-fields section.
 - **`adef schema show <source>`** — display a schema.
+- **`adef schema list`** — list the declared sources in the workspace.
 - **`adef schema recipe [platform]`** — SIEM-specific field-extraction recipe
   (7 platforms). The Splunk query keeps distribution columns
   (`fieldsummary maxvals=50`) and strips search-time meta
