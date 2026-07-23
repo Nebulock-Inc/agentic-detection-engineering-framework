@@ -305,17 +305,26 @@ def catalog(
     # That's what `adef sync` is for. A genuinely new repo (no overlap) still
     # appends cleanly. --force overrides; --dry-run always previews.
     existing = [data for _id, _path, data in cat.iter_records()]
-    if existing and not dry_run and not force:
+    if existing and not dry_run:
         from adef.core.reconcile import Action, reconcile
 
         plan = reconcile(existing, discovered, rule_root=rule_root)
         already = sum(1 for e in plan if e.action in (Action.UNCHANGED, Action.MODIFIED))
-        if already:
+        if already and not force:
             raise click.ClickException(
                 f"{already} of these rules are already catalogued in {ws}.\n"
                 f"  Re-cataloging would mint duplicate records — use "
                 f"`adef sync {rule_root}` to reconcile changes instead,\n"
                 f"  or `adef catalog {rule_root} --force` to add them anyway."
+            )
+        if already and force:
+            # Proceed, but be honest about the consequence: --force mints fresh IDs,
+            # so a later `sync` sees the prior copies as source-less → orphaned.
+            console.print(
+                f"[yellow]--force:[/yellow] {already} rule(s) already catalogued — "
+                f"minting duplicate records with fresh IDs.\n"
+                f"  A later `adef sync {rule_root}` will flag the prior copies as "
+                f"orphaned; run `adef sync {rule_root}` instead to update in place."
             )
 
     journal = Journal(ws / "journals")

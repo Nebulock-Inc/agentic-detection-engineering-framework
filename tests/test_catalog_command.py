@@ -86,6 +86,9 @@ def test_recatalog_with_force_appends(tmp_path, rule_repo, monkeypatch):
     result = CliRunner().invoke(catalog, [str(rule_repo), "--force"])
     assert result.exit_code == 0, result.output
     assert len(list((ws / "catalog").rglob("D-*.yml"))) == before * 2  # duplicated on purpose
+    # --force proceeds but warns about the duplicate→orphan consequence.
+    assert "orphaned" in result.output.lower()
+    assert "sync" in result.output.lower()
 
 
 def test_catalog_new_repo_into_populated_workspace_appends(tmp_path, rule_repo, monkeypatch):
