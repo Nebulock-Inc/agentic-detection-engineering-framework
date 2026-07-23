@@ -192,6 +192,37 @@ server in one step. The server needs the mcp extra installed
 (`pip install -e ".[mcp]"`) — without it the plugin points at an `adef-mcp`
 command that fails on import.
 
+### For teams + non-Claude agents: `adef install-skills`
+
+`adef install-skills` copies the skills into an assistant's skills directory —
+so a team can **commit them into their shared detections repo** (everyone gets
+them on clone, no per-person plugin install), and so users on **ChatGPT / Codex**
+get them too, not just Claude Code.
+
+Run it bare and it prompts for the agent and project-vs-global (it's a rare
+one-time setup, so you don't have to memorize flags):
+
+```
+cd your-detections-repo
+adef install-skills
+#   Which AI assistant?
+#     1) Claude Code
+#     2) Codex (also ChatGPT) — .agents/
+#   Install where?
+#     1) This project only (./)
+#     2) User-wide (~/)
+git add .claude && git commit -m "Add ADEF skills"   # (or .agents/ for codex)
+```
+
+Flags skip the prompt: `adef install-skills --agent codex --global`. Claude →
+`.claude/skills/`; Codex/ChatGPT → `.agents/skills/` (same skill files, each
+agent's convention). `--force` overwrites edited local skills.
+
+This does *not* start the `adef-mcp` server — but note **MCP is already
+cross-agent**: `adef-mcp` works in any MCP client (Claude, Cursor, Copilot,
+ChatGPT desktop). Run it directly, or use the Claude plugin above for the
+all-in-one.
+
 ## 6. Developing
 
 ```bash

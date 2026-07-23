@@ -184,6 +184,32 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
 
+### Skills
+```bash
+adef install-skills                          # numbered-menu prompt: agent, then project/global
+adef install-skills --agent claude           # skip the prompt (scriptable/CI)
+adef install-skills --agent codex --global   # Codex/ChatGPT, user-wide
+adef install-skills --force                  # overwrite skills already installed
+```
+Run bare, it shows a **numbered menu** for the AI assistant (Claude Code /
+Codex) and then project-local vs. global — setup is a rare one-time thing, so it
+walks you through it. Any `--agent`/`--global` flag skips the prompt. `codex`
+and `chatgpt` are the same target (`.agents/skills/`); `codex` is the menu label
+(the Claude Code equivalent), `chatgpt` a flag alias. Destinations: claude →
+`.claude/skills/`, codex → `.agents/skills/` (same skill files; only the
+location differs). Refuses to
+clobber edited local skills without `--force`.
+
+Two ways to get the skills in:
+- **Plugin marketplace (recommended for solo Claude use):**
+  `/plugin install adef@adef-marketplace` — also wires the `adef-mcp` server;
+  versioned/maintained by Claude Code.
+- **`adef install-skills` (teams + non-Claude agents):** copies the skills into
+  a `.claude/`/`.agents/` tree so a team can **commit them into their own repo**,
+  and so ChatGPT/Codex users get them too. Does *not* wire `adef-mcp` (the
+  deeper, agent-agnostic integration — run `adef-mcp` separately; it works in any
+  MCP client: Claude, Cursor, Copilot, ChatGPT desktop).
+
 ### Testing
 ```bash
 pytest                              # Run all tests
