@@ -2,7 +2,7 @@
 
 **Living doc.** The single answer to "what actually works right now?" Update it
 when a command ships or changes. For *why* decisions were made, see `ISA.md`
-(`## Decisions`); for the full command reference, see `CLAUDE.md`; for a
+(`## Decisions`); for the full command reference, see `docs/cli-reference.md`; for a
 hands-on walkthrough, `docs/quickstart.md`.
 
 > Supersedes the 2026-06-25 snapshot docs (`existing-vs-roadmap`,

@@ -18,6 +18,8 @@ ADEF wraps existing detection rules (YAML) with sibling markdown journals (`jour
 
 ## Essential Commands
 
+> Full per-command reference (synopsis, options, examples): **`docs/cli-reference.md`**.
+
 ### Installation & Setup
 ```bash
 pip install -e .                    # Editable install for development
