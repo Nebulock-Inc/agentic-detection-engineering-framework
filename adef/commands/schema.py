@@ -583,4 +583,8 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     if no_fold:
         flags = " ".join(f"--no-fold {n}" for n in no_fold)
         # click.echo, not console.print: a copy-paste command must never soft-wrap
-        click.echo(f"Reproducible: adef schema reshape {export_file} --platform {platform} {flags}")
+        click.echo(
+            "\nFor later — nothing to run now. To repeat these keep/split "
+            "decisions on a future export of this source (no prompts):"
+        )
+        click.echo(f"  adef schema reshape {export_file} --platform {platform} {flags}")

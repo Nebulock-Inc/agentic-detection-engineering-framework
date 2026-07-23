@@ -353,10 +353,10 @@ def test_cli_reshape_interactive_split(tmp_path):
     assert {"eventtype", "EventType"} <= names
     assert "Split after your review: EventType" in result.output
     assert "SUSPECT merge" not in result.output  # adjudicated — not re-flagged
-    assert "Reproducible:" in result.output
+    assert "nothing to run now" in result.output  # receipt, not a to-do
     assert "--no-fold EventType" in result.output
-    # the reproducible command is the closing line, not buried mid-report
-    assert result.output.rstrip().splitlines()[-1].startswith("Reproducible:")
+    # the repeat-later command is the closing line, not buried mid-report
+    assert result.output.rstrip().splitlines()[-1].lstrip().startswith("adef schema reshape")
 
 
 def test_cli_reshape_interactive_help_answer(tmp_path):
