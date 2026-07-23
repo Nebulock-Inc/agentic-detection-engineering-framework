@@ -56,8 +56,9 @@ adef detection refine  D-0001       # Stage 3: runs Similarity → Overlap → V
 adef detection govern  D-0001       # Stage 4: deployment gates, ownership
 adef detection evolve  D-0001       # Stage 5: tuning, deprecation
 
-# Add notes to any stage transition
-adef detection observe D-0001 --note "Checked 30d of process_create events"
+# Add notes to any stage transition (--note is repeatable → renders as a bullet list)
+adef detection observe D-0001 --note "Baseline: mshta-from-office ~3/day" \
+                              --note "FP source: legit admin GPO scripts"
 
 # Enrich a catalog record with ATT&CK technique IDs (drains the no_mitre queue)
 adef detection tag-mitre D-0007 T1547.001 T1055   # validated vs the shipped reference

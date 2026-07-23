@@ -3,8 +3,9 @@
 Each subcommand:
 
 - advances the journal's ``current_stage`` frontmatter atomically,
-- appends a timestamped ``## [<ISO-8601>] Stage: <stage>`` block,
-- renders a stage-specific prompt from ``adef/data/prompts/<stage>.md`` into the block,
+- appends a lean timestamped ``## [<ISO-8601>] Stage: <stage>`` block with the
+  note (stage *guidance* lives once in the template's fill-in sections, not
+  re-printed per block — ISA 2026-07-22),
 - (for ``refine``) invokes the orchestration chain (Similarity → Overlap → Verification).
 
 The hard invariant — no path under any external rule directory is opened — is
@@ -125,10 +126,15 @@ def _make_stage_command(stage: str) -> click.Command:
     )
     @click.option(
         "--note",
-        default="",
-        help="Free-text note appended to the stage block.",
+        "notes",
+        multiple=True,
+        help="Note appended to the stage block. Repeatable — pass --note several "
+        'times to capture separate points (e.g. --note "Baseline: 3/day" '
+        '--note "FP source: admin scripts"); they render as a bullet list.',
     )
-    def cmd(detection_id: str, workspace: Path | None, note: str) -> None:
+    def cmd(detection_id: str, workspace: Path | None, notes: tuple[str, ...]) -> None:
+        # One note → plain line; several → a markdown bullet list.
+        note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
         journals_dir = workspace_journals_dir(workspace)
         journal = Journal(journals_dir)
         result = journal.advance_stage(detection_id=detection_id, stage=stage, note=note)

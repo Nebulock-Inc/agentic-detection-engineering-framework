@@ -130,18 +130,6 @@ def _load_template_text() -> str:
     )
 
 
-def _load_prompt(stage: str) -> str:
-    """Return the stage-prompt body for ``stage`` (empty string if absent)."""
-    try:
-        return (
-            resources.files("adef.data.prompts")
-            .joinpath(f"{stage}.md")
-            .read_text(encoding="utf-8")
-        )
-    except (FileNotFoundError, ModuleNotFoundError):
-        return ""
-
-
 def _split_frontmatter(text: str) -> tuple[dict, str]:
     """Split markdown ``text`` into (frontmatter dict, body string)."""
     m = _FRONTMATTER_RE.match(text)
@@ -228,12 +216,12 @@ class Journal:
             "created": ts,
             "updated": ts,
         }
-        find_prompt = _load_prompt("find")
+        # Lean Find block, consistent with the other stages — the Find guidance
+        # lives in the template's `## Find` fill-in section, not re-printed here.
         find_block = (
             f"\n## [{ts}] Stage: find\n\n"
             f"**Title:** {title}\n\n"
-            + (f"{find_prompt.strip()}\n\n" if find_prompt else "")
-            + (f"_Note:_ {note}\n" if note else "")
+            + (f"{note}\n" if note else "")
         )
         text = _join_frontmatter(fm, body_template.rstrip() + "\n" + find_block)
         _atomic_write(path, text)
@@ -277,11 +265,13 @@ class Journal:
             if note:
                 new_body = entry.body.rstrip() + f"\n\n_Note ({ts}):_ {note}\n"
         else:
-            prompt = _load_prompt(stage)
+            # A lean transition record: timestamp + note. The FORGE guidance
+            # (what to capture at each stage) lives once in the template's
+            # fill-in sections — re-printing the prompt prose in every block
+            # duplicated it and buried the actual notes (ISA 2026-07-22).
             block = (
                 f"\n## [{ts}] Stage: {stage}\n\n"
-                + (f"{prompt.strip()}\n\n" if prompt else "")
-                + (f"_Note:_ {note}\n" if note else "")
+                + (f"{note}\n" if note else "_(no note)_\n")
             )
             new_body = entry.body.rstrip() + "\n" + block
 
