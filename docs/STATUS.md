@@ -78,7 +78,10 @@ Everything below is implemented, tested, and exercised end-to-end.
   per-spelling value evidence). Folds that merge two different fields are split
   with repeatable `--no-fold <name>` flags, or walk them with `--interactive`
   (keep/split prompts + a reproducible-command echo). Platform is never
-  inferred; read from workspace config when omitted.
+  inferred; read from workspace config when omitted. `--append <decl.yml>`
+  adds the source to an existing declaration (multi-table flows; duplicate
+  source names refused). Also exposed as the `schema_reshape` MCP tool
+  (returns the report incl. suspect-merge evidence for agent adjudication).
 
 All workspace-reading commands resolve the workspace identically
 (`adef/core/workspace.py`): explicit `--workspace` → `ADEF_WORKSPACE` →

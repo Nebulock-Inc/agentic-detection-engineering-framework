@@ -394,8 +394,9 @@ def _print_fold_evidence(canonical: str, evidence: dict[str, list[str]], indent:
 @click.option("--output", "-o", type=click.Path(dir_okay=False, path_type=Path), default=None, help="Output declaration path (default: <source>-sources.yml).")
 @click.option("--no-fold", "no_fold", multiple=True, help="Field name to exempt from case-folding — it keeps its own entry. Repeatable. Use when a fold merged two different fields that collide on spelling.")
 @click.option("--interactive", "-i", is_flag=True, help="Walk each SUSPECT fold with its value evidence and ask keep or split.")
+@click.option("--append", "append_to", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None, help="Add this source to an existing declaration file instead of writing a new one (multi-table/multi-sourcetype flows).")
 @click.option("--workspace", type=click.Path(file_okay=False, path_type=Path), default=None, help="Workspace path (defaults to ADEF_WORKSPACE, current dir, or ~/work/adef-workspace/).")
-def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...], interactive: bool, workspace: Path | None):
+def reshape(export_file: Path, platform: str | None, source_name: str | None, output: Path | None, no_fold: tuple[str, ...], interactive: bool, append_to: Path | None, workspace: Path | None):
     """Reshape a raw SIEM field export into a draft declaration.
 
     Applies the five reshape rules (internals filter, case-dupes to aliases,
@@ -456,14 +457,37 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         raise click.ClickException("reshape produced an invalid declaration: " + "; ".join(errors))
 
     src = result.declaration["sources"][0]
-    out_path = output or Path(f"{src['name']}-sources.yml")
+    to_write = result.declaration
+    if append_to is not None:
+        try:
+            existing = yaml.safe_load(append_to.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            raise click.ClickException(f"{append_to}: not parseable as YAML: {exc}") from exc
+        if not isinstance(existing, dict) or not isinstance(existing.get("sources"), list):
+            raise click.ClickException(f"{append_to}: not a declaration (no `sources:` list)")
+        taken = {s.get("name") for s in existing["sources"] if isinstance(s, dict)}
+        if src["name"] in taken:
+            raise click.ClickException(
+                f"{append_to} already declares a source named {src['name']!r} — "
+                "pass --source to name this one differently, or re-ingest instead."
+            )
+        existing["sources"].append(src)
+        errors, warnings = lint_declaration_dict(existing)
+        if errors:
+            raise click.ClickException(f"appending produced an invalid declaration: {'; '.join(errors)}")
+        to_write = existing
+    out_path = append_to or output or Path(f"{src['name']}-sources.yml")
     out_path.write_text(
-        yaml.safe_dump(result.declaration, default_flow_style=False, sort_keys=False),
+        yaml.safe_dump(to_write, default_flow_style=False, sort_keys=False),
         encoding="utf-8",
     )
 
     report = result.report
-    console.print(f"[green]✓[/green] Wrote [bold]{out_path}[/bold] — {len(src['fields'])} fields declared\n")
+    verb = f"Appended source [bold]{src['name']}[/bold] to" if append_to else "Wrote"
+    console.print(
+        f"[green]✓[/green] {verb} [bold]{out_path}[/bold] — {len(src['fields'])} fields declared"
+        + (f" ({len(to_write['sources'])} sources total)\n" if append_to else "\n")
+    )
     console.print("[bold]Transformation report[/bold] (approve these, not the YAML):")
     if src.get("scope"):
         scope_str = ", ".join(f"{k}={v}" for k, v in src["scope"].items())

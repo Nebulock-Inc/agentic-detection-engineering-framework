@@ -92,7 +92,15 @@ consumed across both people's features.
 - Shape-literal extractors beyond SPL `sourcetype=` (CQL `#event_simpleName`,
   Elastic `event.dataset`) — upgrades a platform from union- to exact-matching
   in `schema check`.
-- `schema check` flags stats-derived output fields (`count` from
-  `| stats count by ...`) as missing-from-schema — correct but noise (demo
-  D-0002). Teach the SPL extractor that aggregation outputs aren't event
-  fields, or add them to `_CHECK_IGNORED_FIELDS`.
+- ✅ *(fixed 2026-07-23)* `schema check` flags stats-derived output fields
+  (`count` from `| stats count by ...`) as missing-from-schema — the SPL
+  extractor now subtracts aggregation outputs (`count`, `... as total`).
+- **Sigma field validation in `schema check`.** The extractor map covers
+  sql/spl/cql/kql and skips Sigma entirely — the largest public rule format
+  gets zero field validation, yet its field names are literally the
+  `detection:` block's YAML keys (strip `|modifiers`). No declaration-format
+  change; likely the highest-value medium schema item.
+- **v2 pair sequencing (per-alias values / namespace preference / data-model
+  schemas):** next step is a design doc for sign-off, not code — it changes
+  the declaration format (a shared surface). Reasoning in the 2026-07-23
+  session discussion; sketches in roadmap v0.2.0.

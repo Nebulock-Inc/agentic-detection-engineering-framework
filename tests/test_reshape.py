@@ -370,6 +370,39 @@ def test_cli_reshape_interactive_keep(tmp_path):
     assert "EventType" not in by
 
 
+def test_cli_reshape_append_builds_multi_source_declaration(tmp_path):
+    """--append adds this export's source to an existing declaration (the
+    multi-table flow) instead of hand-splicing sources: lists."""
+    first = _splunk_csv(tmp_path, SPLUNK_ROWS, name="a.csv")
+    decl = tmp_path / "all-sources.yml"
+    r1 = CliRunner().invoke(
+        schema_cli, ["reshape", str(first), "--platform", "splunk", "--source", "win", "-o", str(decl)]
+    )
+    assert r1.exit_code == 0, r1.output
+
+    second = _splunk_csv(tmp_path, SPLUNK_ROWS, name="b.csv")
+    r2 = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(second), "--platform", "splunk", "--source", "dns", "--append", str(decl)],
+    )
+    assert r2.exit_code == 0, r2.output
+    assert "Appended source dns" in r2.output
+    data = yaml.safe_load(decl.read_text(encoding="utf-8"))
+    assert [s["name"] for s in data["sources"]] == ["win", "dns"]
+    assert lint_declaration_dict(data)[0] == []
+
+
+def test_cli_reshape_append_rejects_duplicate_source_name(tmp_path):
+    export = _splunk_csv(tmp_path, SPLUNK_ROWS)
+    decl = tmp_path / "all-sources.yml"
+    CliRunner().invoke(schema_cli, ["reshape", str(export), "--platform", "splunk", "--source", "win", "-o", str(decl)])
+    result = CliRunner().invoke(
+        schema_cli, ["reshape", str(export), "--platform", "splunk", "--source", "win", "--append", str(decl)]
+    )
+    assert result.exit_code != 0
+    assert "already declares" in result.output
+
+
 def test_cli_reshape_mixed_shape_exits_nonzero(tmp_path):
     rows = list(SPLUNK_ROWS)
     rows[4] = {

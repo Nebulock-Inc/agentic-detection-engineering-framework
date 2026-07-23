@@ -117,3 +117,23 @@ def test_extract_kql_fields():
     assert "ProcessCommandLine" in fields
     assert "InitiatingProcessFileName" in fields
     assert "ComputerName" in fields
+
+
+def test_extract_spl_fields_excludes_aggregation_outputs():
+    """`count` / `as total` are created by stats, not read from events —
+    they must not surface as schema-check findings (HANDOFF follow-up)."""
+    fields = extract_spl_fields(
+        "index=thrunt action=denied | stats count by src_ip dest_port | where count > 20"
+    )
+    assert {"src_ip", "dest_port"} <= fields
+    assert "count" not in fields
+
+    fields = extract_spl_fields(
+        "index=web | stats sum(bytes) as total, dc(uri_path) as paths by src_ip "
+        "| where total > 5000 | where paths > 10"
+    )
+    assert "src_ip" in fields
+    assert "total" not in fields and "paths" not in fields
+
+    # a genuine event field named count (field comparison, no stats) survives
+    assert "count" in extract_spl_fields("index=x count=5")

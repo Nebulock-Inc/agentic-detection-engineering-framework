@@ -140,6 +140,40 @@ def test_mcp_schema_recipe_reads_config(mcp_tools, tmp_path, monkeypatch):
     assert result["query_language"] == "udm"
 
 
+def test_mcp_schema_reshape_writes_declaration_and_reports(mcp_tools, tmp_path):
+    import csv as csv_mod
+    import json as json_mod
+
+    export = tmp_path / "fields.csv"
+    with export.open("w", newline="", encoding="utf-8") as fh:
+        w = csv_mod.DictWriter(fh, fieldnames=["field", "count", "distinct_count", "numeric_count", "values"])
+        w.writeheader()
+        w.writerow({"field": "punct", "count": 10, "distinct_count": 2, "numeric_count": 0, "values": ""})
+        w.writerow({"field": "eventtype", "count": 10, "distinct_count": 1, "numeric_count": 0,
+                    "values": json_mod.dumps([{"value": "winsec", "count": 10}])})
+        w.writerow({"field": "EventType", "count": 5, "distinct_count": 1, "numeric_count": 0,
+                    "values": json_mod.dumps([{"value": "SetValue", "count": 5}])})
+    result = mcp_tools["schema_reshape"](str(export), platform="splunk", source_name="win")
+    assert result["fields_declared"] == 1
+    assert result["report"]["suspect_merges"] == ["eventtype"]
+    assert result["report"]["suspect_evidence"]["eventtype"]["EventType"] == ["SetValue"]
+    assert (tmp_path / "win-sources.yml").exists()
+
+    # adjudicated re-call: split the suspect merge
+    result = mcp_tools["schema_reshape"](str(export), platform="splunk", source_name="win", no_fold=["EventType"])
+    assert result["fields_declared"] == 2
+    assert result["report"]["suspect_merges"] == []
+
+
+def test_mcp_schema_reshape_unconfigured_returns_platforms(mcp_tools, tmp_path, monkeypatch):
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path))
+    export = tmp_path / "f.txt"
+    export.write_text("src_ip\n", encoding="utf-8")
+    result = mcp_tools["schema_reshape"](str(export))
+    assert "error" in result
+    assert result["platforms"] == list_platforms()
+
+
 def test_mcp_schema_lint_declaration_valid(mcp_tools):
     content = yaml.safe_dump(
         {

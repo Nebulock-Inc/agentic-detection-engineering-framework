@@ -44,6 +44,26 @@ TABLE_RE = re.compile(r'\btable\s+([a-z_][a-z0-9_., ]+)', re.IGNORECASE)
 EVAL_RE = re.compile(r'\beval\s+\w+\s*=\s*([a-z_][a-z0-9_.]*)', re.IGNORECASE)
 FIELDS_RE = re.compile(r'\bfields\s+[+-]?\s*([a-z_][a-z0-9_., ]+)', re.IGNORECASE)
 RENAME_RE = re.compile(r'\brename\s+([a-z_][a-z0-9_.]*)', re.IGNORECASE)
+# Aggregation segments create OUTPUT fields (`count`, `... as total`) that later
+# clauses reference (`| where count > 20`) — they aren't event fields and must
+# not surface as schema-check findings.
+_AGG_SEGMENT_RE = re.compile(
+    r'\|\s*(?:stats|eventstats|streamstats|tstats|chart|timechart)\b([^|]*)', re.IGNORECASE
+)
+_AGG_AS_RE = re.compile(r'\bas\s+([a-z_][a-z0-9_.]*)', re.IGNORECASE)
+_AGG_BARE_COUNT_RE = re.compile(r'\bcount\b(?!\s*\()', re.IGNORECASE)
+
+
+def _spl_derived_fields(query: str) -> set[str]:
+    """Names created by aggregation commands, not read from events."""
+    derived: set[str] = set()
+    for segment in _AGG_SEGMENT_RE.findall(query):
+        # `by` fields inside the segment ARE event fields — only look before `by`
+        segment = re.split(r'\bby\b', segment, maxsplit=1, flags=re.IGNORECASE)[0]
+        derived.update(_AGG_AS_RE.findall(segment))
+        if _AGG_BARE_COUNT_RE.search(segment):
+            derived.add("count")
+    return derived
 
 
 def extract_spl_fields(query: str) -> set[str]:
@@ -68,7 +88,9 @@ def extract_spl_fields(query: str) -> set[str]:
                 if field and not field.isdigit():  # Skip numeric values
                     fields.add(field)
 
-    return fields
+    # Aggregation outputs (`count`, `as total`) are created by the query,
+    # not read from events — never report them as event-field usage.
+    return fields - _spl_derived_fields(query)
 
 
 # CQL field extraction patterns

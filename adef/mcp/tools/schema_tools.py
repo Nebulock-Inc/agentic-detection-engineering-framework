@@ -117,6 +117,80 @@ def register(server: Any) -> None:
         return result
 
     @server.tool()
+    def schema_reshape(
+        export_path: str,
+        platform: Optional[str] = None,
+        source_name: Optional[str] = None,
+        no_fold: Optional[list[str]] = None,
+        output_path: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Convert a raw SIEM field export into a draft declaration file.
+
+        Applies the five reshape rules (internals filter, case-dupes → aliases,
+        capped enum harvesting, type inference, mixed-shape guard) and returns
+        the transformation report, including SUSPECT merges with per-spelling
+        value evidence so the caller can adjudicate keep-vs-split. Split a
+        vetoed merge by re-calling with the variant name in ``no_fold``.
+
+        Args:
+            export_path: Raw export file (Splunk fieldsummary CSV, Sentinel
+                         getschema CSV, Elastic _mapping JSON, or a plain
+                         one-field-per-line list).
+            platform: splunk | sentinel | elastic | ... If None, read from
+                      workspace config.
+            source_name: Declared source name (default: derived from the export).
+            no_fold: Field spellings to exempt from case-folding.
+            output_path: Where to write the declaration (default:
+                         <source>-sources.yml next to the export).
+        """
+        from adef.core.reshape import ReshapeError, reshape_export
+        from adef.core.workspace import platform_from_config, resolve_workspace
+
+        if not platform:
+            platform = platform_from_config(resolve_workspace(None))
+            if not platform:
+                return {
+                    "error": "No platform given or configured. Pass a platform, "
+                    "or run `adef init --interactive`.",
+                    "platforms": list_platforms(),
+                }
+
+        export = Path(export_path).expanduser()
+        if not export.is_file():
+            return {"error": f"export not found: {export}"}
+        try:
+            result = reshape_export(export, platform, source_name, tuple(no_fold or ()))
+        except ReshapeError as exc:
+            return {"error": str(exc)}
+
+        src = result.declaration["sources"][0]
+        out = (
+            Path(output_path).expanduser()
+            if output_path
+            else export.parent / f"{src['name']}-sources.yml"
+        )
+        out.write_text(
+            yaml.safe_dump(result.declaration, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+        report = result.report
+        return {
+            "output_path": str(out),
+            "source": src["name"],
+            "fields_declared": len(src["fields"]),
+            "scope": src.get("scope", {}),
+            "report": {
+                "dropped_internals": report.dropped_internals,
+                "folded_aliases": report.folded_aliases,
+                "suspect_merges": report.suspect_folds,
+                "suspect_evidence": report.fold_evidence,
+                "enum_fields": len(report.enum_fields),
+                "typed_fields": report.typed_fields,
+                "notes": report.notes,
+            },
+        }
+
+    @server.tool()
     def schema_lint_declaration(content: str) -> dict[str, Any]:
         """Validate ADEF data source declaration YAML.
 

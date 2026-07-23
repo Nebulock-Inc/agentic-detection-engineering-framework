@@ -8,7 +8,6 @@ mkdir'd the default workspace. All resolution now routes through
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from adef.core.journal import workspace_journals_dir
 from adef.core.workspace import resolve_workspace
