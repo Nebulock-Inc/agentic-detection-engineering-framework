@@ -93,7 +93,7 @@ def test_profile_lint_fails_with_errors(tmp_path):
 def test_report_json_counts_and_unclaimed(ws, acme_repo):
     result = CliRunner().invoke(catalog, [str(acme_repo), "--report", "json"])
     assert result.exit_code == 0, result.output
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["counts"]["supported"] == 1  # sigma
     assert report["counts"]["unclaimed"] == 1  # acme file, no profile loaded
     assert report["counts"]["not_a_rule"] == 1  # README
@@ -109,7 +109,7 @@ def test_report_json_with_candidate_profile_scores_fields(ws, acme_repo, tmp_pat
         catalog, [str(acme_repo), "--report", "json", "--profile", str(p)]
     )
     assert result.exit_code == 0, result.output
-    report = json.loads(result.output)
+    report = json.loads(result.stdout)
     assert report["profile"]["name"] == "acme-siem-export"
     assert report["profile"]["claimed"] == 1
     rates = report["profile"]["field_rates"]

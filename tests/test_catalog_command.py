@@ -158,3 +158,72 @@ def test_catalog_ids_do_not_collide_with_existing_journals(tmp_path, rule_repo, 
     # Existing D-0001 journal must not be overwritten; catalog starts at D-0002.
     assert "D-0001" not in ids
     assert ids == ["D-0002", "D-0003"]
+
+
+# --------------------------------------------------------------------------- #
+# Report honesty + file output + dry-run collapse (field report 2026-07-23:
+# a user ran only --dry-run/--report variants and concluded catalog was broken)
+# --------------------------------------------------------------------------- #
+def test_report_json_says_nothing_was_written(tmp_path, rule_repo, monkeypatch):
+    import json
+
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+
+    result = CliRunner().invoke(catalog, [str(rule_repo), "--report", "json"])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.stdout)
+    assert report["dry_run"] is True
+    assert report["written"] == 0
+    assert "nothing was catalogued" in result.stderr  # terminal warning, off stdout
+    assert not list((ws / "catalog").rglob("D-*.yml"))
+
+
+def test_report_json_output_file(tmp_path, rule_repo, monkeypatch):
+    import json
+
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    out = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        catalog, [str(rule_repo), "--report", "json", "-o", str(out)]
+    )
+    assert result.exit_code == 0, result.output
+    report = json.loads(out.read_text(encoding="utf-8"))
+    assert report["dry_run"] is True
+    assert str(out) in result.output  # confirmation line names the file
+
+
+def test_output_without_report_errors(tmp_path, rule_repo, monkeypatch):
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path / "ws"))
+    result = CliRunner().invoke(catalog, [str(rule_repo), "-o", "x.json"])
+    assert result.exit_code != 0
+    assert "--report" in result.output
+
+
+def test_dry_run_leads_with_nothing_written_and_collapses_mass_flags(
+    tmp_path, monkeypatch
+):
+    """1,469 identical no_platform rows drowned the one line that mattered —
+    dominant flag groups collapse to samples + a count."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    for i in range(30):
+        (root / f"r{i}.sql").write_text(
+            f"SELECT user_name FROM cloudtrail WHERE q = {i}", encoding="utf-8"
+        )
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+
+    result = CliRunner().invoke(catalog, [str(root), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    first_line = next(line for line in result.output.splitlines() if line.strip())
+    assert "nothing will be written" in first_line
+    assert "more like these" in result.output
+    # collapsed: far fewer record rows than rules
+    record_rows = [line for line in result.output.splitlines() if "D-00" in line]
+    assert len(record_rows) <= 6

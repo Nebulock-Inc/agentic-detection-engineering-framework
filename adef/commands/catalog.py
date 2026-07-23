@@ -213,7 +213,16 @@ def _build_report(
     "report_format",
     type=click.Choice(["json"]),
     default=None,
-    help="Emit a machine-readable outcome report (implies --dry-run).",
+    help="Emit a machine-readable outcome report. Implies --dry-run: NOTHING "
+    "is catalogued. Writes to stdout; use -o to write a file.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write the --report json to this file instead of stdout.",
 )
 @click.option(
     "--profile",
@@ -234,11 +243,14 @@ def catalog(
     workspace: Path | None,
     dry_run: bool,
     report_format: str | None,
+    output_path: Path | None,
     profile_path: Path | None,
     force: bool,
 ) -> None:
     """Catalog every detection rule under RULE_ROOT into the ADEF workspace."""
     ws = _resolve_workspace(workspace)
+    if output_path is not None and report_format is None:
+        raise click.ClickException("-o/--output requires --report json")
     if report_format:
         dry_run = True
 
@@ -261,7 +273,22 @@ def catalog(
 
     if report_format == "json":
         report = _build_report(rule_root, outcomes, candidate, profile_errors)
-        click.echo(json.dumps(report, indent=2))
+        # The report is a preview — say so IN the data, not just the help text.
+        report["dry_run"] = True
+        report["written"] = 0
+        rendered = json.dumps(report, indent=2)
+        if output_path is not None:
+            output_path.write_text(rendered + "\n", encoding="utf-8")
+            # click.echo: paths must never soft-wrap (they get copy-pasted)
+            click.echo(f"Report → {output_path}")
+        else:
+            click.echo(rendered)
+        # stderr: visible on the terminal, never corrupts piped/parsed stdout.
+        click.echo(
+            "--report implies --dry-run: nothing was catalogued. "
+            f"Run `adef catalog {rule_root}` (no flags) to write.",
+            err=True,
+        )
         return
 
     unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
@@ -317,10 +344,24 @@ def catalog(
     mitre_gaps = sum(1 for r in planned if "no_mitre" in r.review_reasons)
 
     if dry_run:
+        console.print("[bold]Dry run[/bold] — nothing will be written.\n")
+        # Collapse mass-flag noise: a corpus where one reason dominates (ESCU:
+        # 1,469 × no_platform) shows a few examples per group, not every row.
+        groups: dict[tuple[str, ...], list] = {}
         for rec in planned:
-            structural = structural_reasons(rec.review_reasons)
-            flag = f" [yellow]({', '.join(structural)})[/yellow]" if structural else ""
-            console.print(f"  {rec.id}  {rec.platform:<14} {rec.format:<6} {rec.title}{flag}")
+            groups.setdefault(tuple(structural_reasons(rec.review_reasons)), []).append(rec)
+        sample = 5
+        for reasons, recs in groups.items():
+            flag = f" [yellow]({', '.join(reasons)})[/yellow]" if reasons else ""
+            collapse = len(recs) > 2 * sample
+            for rec in recs[:sample] if collapse else recs:
+                console.print(f"  {rec.id}  {rec.platform:<14} {rec.format:<6} {rec.title}{flag}")
+            if collapse:
+                label = ", ".join(reasons) if reasons else "no flags"
+                console.print(
+                    f"  … and [bold]{len(recs) - sample}[/bold] more like these "
+                    f"({label}; full list: --report json)"
+                )
         unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
         console.print(
             f"\n[bold]{len(planned)}[/bold] rules would be catalogued "
