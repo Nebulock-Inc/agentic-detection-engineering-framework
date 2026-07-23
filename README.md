@@ -40,9 +40,12 @@ adef --version                         # verify
 adef init --interactive                # scaffold ~/work/adef-workspace/ + set your SIEM
 ```
 
-`--interactive` asks which SIEM and query language you use and remembers the
-answer — later commands (`schema recipe`, `schema reshape`) stop asking.
-Plain `adef init` works too. After release: `pip install agentic-detection-engineering-framework`.
+`--interactive` is a guided setup: it asks where your detections live today
+(repo / SIEM-only / starting fresh) and tailors your next steps, remembers
+your SIEM and query language so later commands stop asking, surfaces the
+optional layers (MCP server, AI-assistant skills — inactive until installed)
+and offers to install the skills on the spot. Plain `adef init` works too.
+After release: `pip install agentic-detection-engineering-framework`.
 
 ## Pick your on-ramp
 

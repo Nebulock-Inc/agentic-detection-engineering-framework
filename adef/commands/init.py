@@ -50,6 +50,70 @@ templates_dir: templates
 # hunt_root: ~/path/to/hunts
 """
 
+def _mcp_installed() -> bool:
+    """Is the optional FastMCP dependency importable (the `.[mcp]` extra)?"""
+    try:
+        import fastmcp  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _print_capabilities(workspace: Path) -> None:
+    """Honest detection of the optional layers CLI-first users miss."""
+    console.print("\n[bold]Optional capabilities[/bold]")
+    if _mcp_installed():
+        console.print("  [green]✓[/green] MCP server available — run [bold]adef-mcp[/bold] for Claude Code / Cursor / Copilot integration")
+    else:
+        console.print('  [yellow]✗[/yellow] MCP server not installed — [bold]pip install -e ".\\[mcp]"[/bold] enables agent integration (adef-mcp)')
+    console.print(
+        "  [yellow]![/yellow] AI-assistant skills are [bold]inactive until installed[/bold]:\n"
+        "      teams / any assistant:  [bold]adef install-skills[/bold]\n"
+        "      Claude Code (also wires MCP):  [bold]/plugin install adef@adef-marketplace[/bold]"
+    )
+
+
+_JOURNEY_STEPS = {
+    "1": [
+        "See what ADEF recognizes: [bold]adef catalog /path/to/your/rules --dry-run --report json[/bold]",
+        "Catalog it (read-only on your repo): [bold]adef catalog /path/to/your/rules[/bold]",
+        "Keep it fresh after repo changes: [bold]adef sync /path/to/your/rules[/bold] ([bold]--check[/bold] in CI)",
+        "See your coverage: [bold]adef coverage[/bold]",
+    ],
+    "2": [
+        "Export your rules from the SIEM to a folder (e.g. savedsearches.conf, analytics export)",
+        "Catalog the export: [bold]adef catalog /path/to/export[/bold]",
+        "See your coverage: [bold]adef coverage[/bold]",
+    ],
+    "3": [
+        "Get your SIEM's field-export command: [bold]adef schema recipe {platform}[/bold]",
+        "Run it in your SIEM, save the export, then: [bold]adef schema reshape <export> --interactive[/bold]",
+        "Ingest the reviewed declaration: [bold]adef schema ingest <name>-sources.yml[/bold]",
+        'Author your first schema-grounded rule: [bold]adef detection new "Title" --source <name>[/bold]',
+    ],
+}
+
+
+def _print_next_steps(journey: str, platform: str, workspace: Path) -> None:
+    console.print("\n[bold]Next steps:[/bold]")
+    for i, step in enumerate(_JOURNEY_STEPS[journey], 1):
+        console.print(f"  {i}. {step.format(platform=platform)}")
+    if journey in ("2", "3"):
+        # ADEF is the system of record here — durability is not optional.
+        # Printed, never executed: the `init --git` flag was deliberately
+        # retired in favor of docs (ISA 2026-07-22, detection-home step 2).
+        console.print(
+            "\n[bold]Make the workspace durable[/bold] — your records here are the only copy:"
+        )
+        click.echo(f'  cd {workspace} && git init && git add -A && git commit -m "detection workspace, day 0"')
+        console.print("  Full guide: docs/detection-home.md")
+    if (Path.cwd() / "examples" / "demo-rules").is_dir():
+        console.print(
+            "\nBundled 5-minute demo (sample rules + data): docs/quickstart.md §3"
+        )
+
+
 def _workspace_agents_md() -> str:
     """The operator briefing scaffolded into every workspace as AGENTS.md.
 
@@ -120,8 +184,17 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
         "templates_dir": "templates",
     }
 
-    # Interactive mode: prompt for SIEM preferences
+    # Interactive mode: guided setup
+    journey = "1"
     if interactive:
+        console.print("\n[bold]Where do your detections live today?[/bold]")
+        console.print("  1) In a git repo (detection-as-code)")
+        console.print("  2) Only in my SIEM (no repo)")
+        console.print("  3) Starting fresh — I'll author them in ADEF")
+        journey = click.prompt(
+            "Choose", type=click.Choice(["1", "2", "3"]), default="1"
+        )
+
         console.print("\n[bold]SIEM/Platform Configuration[/bold]")
         console.print("These preferences help ADEF provide relevant schema recipes.\n")
 
@@ -178,10 +251,30 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
     console.print(f"  AGENTS.md    → {agents_md}")
     console.print()
 
-    if interactive and "platform" in config_data:
-        console.print("[bold]Next steps:[/bold]")
-        console.print(f"  1. Generate a schema recipe: [bold]adef schema recipe {config_data['platform']}[/bold]")
-        console.print("  2. Create your first detection: [bold]adef detection new TITLE[/bold]")
+    if interactive:
+        _print_capabilities(workspace)
+        if click.confirm(
+            "\nInstall AI-assistant skills now (Claude Code / Codex)?", default=False
+        ):
+            from adef.commands.install_skills import install_skills
+
+            try:
+                click.get_current_context().invoke(
+                    install_skills, agent=None, global_=None, force=False
+                )
+            except click.ClickException as exc:
+                # Never let a skills hiccup fail an already-scaffolded init.
+                console.print(f"  [yellow]![/yellow] skills install skipped: {exc.message}")
+                console.print("  Re-run later with: [bold]adef install-skills[/bold]")
+
+        _print_next_steps(journey, str(config_data.get("platform", "")), workspace)
+
+        if workspace != DEFAULT_WORKSPACE.expanduser().resolve():
+            console.print(
+                "\n[yellow]![/yellow] Non-default workspace path — so every adef "
+                "command can find it, add this to your shell profile:"
+            )
+            click.echo(f"  export ADEF_WORKSPACE={workspace}")
     else:
         console.print("Next: [bold]adef detection new TITLE[/bold] to create your first journal.")
 

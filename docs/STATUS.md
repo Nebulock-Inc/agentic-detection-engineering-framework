@@ -20,10 +20,15 @@ Everything below is implemented, tested, and exercised end-to-end.
 
 ### Workspace & lifecycle
 - **`adef init`** — scaffold a workspace (`journals/`, `catalog/`, `schema/`,
-  `config/`, `templates/`, operator `AGENTS.md`). `--interactive` captures
-  SIEM platform + query languages into config; `--force` refreshes. Using ADEF
-  as your detection home? Version the workspace with native git —
-  `docs/detection-home.md`.
+  `config/`, `templates/`, operator `AGENTS.md`). `--interactive` is a guided
+  setup: asks where your detections live today (repo / SIEM-only / starting
+  fresh) and routes the next-steps accordingly; captures SIEM platform + query
+  languages into config; reports optional capabilities (MCP extra detected,
+  skills inactive-until-installed) and offers to chain into
+  `adef install-skills`; prints workspace-under-git durability guidance for
+  repo-less journeys (never runs git — ISA 2026-07-22) and an
+  `ADEF_WORKSPACE` hint for non-default paths. `--force` refreshes. Detection
+  home guide: `docs/detection-home.md`.
 - **`adef detection new "title"`** — create a FORGE journal at Find stage.
   `--source <schema>` also scaffolds a **schema-grounded draft catalog record**
   (platform / query_language / scope literals from the declaration) — the
