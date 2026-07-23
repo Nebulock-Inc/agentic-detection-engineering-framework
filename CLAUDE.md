@@ -149,7 +149,7 @@ validation and true `by_tactic` INDEX resolution. `refresh` writes to
 ```bash
 adef detection list                            # all catalogued detections
 adef detection list --platform windows --status draft
-adef detection list --tactic defense-evasion   # by ATT&CK tactic (shortname or display name)
+adef detection list --tactic execution         # by ATT&CK tactic (shortname or display name)
 adef detection list --engine sigma             # by internal engine (sigma|sql|sch_sql|composite)
 adef detection list --origin authored          # created in ADEF vs catalogued from a repo
 adef detection list --needs-review no_mitre    # triage the enrichment queue
