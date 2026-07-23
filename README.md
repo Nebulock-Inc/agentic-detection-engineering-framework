@@ -148,7 +148,11 @@ spellings' observed values have nothing in common), read the values it shows —
 same information in two formats (`SYSTEM` vs `NT AUTHORITY\SYSTEM`) means one
 field, keep the merge; different information (code-signing publishers vs event
 descriptions) means two unrelated fields that collide on spelling — split them
-with `--no-fold`, or let `--interactive` walk you through each pair.
+with `--no-fold`, or let `--interactive` walk you through each pair. Better
+still, with the Claude plugin installed, ask the `schema-declaration` skill to
+drive the whole flow: the keep-or-split call requires knowing what a field *is*
+(a code-signing publisher? a CIM constant?), and that domain knowledge is
+exactly what an agent session adds over a y/n prompt.
 
 ## See your coverage — honestly
 

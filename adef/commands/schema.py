@@ -393,6 +393,9 @@ _MERGE_HELP = """
     names vs sentences, publishers vs descriptions, one constant vs a list.
   Unsure? Split (n) is the safe answer - both spellings stay valid for
   `schema check`, each keeps its own values; you can merge later by hand.
+  Better: with the ADEF Claude plugin, ask the schema-declaration skill to
+  drive this flow - knowing what a field IS (code-signing publisher vs CIM
+  constant) is exactly what an agent session adds over a y/n prompt.
 """
 
 
@@ -448,6 +451,8 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     except ReshapeError as exc:
         raise click.ClickException(str(exc)) from exc
 
+    kept_after_review: list[str] = []
+    split_after_review: list[str] = []
     if interactive and result.report.suspect_folds:
         console.print(
             f"\n[bold]{len(result.report.suspect_folds)} merged pair(s) to review.[/bold]\n\n"
@@ -478,6 +483,30 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         if split:
             no_fold = tuple(no_fold) + tuple(split)
             result = reshape_export(export_file, platform, source_name, no_fold)
+        split_after_review = split
+        # The human just adjudicated these — don't re-flag their decisions.
+        kept_after_review = list(result.report.suspect_folds)
+        result.report.suspect_folds = []
+
+    if interactive:
+        # Finish the fields reshape never guesses, while we have the human.
+        src_platform = click.prompt(
+            "  What kind of system does this source describe? — sets `platform:` "
+            "(windows/linux/network/cloud/...; Enter to skip)",
+            default="", show_default=False,
+        ).strip()
+        src_description = click.prompt(
+            "  One-line description for this source (Enter to skip)",
+            default="", show_default=False,
+        ).strip()
+        source_entry = result.declaration["sources"][0]
+        if src_platform:
+            source_entry["platform"] = src_platform
+            result.report.notes = [
+                n for n in result.report.notes if not n.startswith("source platform")
+            ]
+        if src_description:
+            source_entry["description"] = src_description
 
     errors, warnings = lint_declaration_dict(result.declaration)
     if errors:  # reshape output must always lint clean — this is a bug, not user error
@@ -527,6 +556,10 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
             for k, v in report.folded_aliases.items()
         )
         console.print(f"  Folded {len(report.folded_aliases)} case-dupes: {folded}")
+    if kept_after_review:
+        console.print(f"  Merges kept after your review: {', '.join(kept_after_review)}")
+    if split_after_review:
+        console.print(f"  Split after your review: {', '.join(split_after_review)}")
     for suspect in report.suspect_folds:
         variant_str = ", ".join(report.folded_aliases.get(suspect, []))
         console.print(
@@ -541,13 +574,13 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         )
         # click.echo: a copy-paste flag must never soft-wrap mid-token
         click.echo(f"        --no-fold {variant_str}    (or walk all pairs with --interactive)")
-    if no_fold:
-        flags = " ".join(f"--no-fold {n}" for n in no_fold)
-        # click.echo, not console.print: a copy-paste command must never soft-wrap
-        click.echo(f"\nReproducible: adef schema reshape {export_file} --platform {platform} {flags}")
     console.print(f"  Enums harvested: {len(report.enum_fields)} fields; typed: {len(report.typed_fields)}")
     for note in report.notes:
         console.print(f"  [yellow]![/yellow] {note}")
     for warning in warnings:
         console.print(f"  [yellow]![/yellow] lint: {warning}")
     console.print(f"\nNext: review, then [bold]adef schema ingest {out_path}[/bold]")
+    if no_fold:
+        flags = " ".join(f"--no-fold {n}" for n in no_fold)
+        # click.echo, not console.print: a copy-paste command must never soft-wrap
+        click.echo(f"Reproducible: adef schema reshape {export_file} --platform {platform} {flags}")

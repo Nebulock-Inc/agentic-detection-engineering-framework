@@ -419,7 +419,10 @@ def reshape_export(
         source["query_language"] = query_language
     else:
         report.notes.append("query_language not set — add it if this source is queried")
-    report.notes.append("platform not set — never inferred; add it before ingest")
+    report.notes.append(
+        "source platform (windows/linux/network/cloud/...) not set — never "
+        "inferred; edit `platform:` in the YAML before ingest"
+    )
 
     if scope:
         source["scope"] = scope

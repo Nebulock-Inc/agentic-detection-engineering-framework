@@ -79,8 +79,13 @@ Everything below is implemented, tested, and exercised end-to-end.
   transformation report (inferred scope, drops, folds, `[SUSPECT]` folds with
   per-spelling value evidence). Folds that merge two different fields are split
   with repeatable `--no-fold <name>` flags, or walk them with `--interactive`
-  (keep/split prompts + a reproducible-command echo). Platform is never
-  inferred; read from workspace config when omitted. `--append <decl.yml>`
+  (keep/split prompts with a `?` help checklist; adjudicated pairs are recorded
+  as decisions, never re-flagged; ends by prompting for source `platform:` +
+  `description:` so the file is ingest-ready; closes with a reproducible
+  `--no-fold` command). SIEM platform is never inferred; read from workspace
+  config when omitted. `--append <decl.yml>` adds the source to an existing
+  declaration (multi-table flows). Also exposed as the `schema_reshape` MCP
+  tool (returns suspect evidence structurally for agent adjudication). `--append <decl.yml>`
   adds the source to an existing declaration (multi-table flows; duplicate
   source names refused). Also exposed as the `schema_reshape` MCP tool
   (returns the report incl. suspect-merge evidence for agent adjudication).

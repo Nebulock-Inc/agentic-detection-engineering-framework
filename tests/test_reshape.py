@@ -346,13 +346,17 @@ def test_cli_reshape_interactive_split(tmp_path):
     result = CliRunner().invoke(
         schema_cli,
         ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
-        input="n\n",
+        input="n\n\n\n",
     )
     assert result.exit_code == 0, result.output
     names = {f["name"] for f in yaml.safe_load(out.read_text())["sources"][0]["fields"]}
     assert {"eventtype", "EventType"} <= names
+    assert "Split after your review: EventType" in result.output
+    assert "SUSPECT merge" not in result.output  # adjudicated — not re-flagged
     assert "Reproducible:" in result.output
     assert "--no-fold EventType" in result.output
+    # the reproducible command is the closing line, not buried mid-report
+    assert result.output.rstrip().splitlines()[-1].startswith("Reproducible:")
 
 
 def test_cli_reshape_interactive_help_answer(tmp_path):
@@ -362,7 +366,7 @@ def test_cli_reshape_interactive_help_answer(tmp_path):
     result = CliRunner().invoke(
         schema_cli,
         ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
-        input="?\ny\n",
+        input="?\ny\n\n\n",
     )
     assert result.exit_code == 0, result.output
     assert "hex <-> decimal" in result.output
@@ -377,12 +381,31 @@ def test_cli_reshape_interactive_keep(tmp_path):
     result = CliRunner().invoke(
         schema_cli,
         ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
-        input="y\n",
+        input="y\n\n\n",
     )
     assert result.exit_code == 0, result.output
     by = {f["name"]: f for f in yaml.safe_load(out.read_text())["sources"][0]["fields"]}
     assert by["eventtype"]["aliases"] == ["EventType"]
     assert "EventType" not in by
+    assert "Merges kept after your review: eventtype" in result.output
+    assert "SUSPECT merge" not in result.output  # decision respected, not re-flagged
+
+
+def test_cli_reshape_interactive_prompts_for_platform_and_description(tmp_path):
+    """--interactive finishes the fields reshape never guesses: source
+    platform + description, making the file ingest-ready."""
+    export = _splunk_csv(tmp_path, _suspect_rows())
+    out = tmp_path / "d.yml"
+    result = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
+        input="y\nwindows\nWindows XML event log\n",
+    )
+    assert result.exit_code == 0, result.output
+    src = yaml.safe_load(out.read_text())["sources"][0]
+    assert src["platform"] == "windows"
+    assert src["description"] == "Windows XML event log"
+    assert "source platform" not in result.output  # note suppressed once set
 
 
 def test_cli_reshape_append_builds_multi_source_declaration(tmp_path):
