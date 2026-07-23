@@ -419,22 +419,28 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
 
     if interactive and result.report.suspect_folds:
         console.print(
-            f"\n[bold]{len(result.report.suspect_folds)} merged pair(s) need review.[/bold] "
-            "Each pair below differs only by upper/lowercase, so it was merged into one "
-            "field — but the values observed under each spelling have nothing in common, "
-            "which can mean they are two unrelated fields.\n\n"
-            "For each pair, compare the values:\n"
-            "  • Same information in two formats (e.g. 'SYSTEM' vs 'NT AUTHORITY\\SYSTEM')"
-            " → one field: keep the merge.\n"
-            "  • Different information (e.g. publisher names vs event descriptions)"
-            " → two fields: split them.\n"
+            f"\n[bold]{len(result.report.suspect_folds)} merged pair(s) to review.[/bold]\n\n"
+            "Your SIEM has each pair below as two separate fields whose names differ\n"
+            "only by capitalization. ADEF merged each pair into one schema entry,\n"
+            "assuming both names describe the same thing — but their observed values\n"
+            "have nothing in common, so it can't confirm that. You decide, per pair:\n\n"
+            "  [bold]MERGE (y)[/bold] if both value lists describe the SAME attribute in\n"
+            "  different formats. Example: Direction '%%14592' is the Windows code\n"
+            "  for 'inbound' — one attribute, raw vs normalized. Merged = one schema\n"
+            "  entry; a detection may reference either name.\n\n"
+            "  [bold]SPLIT (n)[/bold] if the value lists describe UNRELATED attributes.\n"
+            "  Example: Signature 'Microsoft Corporation' (who signed a binary) vs\n"
+            "  signature 'A new process has been created' (what the event is) — two\n"
+            "  attributes colliding on a name. Split = two schema entries, each\n"
+            "  keeping its own values.\n"
         )
         split: list[str] = []
         for canonical in result.report.suspect_folds:
             variants = result.report.folded_aliases.get(canonical, [])
             _print_fold_evidence(canonical, result.report.fold_evidence.get(canonical, {}))
             if not click.confirm(
-                f"  Keep {canonical} and {', '.join(variants)} merged as one field?",
+                f"  Do {canonical} and {', '.join(variants)} describe the same "
+                f"attribute (merge)?",
                 default=True,
             ):
                 split.extend(variants)
@@ -471,15 +477,17 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
     for suspect in report.suspect_folds:
         variant_str = ", ".join(report.folded_aliases.get(suspect, []))
         console.print(
-            f"  [red]![/red] SUSPECT merge: {suspect} + {variant_str} were merged "
-            f"(names differ only by case), but their observed values have nothing in common:"
+            f"  [red]![/red] SUSPECT merge: {suspect} + {variant_str} — two SIEM fields, "
+            f"names differing only by case, merged into one schema entry. Their observed "
+            f"values have nothing in common, so verify they describe the same attribute:"
         )
         _print_fold_evidence(suspect, report.fold_evidence.get(suspect, {}), indent="      ")
         console.print(
-            f"      Same information in two formats → one field, keep the merge. "
-            f"Different information → two fields: re-run with "
-            f"[bold]--no-fold {variant_str}[/bold] (or use [bold]--interactive[/bold])."
+            "      Same attribute, different formats (raw code vs readable value)? "
+            "keep the merge. Unrelated attributes colliding on a name? split:"
         )
+        # click.echo: a copy-paste flag must never soft-wrap mid-token
+        click.echo(f"        --no-fold {variant_str}    (or walk all pairs with --interactive)")
     if no_fold:
         flags = " ".join(f"--no-fold {n}" for n in no_fold)
         # click.echo, not console.print: a copy-paste command must never soft-wrap
