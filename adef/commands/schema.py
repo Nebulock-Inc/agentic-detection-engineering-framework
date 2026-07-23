@@ -380,6 +380,31 @@ def recipe(platform: str | None, format: str, workspace: Path | None):
         console.print(render_recipe_markdown(recipe_obj))
 
 
+_MERGE_HELP = """
+  Same attribute usually looks like one of these value transformations:
+    hex <-> decimal      (0x1538 <-> 5432)            - process/thread/status IDs
+    code <-> word        (%%14592 <-> inbound, 0x0 <-> success)
+    prefixed <-> bare    (NT AUTHORITY\\SYSTEM <-> SYSTEM)
+    quoted <-> unquoted  ("4" <-> 4)
+  Unrelated attributes usually differ in KIND, not format:
+    names vs sentences, publishers vs descriptions, one constant vs a list.
+  Unsure? Split (n) is the safe answer - both spellings stay valid for
+  `schema check`, each keeps its own values; you can merge later by hand.
+"""
+
+
+def _ask_merge(question: str) -> bool:
+    """y/n/? prompt — '?' prints the same-attribute checklist and re-asks."""
+    while True:
+        answer = click.prompt(question + " [y/n/?]", default="y", show_default=False)
+        answer = answer.strip().lower()
+        if answer in ("y", "yes", ""):
+            return True
+        if answer in ("n", "no"):
+            return False
+        console.print(_MERGE_HELP)
+
+
 def _print_fold_evidence(canonical: str, evidence: dict[str, list[str]], indent: str = "  ") -> None:
     """Show each spelling's harvested values so keep-or-split is decidable in place."""
     for spelling, values in evidence.items():
@@ -441,10 +466,9 @@ def reshape(export_file: Path, platform: str | None, source_name: str | None, ou
         for canonical in result.report.suspect_folds:
             variants = result.report.folded_aliases.get(canonical, [])
             _print_fold_evidence(canonical, result.report.fold_evidence.get(canonical, {}))
-            if not click.confirm(
+            if not _ask_merge(
                 f"  Do {canonical} and {', '.join(variants)} describe the same "
-                f"attribute (merge)?",
-                default=True,
+                f"attribute (merge)?"
             ):
                 split.extend(variants)
             console.print()

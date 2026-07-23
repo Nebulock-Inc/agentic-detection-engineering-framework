@@ -355,6 +355,21 @@ def test_cli_reshape_interactive_split(tmp_path):
     assert "--no-fold EventType" in result.output
 
 
+def test_cli_reshape_interactive_help_answer(tmp_path):
+    """'?' at the prompt prints the same-attribute checklist, then re-asks."""
+    export = _splunk_csv(tmp_path, _suspect_rows())
+    out = tmp_path / "d.yml"
+    result = CliRunner().invoke(
+        schema_cli,
+        ["reshape", str(export), "--platform", "splunk", "-o", str(out), "--interactive"],
+        input="?\ny\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "hex <-> decimal" in result.output
+    by = {f["name"]: f for f in yaml.safe_load(out.read_text())["sources"][0]["fields"]}
+    assert by["eventtype"]["aliases"] == ["EventType"]  # the eventual 'y' merged
+
+
 def test_cli_reshape_interactive_keep(tmp_path):
     """Answering 'yes' (same field, default) keeps the fold."""
     export = _splunk_csv(tmp_path, _suspect_rows())
