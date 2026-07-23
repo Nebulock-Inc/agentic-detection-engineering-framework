@@ -457,6 +457,12 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **#15/16/17 (real, as deletion) dead `adef/data/skills/adef-schema.md`.** Unreferenced (live skill is `claude-plugin/skills/schema-declaration`) and documented removed `schema init/update/rescan` commands. CR wanted a rewrite; correct fix is deletion.
   - **Skipped false positives:** #18/19/35 (MCP `register` "should be `register_mcp_tools`") — the *entry-point* aggregator `mcp/register.py` already exposes `register_mcp_tools` (pyproject-wired); per-module `register()` is the internal helper it calls. Correct as-is. Cosmetic (#10 quoted annotation, #91 deliberate ponytail marker) left. Suite → **345**.
 
+- 2026-07-23 — **PyPI release pipeline (mirrors ATHF's live flow).** ADEF ships the same release mechanism as its sibling so the two frameworks' release muscle-memory is identical.
+  - **Mechanism:** `.github/workflows/publish.yml` — a published GitHub Release (`release: types: [published]`) triggers build → `twine check` → upload; the release's pre-release flag routes to **Test PyPI** (`TEST_PYPI_API_TOKEN`), otherwise **PyPI** (`PYPI_API_TOKEN`). A version-vs-tag guard fails the run if `pyproject` version ≠ `vX.Y.Z`. Runbook: `docs/publishing.md` (account setup, cut-a-release, local verify, known gaps).
+  - **Auth = API token, not OIDC** — consistency with ATHF, whose workflow declares `id-token: write` (commented "required for trusted publishing") but actually authenticates by token. Kept the permission line for a future trusted-publishing switch; corrected the misleading comment.
+  - **No `MANIFEST.in` / `setup.py`** — ATHF ships both, but for ADEF they are no-ops: modern setuptools + PEP 621 `pyproject.toml` already produce a `twine`-clean sdist + wheel including README, LICENSE, and all `adef/data/*`. Ladder rung 1 (does it need to exist) — skipped.
+  - **Open / pre-real-push items:** (1) real PyPI push **on hold** until v1 is further along; (2) `[project.urls]` all point at the `INTERNAL` GitHub repo → they 404 for the public on a real PyPI page — fix with public-safe URLs (Homepage → nebulock.io, drop repo/docs/issues) or flip the repo public first; (3) bundled skills ship from the repo's `claude-plugin/`, **not** the wheel — PyPI installs get skills via the plugin marketplace or a source checkout (intentional, see `install_skills.py`).
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -614,3 +620,10 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - Reproduced the bug: `adef catalog examples/demo-rules` twice → 9→18 records (silent duplicate mint). After the fix, the 2nd run **errors** ("N of these rules are already catalogued … use `adef sync`") and writes nothing (stays 9).
   - Guard in `adef/commands/catalog.py`: reconcile discovered vs. existing; refuse if any `UNCHANGED`/`MODIFIED`; skip the check under `--dry-run`/`--force`/empty-workspace. `--force` appends (9→18 by request); a distinct new repo into the populated workspace **appends** (9→10, not blocked — no identity overlap).
   - `tests/test_catalog_command.py`: `test_recatalog_same_repo_is_refused`, `test_recatalog_with_force_appends`, `test_catalog_new_repo_into_populated_workspace_appends`. Full suite **301 passed** (was 298). `ruff`/`mypy` clean (63 files). Docs: CLAUDE.md catalog section + `--force`, STATUS.
+
+- 2026-07-23 — **PyPI packaging verified end-to-end via Test PyPI.** Evidence:
+  - **Build:** `python -m build` → sdist + wheel; `twine check` **PASSED** on both. Confirmed both artifacts include README, LICENSE, all 5 FORGE prompts, both templates, and `adef/data/attack/enterprise.json` (no `MANIFEST.in` needed).
+  - **Local install:** wheel installed into a clean venv → `adef --version` = 0.1.0; all 11 commands present in `--help`.
+  - **Index install:** published v0.1.0 to **Test PyPI**; installed from the index into a fresh venv (`--index-url test.pypi.org --extra-index-url pypi.org` for deps) → `adef --version` OK. The full package / dependency / entry-point chain resolves from an index.
+  - **Page check:** Test PyPI project page live; **Summary** field = `pyproject` `description`, README renders below (its `>` tagline is *not* the Summary — the earlier "description mismatch" was a WebFetch-summarizer artifact, no real drift; tree was git-clean).
+  - **Real PyPI:** not pushed — on hold. Repo remains `INTERNAL`; `docs/publishing.md` + `.github/workflows/publish.yml` committed (`ab3bf80`).

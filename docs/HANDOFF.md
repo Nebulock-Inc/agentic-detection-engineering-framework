@@ -9,7 +9,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 - **Hands-on walkthrough:** `docs/quickstart.md`
 - **Prior session logs:** `docs/archive/` (the full pre-2026-07-22 HANDOFF + dated session docs)
 
-**Last updated:** 2026-07-22.
+**Last updated:** 2026-07-23.
 
 ---
 
@@ -72,8 +72,14 @@ consumed across both people's features.
    numbers — the objective merge gate for community profiles.
 4. **v0.1.0 release framing** — gap to releasable is small. The README pass
    landed 2026-07-22 (on-ramps rework, all commands verified against the live
-   CLI, north-star labeled not-yet-built); remaining: confirm `examples/` + the
-   plugin are the launch story.
+   CLI, north-star labeled not-yet-built). **PyPI pipeline shipped 2026-07-23**
+   (`ab3bf80`): `.github/workflows/publish.yml` (Release-triggered build + upload,
+   ATHF-style token auth) + `docs/publishing.md` runbook; package **verified on
+   Test PyPI** (builds, uploads, installs from index, CLI runs). Remaining before
+   the real PyPI push: (a) `[project.urls]` point at the INTERNAL repo → 404 for
+   the public — apply public-safe URLs or flip the repo public; (b) confirm
+   `examples/` + the plugin are the launch story. Real push is on hold until v1
+   is further along. Full runbook: `docs/publishing.md`.
 
 ### Standing follow-ups (tracked, not scheduled)
 - **v2: per-alias values + namespace preference.** Folded fields keep only the

@@ -9,7 +9,10 @@ hands-on walkthrough, `docs/quickstart.md`.
 > `whats-real-vs-proposed`, `v0.1.0-current-state`, `command-summary-for-team`),
 > now in `docs/archive/`.
 
-**Version:** v0.1.0 (unreleased — not on PyPI; install from source).
+**Version:** v0.1.0 (unreleased — not on real PyPI; install from source).
+Release pipeline shipped and **validated on Test PyPI** 2026-07-23 (build +
+upload + index-install verified); real PyPI push on hold until v1 is further
+along. See `docs/publishing.md`.
 **Last updated:** 2026-07-23.
 
 ---
