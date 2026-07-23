@@ -42,7 +42,9 @@ Everything below is implemented, tested, and exercised end-to-end.
   format by content signature (Sigma, Splunk ESCU, Panther, SPL `.conf`, raw
   sql/kql/cql); write `catalog/<platform>/D-XXXX.yml` + `INDEX.yml` + skeleton
   journals. `--dry-run`, `--report json` (unclaimed clustering), `--profile`
-  (extraction-rate scoreboard for in-house formats).
+  (extraction-rate scoreboard for in-house formats). Re-cataloging a repo whose
+  rules are already present is **refused** (→ use `adef sync`, or `--force`);
+  a genuinely new repo appends cleanly.
 - **`adef profile lint`** — validate an extraction profile for an in-house format.
 - **`adef sync <rule-root>`** — reconcile the catalog after the repo changes:
   identity cascade (`rule_uuid` → `source_hash` → path → new; gone → orphaned,

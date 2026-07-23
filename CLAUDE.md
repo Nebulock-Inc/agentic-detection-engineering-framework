@@ -98,12 +98,19 @@ sync. Filter with `adef detection list --origin authored`.
 ```bash
 adef catalog /path/to/rules             # Walk a rule repo → catalog/ + INDEX.yml + skeleton journals
 adef catalog /path/to/rules --dry-run   # Preview what would be catalogued (nothing written)
+adef catalog /path/to/rules --force     # Catalog even if rules are already present (mints duplicates)
 ```
 Cataloging is read-only on the source repo. It sniffs each file's format
 (Sigma YAML, Splunk `.conf`, `.kql`, `.sql`, `.cql`), writes an enrichment
 record to `catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
 `rule_ref`, and flags rules whose platform/MITRE couldn't be inferred with
 `needs_review: true`. See `docs/plans/2026-07-15-catalog-design.md` for the spec.
+
+**Re-catalog guard:** if some incoming rules are *already* in the workspace
+(matched by the identity cascade), `catalog` **refuses** rather than silently
+minting duplicates — it points you to `adef sync` (the reconciling re-run) or
+`--force`. Cataloging a genuinely new repo into a populated workspace still
+appends cleanly (no identity overlap → no block). `--dry-run` is never blocked.
 
 ### Backfilling
 ```bash

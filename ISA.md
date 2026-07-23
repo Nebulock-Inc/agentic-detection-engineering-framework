@@ -408,6 +408,11 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **`tests/test_skills.py`** lints every `SKILL.md` (valid frontmatter, `name`==dir, size ceilings). **Accepted as a shared CI merge gate (2026-07-22)** — the team keeps broad coverage in `tests/`, so gating skills there is in keeping; kept as-is.
   - Each skill ships an **`EVALS.md`** prompt checklist — skills are model instructions, so activation/faithfulness is a human-run eval in a live session, not a unit test. Layers 1 (lint) + 2 (flow, rehearsed on `detect-vault`) verified; Layer 3 (auto-activation) needs the plugin installed.
 
+- 2026-07-22 — **Re-catalog guard: `adef catalog` refuses to silently duplicate** (found field-testing — a second `catalog` of the same repo minted a whole duplicate record set, 9→18). Decisions:
+  - **Smart guard, not blunt.** Not "workspace non-empty → error" (that would block the legit case of cataloging a *second, different* repo into one workspace). Instead: reconcile the discovered rules against existing records (reusing `reconcile()` — no new identity logic); if any come back `UNCHANGED`/`MODIFIED`, that's a **re-catalog** of already-present rules → refuse with a message pointing to `adef sync` (the reconciling re-run) and `--force`. All-`NEW` (a genuinely new repo) still appends cleanly.
+  - **`--force`** overrides (mints duplicates by explicit request); **`--dry-run` is never blocked** (preview always allowed). Consistent with "catalog never prompts mid-run" — this is a pre-flight refusal, not an interactive prompt.
+  - Reuses `adef/core/reconcile.py` — the identity cascade (`rule_uuid`/`source_hash`/`rule_ref`) built for sync is exactly the overlap test the guard needs.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -551,3 +556,8 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - `tests/test_skills.py` — **7 passed** (dir check + 6 skills well-formed: valid frontmatter, `name`==dir, desc ≤1024 chars, body <500 lines). Sizes: detection-explorer 284 words / 376-char desc; coverage-review 290 words / 406-char desc.
   - Layer 2 (flow) rehearsed against a real catalog (`detect-vault`, 9 detections): `detection-explorer`'s `list`/filters/`show` return correct subsets; `coverage-review`'s `adef coverage --gaps` renders the full quality+gap report and triggers the honesty-guard case (6 `no_mitre` records → the "3 of 697" figure is understated). **Layer 3 (auto-activation) verified live (2026-07-22)** — with the plugin installed in a Claude Code session, both skills auto-activate on their intended prompts and route correctly (browse vs. coverage), per each `EVALS.md`.
   - Docs/registration only — no `adef/` code changed; `ruff`/`mypy` clean on touched files. Registered in `plugin.json`; listed in `STATUS.md`/`README.md`/`quickstart.md`; HANDOFF count → 6 skills. **Full gate since run** in a fresh `.adef` venv (Python 3.10, via `scripts/fresh-install.sh`): **295 passed / 3 skipped**, `ruff` (adef/ + tests/) + `mypy` (63 files) clean. HANDOFF's living count updated 283→295 to match.
+
+- 2026-07-22 — Re-catalog guard. Evidence:
+  - Reproduced the bug: `adef catalog examples/demo-rules` twice → 9→18 records (silent duplicate mint). After the fix, the 2nd run **errors** ("N of these rules are already catalogued … use `adef sync`") and writes nothing (stays 9).
+  - Guard in `adef/commands/catalog.py`: reconcile discovered vs. existing; refuse if any `UNCHANGED`/`MODIFIED`; skip the check under `--dry-run`/`--force`/empty-workspace. `--force` appends (9→18 by request); a distinct new repo into the populated workspace **appends** (9→10, not blocked — no identity overlap).
+  - `tests/test_catalog_command.py`: `test_recatalog_same_repo_is_refused`, `test_recatalog_with_force_appends`, `test_catalog_new_repo_into_populated_workspace_appends`. Full suite **301 passed** (was 298). `ruff`/`mypy` clean (63 files). Docs: CLAUDE.md catalog section + `--force`, STATUS.

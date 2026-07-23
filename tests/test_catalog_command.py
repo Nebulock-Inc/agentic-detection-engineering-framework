@@ -59,6 +59,59 @@ def test_catalog_creates_records_and_index(tmp_path, rule_repo, monkeypatch):
     assert "windows" in index["by_platform"]
 
 
+def test_recatalog_same_repo_is_refused(tmp_path, rule_repo, monkeypatch):
+    """A second catalog of the same repo would mint duplicates → refused,
+    pointing at `sync` (ISA 2026-07-22)."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+
+    assert CliRunner().invoke(catalog, [str(rule_repo)]).exit_code == 0
+    before = len(list((ws / "catalog").rglob("D-*.yml")))
+
+    result = CliRunner().invoke(catalog, [str(rule_repo)])
+    assert result.exit_code != 0
+    assert "already catalogued" in result.output and "sync" in result.output
+    # Nothing written on the refused run.
+    assert len(list((ws / "catalog").rglob("D-*.yml"))) == before
+
+
+def test_recatalog_with_force_appends(tmp_path, rule_repo, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+
+    CliRunner().invoke(catalog, [str(rule_repo)])
+    before = len(list((ws / "catalog").rglob("D-*.yml")))
+    result = CliRunner().invoke(catalog, [str(rule_repo), "--force"])
+    assert result.exit_code == 0, result.output
+    assert len(list((ws / "catalog").rglob("D-*.yml"))) == before * 2  # duplicated on purpose
+
+
+def test_catalog_new_repo_into_populated_workspace_appends(tmp_path, rule_repo, monkeypatch):
+    """No identity overlap → not a re-catalog → appends cleanly, no false block."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    CliRunner().invoke(catalog, [str(rule_repo)])
+    before = len(list((ws / "catalog").rglob("D-*.yml")))
+
+    # A second, distinct repo (different rules) — should append, not be refused.
+    repo2 = tmp_path / "repo2"
+    repo2.mkdir()
+    (repo2 / "other.yml").write_text(
+        "title: Distinct rule\n"
+        "id: 99999999-0000-0000-0000-000000000abc\n"
+        "logsource:\n  product: linux\n"
+        "detection:\n  condition: selection\n"
+        "tags:\n  - attack.t1059\n",
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(catalog, [str(repo2)])
+    assert result.exit_code == 0, result.output
+    assert len(list((ws / "catalog").rglob("D-*.yml"))) == before + 1
+
+
 def test_catalog_also_creates_skeleton_journals(tmp_path, rule_repo, monkeypatch):
     ws = tmp_path / "ws"
     (ws / "journals").mkdir(parents=True)

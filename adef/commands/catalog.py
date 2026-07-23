@@ -220,12 +220,19 @@ def _build_report(
     help="Candidate extraction profile to validate (checked before all others; "
     "dry-run report includes its per-field extraction rates).",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Catalog even if some rules are already in the workspace (mints duplicate "
+    "records). Normally a re-catalog is refused — use `adef sync` to reconcile.",
+)
 def catalog(
     rule_root: Path,
     workspace: Path | None,
     dry_run: bool,
     report_format: str | None,
     profile_path: Path | None,
+    force: bool,
 ) -> None:
     """Catalog every detection rule under RULE_ROOT into the ADEF workspace."""
     ws = _resolve_workspace(workspace)
@@ -262,6 +269,25 @@ def catalog(
         return
 
     cat = Catalog(ws)
+
+    # Re-catalog guard (ISA 2026-07-22): if some of these rules are ALREADY in
+    # the workspace, minting fresh D-XXXX records would silently duplicate them.
+    # That's what `adef sync` is for. A genuinely new repo (no overlap) still
+    # appends cleanly. --force overrides; --dry-run always previews.
+    existing = [data for _id, _path, data in cat.iter_records()]
+    if existing and not dry_run and not force:
+        from adef.core.reconcile import Action, reconcile
+
+        plan = reconcile(existing, discovered, rule_root=rule_root)
+        already = sum(1 for e in plan if e.action in (Action.UNCHANGED, Action.MODIFIED))
+        if already:
+            raise click.ClickException(
+                f"{already} of these rules are already catalogued in {ws}.\n"
+                f"  Re-cataloging would mint duplicate records — use "
+                f"`adef sync {rule_root}` to reconcile changes instead,\n"
+                f"  or `adef catalog {rule_root} --force` to add them anyway."
+            )
+
     journal = Journal(ws / "journals")
 
     # One HEAD SHA for the whole run — the sync staleness base (empty if the
