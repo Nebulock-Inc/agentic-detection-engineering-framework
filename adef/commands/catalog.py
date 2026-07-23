@@ -68,9 +68,12 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
     for path in sorted(schema_dir.glob("*.yml")):
         data = read_schema_v2(path)
         if data:
-            platforms[data["source"]] = str(data.get("platform") or "")
+            source = data.get("source")
+            if not source:  # v2 but hand-edited/partial (no source) → skip, don't KeyError
+                continue
+            platforms[source] = str(data.get("platform") or "")
             for literal in address_literals(data):
-                addressed_by.setdefault(literal, set()).add(data["source"])
+                addressed_by.setdefault(literal, set()).add(source)
     if not addressed_by:
         return 0
 
@@ -296,7 +299,7 @@ def catalog(
 
     catalog_sha = git_head_sha(rule_root)
 
-    next_idx = int(max(cat.max_index(), cat._journals_max_index())) + 1
+    next_idx = int(max(cat.max_index(), cat.journals_max_index())) + 1
     planned: list = []
     for disc in discovered:
         detection_id = f"D-{next_idx:04d}"

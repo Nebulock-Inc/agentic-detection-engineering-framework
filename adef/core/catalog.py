@@ -387,7 +387,13 @@ class Catalog:
                 max_idx = max(max_idx, int(lead.group(1)[2:]))
         return max_idx
 
-    def _journals_max_index(self) -> int:
+    def journals_max_index(self) -> int:
+        """Highest ``D-XXXX`` index present in ``journals/``, or 0.
+
+        Public because sync's reconcile needs the journal floor too (shared ID
+        space) — a NEW id must clear journal-only detections, not just catalog
+        records (ISA 2026-07-22).
+        """
         journals = self._ws / "journals"
         if not journals.is_dir():
             return 0
@@ -400,7 +406,7 @@ class Catalog:
 
     def next_id(self) -> str:
         """Next ``D-XXXX`` clearing both catalog and journal IDs (shared space)."""
-        nxt = max(self.max_index(), self._journals_max_index()) + 1
+        nxt = max(self.max_index(), self.journals_max_index()) + 1
         return f"D-{nxt:04d}"
 
     def rebuild_index(self) -> Path:

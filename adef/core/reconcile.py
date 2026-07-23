@@ -82,6 +82,7 @@ def reconcile(
     existing: list[dict],
     discovered: list[DiscoveredRule],
     rule_root: Optional[Path] = None,
+    floor_index: int = 0,
 ) -> list[PlanEntry]:
     """Match discovered rules to existing records; return a per-rule plan.
 
@@ -90,6 +91,12 @@ def reconcile(
     lets the path-match step (cascade 3) and the unchanged/moved check compare
     against the stored ``rule_ref`` in the same ``<root.name>/<rel>`` form the
     catalog writes; omit it and path-matching is skipped (UUID/hash still work).
+
+    ``floor_index`` is the highest ``D-XXXX`` index seen *outside* the catalog
+    (i.e. in ``journals/``); NEW ids allocate above ``max(catalog, floor)`` so a
+    journal-only detection whose catalog record is gone never gets its id reused
+    — the shared-ID-space guarantee, same as ``Catalog.next_id`` (ISA 2026-07-22).
+    This stays a pure function: the caller reads the journal max and passes it in.
     """
     by_uuid = {r["rule_uuid"]: r for r in existing if r.get("rule_uuid")}
     by_hash = {r["source_hash"]: r for r in existing if r.get("source_hash")}
@@ -97,7 +104,7 @@ def reconcile(
 
     matched_ids: set[str] = set()
     plan: list[PlanEntry] = []
-    next_index = _max_index(existing)
+    next_index = max(_max_index(existing), floor_index)
 
     for disc in discovered:
         ref = _rule_ref_of(disc, rule_root)

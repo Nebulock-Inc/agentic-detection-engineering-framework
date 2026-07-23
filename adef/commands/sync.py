@@ -61,7 +61,13 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
         console.print(f"[yellow]Skipping broken profile:[/yellow] {err}", highlight=False)
     discovered = [r for oc in walk_outcomes(rule_root, user_profiles) for r in oc.rules]
 
-    plan = reconcile(existing, discovered, rule_root=rule_root)
+    # Floor NEW ids above any journal-only detection id too (shared ID space) —
+    # else a rule whose catalog record was removed but whose journal survives
+    # gets its id reused (CodeRabbit #96; same footgun `detection new` guards).
+    plan = reconcile(
+        existing, discovered, rule_root=rule_root,
+        floor_index=cat.journals_max_index(),
+    )
     counts = {a: 0 for a in Action}
     for entry in plan:
         counts[entry.action] += 1
@@ -152,10 +158,18 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
 
 
 def _journal_note(journal: Journal, detection_id: str, note: str) -> None:
-    """Append a note to a detection's journal (create if missing). Best-effort."""
+    """Append a note to a detection's journal (create if missing). Best-effort.
+
+    Re-advance to the journal's *current* stage, not a hardcoded one — sync
+    records an out-of-band source change without moving the detection through
+    FORGE (advancing to a fixed stage would corrupt the lifecycle state, which
+    is the journal's whole point). Re-advancing to the same stage is idempotent:
+    it appends the note only, no duplicate stage block (CodeRabbit #97).
+    """
     try:
         if (journal.directory / f"{detection_id}.md").exists():
-            journal.advance_stage(detection_id=detection_id, stage="evolve", note=note)
+            stage = journal.read(detection_id).current_stage
+            journal.advance_stage(detection_id=detection_id, stage=stage, note=note)
         else:
             journal.create(detection_id=detection_id, title=detection_id, note=note)
     except Exception as exc:  # journaling is enrichment, never fatal to sync

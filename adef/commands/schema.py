@@ -197,7 +197,9 @@ def check(workspace: Path | None, report_format: str | None):
     for path in sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []:
         data = read_schema_v2(path)
         if data:
-            name = data["source"]
+            name = data.get("source")
+            if not name:  # v2 but no source (hand-edited/partial) → skip, don't KeyError
+                continue
             schemas[name] = known_field_names(data)
             declared_fields[name] = {str(f.get("name", "")) for f in data.get("fields", [])}
             for literal in address_literals(data):

@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from adef.commands.catalog import catalog
 from adef.commands.sync import sync
 from adef.core.catalog import Catalog
+from adef.core.journal import Journal
 
 
 def _sigma(uuid: str, title: str = "Rundll32 no args") -> str:
@@ -71,6 +72,32 @@ def test_sync_preserves_enrichment_on_modified(tmp_path, monkeypatch):
     assert after["owner"] == "alice"
     # Derived refreshed:
     assert after["title"] == "Rundll32 no args v2"
+
+
+def test_sync_note_preserves_journal_stage(tmp_path, monkeypatch):
+    """Journaling an out-of-band source change must NOT yank the detection to
+    `evolve` — it stays at whatever FORGE stage it was in (CodeRabbit #97)."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    # Move the detection mid-lifecycle (to `refine`), not evolve.
+    journal = Journal(ws / "journals")
+    journal.advance_stage(detection_id="D-0001", stage="observe")
+    journal.advance_stage(detection_id="D-0001", stage="refine")
+    assert journal.read("D-0001").current_stage == "refine"
+
+    # Source changes → sync journals the modification.
+    (repo / "r.yml").write_text(
+        _sigma("03cc0c25-389f-4bf8-b48d-11878079f1ca", title="Rundll32 v2"),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(sync, [str(repo)]).exit_code == 0
+
+    # Stage held at refine, not forced to evolve.
+    assert journal.read("D-0001").current_stage == "refine"
 
 
 def test_sync_orphans_deleted_rule(tmp_path, monkeypatch):

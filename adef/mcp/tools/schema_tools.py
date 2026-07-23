@@ -31,12 +31,35 @@ def _get_workspace_schema_dir(workspace: Optional[str]) -> Path:
     return resolve_workspace(Path(workspace) if workspace else None) / "schema"
 
 
+class _UnsafeName(ValueError):
+    """A client-supplied name that isn't a safe bare filename component."""
+
+
+def _safe_source_name(source: str) -> str:
+    """Return ``source`` iff it's a bare filename component, else raise.
+
+    The MCP server is a trust boundary — ``source`` comes from an agent/client
+    and is joined into a filesystem path (``<schema>/<source>.yml``). Reject
+    path separators, ``..`` traversal, and absolute/empty names so a request
+    can't read outside the schema dir (CodeRabbit #21). Windows ``\\`` too, so
+    the guard holds regardless of the server's OS.
+    """
+    name = (source or "").strip()
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        raise _UnsafeName(source)
+    return name
+
+
 def register(server: Any) -> None:
     """Register schema tools on ``server`` (FastMCP instance)."""
 
     @server.tool()
     def schema_show(source: str, workspace: Optional[str] = None) -> dict[str, Any]:
         """Display the declared schema for SOURCE (fields, types, aliases, values)."""
+        try:
+            source = _safe_source_name(source)
+        except _UnsafeName:
+            return {"error": f"Invalid source name: {source!r} (must be a bare schema name)."}
         schema_path = _get_workspace_schema_dir(workspace) / f"{source}.yml"
         if not schema_path.exists():
             return {"error": f"Schema not found: {source}"}
@@ -223,4 +246,4 @@ def register(server: Any) -> None:
         return {"platforms": list_platforms()}
 
 
-__all__ = ["register"]
+__all__ = ["register", "_safe_source_name"]

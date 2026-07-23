@@ -75,6 +75,20 @@ def test_no_match_is_new_with_fresh_id():
     assert plan[0].detection_id == "D-0006"  # next after max existing
 
 
+def test_new_id_respects_journal_floor():
+    """A NEW rule must not reuse an ID a journal-only detection already holds.
+    The catalog max is D-0005, but a journal D-0009 exists (its catalog record
+    was removed) — the new rule must clear both, not clobber D-0006.
+    CodeRabbit finding #96 / same shared-ID footgun as `detection new`."""
+    existing = [_existing("D-0005", uuid="x", source_hash="h", rule_ref="repo/x.yml")]
+    disc = _disc(uuid="brand-new", path="repo/z.yml")
+    # No floor → old behavior, allocates just above the catalog max.
+    assert reconcile(existing, [disc])[0].detection_id == "D-0006"
+    # With the journal floor (D-0009 exists on disk), the new id clears it.
+    plan = reconcile(existing, [disc], floor_index=9)
+    assert plan[0].detection_id == "D-0010"
+
+
 def test_missing_source_is_orphaned():
     existing = [_existing("D-0007", uuid="gone", source_hash="h", rule_ref="repo/gone.yml")]
     plan = reconcile(existing, [])  # rule no longer in the repo
