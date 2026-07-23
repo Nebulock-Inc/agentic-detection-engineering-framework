@@ -9,7 +9,6 @@ Exposes ``schema_show`` (render a schema_version-2 schema), ``schema_ingest``
 from __future__ import annotations
 
 import dataclasses
-import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -26,11 +25,10 @@ from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 
 
 def _get_workspace_schema_dir(workspace: Optional[str]) -> Path:
-    """Get workspace schema directory from env or arg."""
-    if workspace:
-        return Path(workspace) / "schema"
-    workspace_path = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-    return workspace_path / "schema"
+    """Workspace schema dir via the canonical resolver (ISA 2026-07-22)."""
+    from adef.core.workspace import resolve_workspace
+
+    return resolve_workspace(Path(workspace) if workspace else None) / "schema"
 
 
 def register(server: Any) -> None:

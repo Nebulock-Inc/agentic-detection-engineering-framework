@@ -25,7 +25,8 @@ _TIER_STYLE = {Tier.SOLID: "green", Tier.FRAGILE: "yellow", Tier.BLIND: "red"}
 def _workspace_from(workspace: Path | None) -> Path:
     from adef.core.journal import workspace_journals_dir
 
-    return workspace_journals_dir(workspace).parent
+    # Read-only command — don't scaffold a workspace as a side effect.
+    return workspace_journals_dir(workspace, create=False).parent
 
 
 @click.command()

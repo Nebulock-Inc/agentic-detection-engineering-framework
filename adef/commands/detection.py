@@ -155,8 +155,9 @@ for _stage in FORGE_STAGES:
 # Browsing — list / show (story 7393)
 # --------------------------------------------------------------------------- #
 def _workspace_from(workspace: Path | None) -> Path:
-    """Same resolution the stage commands use: journals dir's parent."""
-    return workspace_journals_dir(workspace).parent
+    """Canonical workspace for the read/browse commands. ``create=False`` — a
+    list/show/tag never scaffolds a workspace as a side effect."""
+    return workspace_journals_dir(workspace, create=False).parent
 
 
 @detection.command("list")

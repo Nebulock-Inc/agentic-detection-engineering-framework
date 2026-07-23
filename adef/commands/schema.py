@@ -16,7 +16,6 @@ field derivation, ``update``/``rescan`` stubs) was removed pre-release — see
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -62,10 +61,11 @@ _CHECK_IGNORED_FIELDS = {
 }
 
 
-def _get_workspace_schema_dir() -> Path:
-    """Get workspace schema directory from env or default."""
-    workspace = Path(os.getenv("ADEF_WORKSPACE", Path.home() / "work" / "adef-workspace"))
-    return workspace / "schema"
+def _get_workspace_schema_dir(workspace: Path | None = None) -> Path:
+    """Workspace schema dir via the canonical resolver (honors --workspace, env,
+    cwd, default — ISA 2026-07-22). Previously env-or-default only, which made
+    `schema show`/`ingest` ignore --workspace and the current directory."""
+    return resolve_workspace(workspace) / "schema"
 
 
 @click.group()
@@ -92,11 +92,7 @@ def ingest(declaration_file: Path, workspace: Path | None):
     Re-ingest replaces declared fields, preserves human ``corrected`` fields,
     and reports drift.
     """
-    schema_dir = (
-        Path(workspace).expanduser().resolve() / "schema"
-        if workspace
-        else _get_workspace_schema_dir()
-    )
+    schema_dir = _get_workspace_schema_dir(workspace)
     try:
         sources = load_declaration(declaration_file)
     except DeclarationError as exc:
@@ -295,9 +291,15 @@ def check(workspace: Path | None, report_format: str | None):
 
 @schema.command()
 @click.argument("source")
-def show(source: str):
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
+)
+def show(source: str, workspace: Path | None):
     """Display schema for SOURCE."""
-    schema_path = _get_workspace_schema_dir() / f"{source}.yml"
+    schema_path = _get_workspace_schema_dir(workspace) / f"{source}.yml"
     if not schema_path.exists():
         console.print(f"[red]Error:[/red] Schema not found: {source}")
         sys.exit(1)

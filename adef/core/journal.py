@@ -90,28 +90,24 @@ def _check_not_under_detections(path: Path) -> None:
         )
 
 
-def workspace_journals_dir(workspace: Optional[Path]) -> Path:
+def workspace_journals_dir(workspace: Optional[Path], create: bool = True) -> Path:
     """Resolve the journals directory for ``workspace``.
 
-    Resolution order:
+    Delegates workspace resolution to the canonical ``resolve_workspace`` (one
+    resolver for every command — ISA 2026-07-22) so ``adef catalog .`` and
+    ``adef detection list`` in the same dir never disagree about *which*
+    workspace they mean.
 
-    1. Explicit ``workspace`` argument.
-    2. ``ADEF_WORKSPACE`` environment variable.
-    3. Current working directory if it contains a ``journals/`` subdirectory.
-    4. Default ``~/work/adef-workspace/`` (creating ``journals/`` on demand).
+    ``create=True`` (default, for write paths) ensures ``journals/`` exists;
+    **read paths must pass ``create=False``** so listing/showing never silently
+    scaffolds ``~/work/adef-workspace`` as a side effect.
     """
-    if workspace is not None:
-        ws = workspace
-    elif env := os.environ.get("ADEF_WORKSPACE"):
-        ws = Path(env)
-    elif (Path.cwd() / "journals").is_dir():
-        ws = Path.cwd()
-    else:
-        ws = Path.home() / "work" / "adef-workspace"
+    from adef.core.workspace import resolve_workspace
 
-    ws = ws.expanduser().resolve()
+    ws = resolve_workspace(workspace)
     journals = ws / "journals"
-    journals.mkdir(parents=True, exist_ok=True)
+    if create:
+        journals.mkdir(parents=True, exist_ok=True)
     return journals
 
 
