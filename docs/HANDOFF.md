@@ -6,6 +6,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 - **What actually works:** `docs/STATUS.md`
 - **Why decisions were made (system of record):** `ISA.md` (`## Decisions` / `## Verification`)
 - **Command reference:** `docs/cli-reference.md` (per-command; `CLAUDE.md` = project/dev instructions)
+- **Skills ↔ commands map:** `docs/skills-reference.md` (which skill fronts which command)
 - **Hands-on walkthrough:** `docs/quickstart.md`
 - **Prior session logs:** `docs/archive/` (the full pre-2026-07-22 HANDOFF + dated session docs)
 
