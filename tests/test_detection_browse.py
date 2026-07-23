@@ -161,9 +161,23 @@ def test_list_filter_tactic_shortname(ws, catalogued):
 
 
 def test_list_tactic_no_match(ws, catalogued):
+    # `impact` is a real tactic with no coverage here → clean empty, not an error.
     result = CliRunner().invoke(detection_cli, ["list", "--tactic", "impact"])
     assert result.exit_code == 0, result.output
     assert "No detections match" in result.output
+
+
+def test_list_rejects_unknown_filter_values(ws, catalogued):
+    # A typo in a closed-set filter must error, not silently look like zero coverage.
+    for args, needle in (
+        (["list", "--engine", "bogus"], "unknown engine"),
+        (["list", "--status", "nope"], "unknown status"),
+        (["list", "--stage", "nope"], "unknown stage"),
+        (["list", "--tactic", "not-a-tactic"], "unknown att&ck tactic"),
+    ):
+        result = CliRunner().invoke(detection_cli, args)
+        assert result.exit_code != 0, f"{args}: {result.output}"
+        assert needle in result.output.lower(), f"{args}: {result.output}"
 
 
 def test_list_json_includes_engine_and_tactics(ws, catalogued):

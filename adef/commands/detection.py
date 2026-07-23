@@ -28,6 +28,12 @@ from adef.core.journal import (
 
 console = Console()
 
+# Closed value-sets for validating `detection list` filters — a typo should
+# error, not read as zero coverage. (Open-ended --platform/--rule-format have no
+# fixed set to check against.)
+_ENGINES = frozenset({"sigma", "sql", "sch_sql", "composite"})
+_STATUSES = frozenset({"draft", "ready", "tuning", "deprecated"})
+
 
 @click.group()
 def detection() -> None:
@@ -279,6 +285,30 @@ def list_cmd(
         return display
 
     want_tactic = _norm(tactic) if tactic else None
+
+    # Validate closed-set filters up front so a typo errors instead of looking
+    # like genuine zero coverage. A valid value with no matches still falls
+    # through to the normal "No detections match".
+    if engine and engine not in _ENGINES:
+        raise click.ClickException(
+            f"unknown engine {engine!r}. Valid: {', '.join(sorted(_ENGINES))}."
+        )
+    if status and status not in _STATUSES:
+        raise click.ClickException(
+            f"unknown status {status!r}. Valid: {', '.join(sorted(_STATUSES))}."
+        )
+    if stage and stage not in FORGE_STAGES:
+        raise click.ClickException(
+            f"unknown stage {stage!r}. Valid: {', '.join(FORGE_STAGES)}."
+        )
+    if want_tactic is not None:
+        assert ref is not None  # loaded above whenever --tactic is set
+        known = {_norm(sn) for sn in ref.tactics} | {_norm(d) for d in ref.tactics.values()}
+        if want_tactic not in known:
+            raise click.ClickException(
+                f"unknown ATT&CK tactic {tactic!r} (ATT&CK {ref.attack_version}); "
+                "see `adef attack info` for the current tactics."
+            )
 
     ws = _workspace_from(workspace)
     records = []
