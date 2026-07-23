@@ -87,6 +87,23 @@ def test_lint_accepts_valid_profile():
     assert lint_profile_dict(dict(ACME_PROFILE)) == []
 
 
+def test_lint_toml_profile_errors_without_tomllib(monkeypatch):
+    """A TOML-container profile lints as an ERROR when the interpreter can't
+    parse TOML (Python 3.10) — else it lints OK then silently claims nothing
+    (ISA 2026-07-22 guardrail audit)."""
+    import adef.core.profiles as profiles_mod
+
+    monkeypatch.setattr(profiles_mod, "_toml_available", lambda: False)
+    prof = dict(ACME_PROFILE)
+    prof["signature"] = {**prof["signature"], "container": "toml"}
+    errors = lint_profile_dict(prof)
+    assert any("Python 3.11+" in e for e in errors)
+
+    # With TOML available, the same profile lints clean.
+    monkeypatch.setattr(profiles_mod, "_toml_available", lambda: True)
+    assert not any("Python 3.11+" in e for e in lint_profile_dict(prof))
+
+
 @pytest.mark.parametrize(
     ("mutate", "expected_fragment"),
     [

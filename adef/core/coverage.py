@@ -129,6 +129,11 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
     source_counter: collections.Counter[str] = collections.Counter()
 
     for rec in records:
+        # An orphaned record's source rule is gone (sync marks it) — it must not
+        # count as coverage, else a deleted detection inflates the report
+        # (fictional coverage by tombstone). ISA 2026-07-22 guardrail audit.
+        if rec.get("orphaned"):
+            continue
         det_id = rec.get("id", "?")
         source = rec.get("data_source") or ""
         needs_review = bool(rec.get("needs_review"))

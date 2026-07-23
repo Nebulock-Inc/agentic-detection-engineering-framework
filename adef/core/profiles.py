@@ -36,6 +36,13 @@ PROFILE_SCHEMA_VERSION = 1
 CONTAINERS = ("yaml", "json", "toml", "conf", "raw")
 IMPLEMENTED_CONTAINERS = ("yaml", "json", "toml")  # toml needs Python 3.11+ (tomllib)
 
+
+def _toml_available() -> bool:
+    """True if this interpreter can parse TOML (stdlib tomllib, Python 3.11+)."""
+    import importlib.util
+
+    return importlib.util.find_spec("tomllib") is not None
+
 QUERY_LANGUAGES = ("spl", "kql", "cql", "sql", "none")
 
 # map keys a profile may set; `title` and `query` are required.
@@ -94,6 +101,14 @@ def lint_profile_dict(data: Any) -> list[str]:
         errors.append(
             f"signature.container: '{container}' is valid in the schema but not "
             f"implemented in v1 (implemented: {', '.join(IMPLEMENTED_CONTAINERS)})"
+        )
+    elif container == "toml" and not _toml_available():
+        # toml is implemented but needs stdlib tomllib (Python 3.11+). Without
+        # this check the profile lints OK and then silently claims nothing on
+        # 3.10 — the confusing footgun. Say so at lint time. (ISA 2026-07-22.)
+        errors.append(
+            "signature.container: 'toml' requires Python 3.11+ (stdlib tomllib); "
+            "this interpreter can't parse TOML, so the profile would match nothing"
         )
     for key in ("all_keys", "any_keys", "none_keys", "extension"):
         val = sig.get(key, [])

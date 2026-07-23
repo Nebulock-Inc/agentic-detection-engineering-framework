@@ -20,6 +20,16 @@ def _rec(tid_list, needs_review=False, data_source="src_a", status="draft"):
     }
 
 
+def test_orphaned_records_excluded_from_coverage():
+    """A record whose source rule is gone (sync marks orphaned) must not count
+    as coverage — else a deleted detection inflates the report (ISA 2026-07-22)."""
+    live = _rec(["T1059.001"])
+    orphan = {**_rec(["T1003.001"]), "orphaned": True, "status": "deprecated"}
+    cov = build_coverage([live, orphan])
+    assert "T1059.001" in cov.techniques        # the live rule counts
+    assert "T1003.001" not in cov.techniques     # the orphaned rule does not
+
+
 def test_solid_technique_needs_depth_and_a_clean_detection():
     recs = [
         _rec(["T1059.001"], needs_review=False, data_source="edr"),

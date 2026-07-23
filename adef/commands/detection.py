@@ -292,7 +292,7 @@ def list_cmd(
         keys = (
             "id", "title", "platform", "engine", "format", "query_language",
             "data_source", "mitre", "status", "stage", "owner", "origin",
-            "needs_review", "review_reasons", "rule_ref",
+            "orphaned", "needs_review", "review_reasons", "rule_ref",
         )
         payload = []
         for d in records:
@@ -310,6 +310,8 @@ def list_cmd(
             ("legacy",) if "legacy" in _reasons(d) else ()
         )
         flag = f" [yellow]⚠ {','.join(structural)}[/yellow]" if structural else ""
+        if d.get("orphaned"):
+            flag += " [red]orphaned[/red]"  # source rule gone from the repo
         mitre = ",".join(d.get("mitre") or []) or "-"
         console.print(
             f"  {d.get('id', '?')}  {d.get('stage', '?'):<8} {d.get('status', '?'):<10} "
@@ -373,6 +375,11 @@ def show(detection_id: str, workspace: Path | None) -> None:
         f"  {'lifecycle':<15} stage={record.get('stage')} status={record.get('status')}"
         + (f" owner={record['owner']}" if record.get("owner") else "")
     )
+    if record.get("orphaned"):
+        console.print(
+            f"  [red]{'orphaned':<15}[/red] source rule is gone from the repo "
+            "(kept for its history; excluded from coverage)"
+        )
     console.print(f"  {'origin':<15} {record.get('origin') or 'catalogued'}")
     if record.get("needs_review"):
         reasons = ", ".join(record.get("review_reasons") or []) or "unspecified (legacy record)"
