@@ -95,5 +95,7 @@ def test_deprecation_healthy_keeps():
     assert rec.verdict == "keep"
 
 
-def test_twelve_wrappers_exported():
-    assert len(wrappers_pkg.ALL_WRAPPERS) == 12
+def test_wired_wrappers_exported():
+    # The four wrappers ADEF actually orchestrates (3 refine + performance
+    # metrics). The other eight speculative slots were removed 2026-07-22.
+    assert len(wrappers_pkg.ALL_WRAPPERS) == 4

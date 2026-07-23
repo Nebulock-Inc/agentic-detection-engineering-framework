@@ -213,7 +213,7 @@ adef/
 │   ├── tune_recommender.py           # ADEF-native: tuning suggestions
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   └── wrappers/                     # Thin wrappers around 12 upstream rule agents
+│   └── wrappers/                     # Thin wrappers around the upstream rule agents ADEF orchestrates (4: similarity, overlap, verification, performance-metrics)
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
@@ -262,11 +262,11 @@ ADEF uses Python entry points for extensibility (same as ATHF):
 ADEF never hardcodes upstream package names. Integration uses env vars:
 
 ```bash
-# Wrapper bindings (12 upstream rule-engineering agents)
-ADEF_WRAPPER_COVERAGE_ANALYSIS=package.module:CoverageAnalysisClass
+# Wrapper bindings (the upstream rule-engineering agents ADEF orchestrates)
+ADEF_WRAPPER_RULE_SIMILARITY=package.module:RuleSimilarityClass
 ADEF_WRAPPER_RULE_OVERLAP=package.module:RuleOverlapClass
 ADEF_WRAPPER_VERIFICATION=package.module:VerificationClass
-# ... (9 more)
+ADEF_WRAPPER_PERFORMANCE_METRICS=package.module:PerformanceMetricsClass
 
 # Hunt promotion
 ADEF_HUNT_RULE_GENERATOR=athf_package.module:HuntRuleGeneratorClass
