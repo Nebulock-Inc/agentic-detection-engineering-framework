@@ -142,6 +142,13 @@ echo -e "${GREEN}✓  Cloned $BRANCH to $INSTALL_DIR${NC}"
 cd "$INSTALL_DIR"
 echo -e "${GREEN}✓  Changed to $INSTALL_DIR${NC}"
 
+# Step 3b: Pull latest commits — closes the clone-vs-push race and prints an
+# explicit freshness receipt (the branch moves several times an hour during
+# active development; "which snapshot do I have?" has bitten more than once).
+echo -e "${YELLOW}⚙  Pulling latest commits...${NC}"
+git pull --ff-only origin "$BRANCH"
+echo -e "${GREEN}✓  Up to date: $BRANCH @ $(git rev-parse --short HEAD)${NC}"
+
 # Step 4: Find Python executable
 PYTHON_CMD=""
 for cmd in "python$PYTHON_VERSION" "python3.$PYTHON_VERSION" "python3" "python"; do
