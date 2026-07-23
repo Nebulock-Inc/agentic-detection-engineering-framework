@@ -189,9 +189,9 @@ next engineer reads *why* the threshold is what it is.
 ## Claude plugin & MCP
 
 The repo doubles as a plugin marketplace: one install wires up the `adef-mcp`
-server, the catalog-onboarding, detection-explorer, coverage-review,
-mitre-tagger, detection-author, and schema-declaration skills, and the
-profile-author sub-agent.
+server, the catalog-onboarding, catalog-sync, detection-explorer,
+coverage-review, mitre-tagger, detection-author, and schema-declaration skills,
+and the profile-author sub-agent.
 
 ```
 pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
