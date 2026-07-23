@@ -92,6 +92,12 @@ consumed across both people's features.
   exports — ~39% of ESCU's active detections. Declaring a data model as a
   source is the seam (roadmap v0.2.0 has the sketch; ISA Decisions 2026-07-22
   has the evidence).
+- **Authoring write seam.** Skills finishing an authored draft must hand-edit
+  the record YAML (`query:`) and journal Find section — no CLI/MCP write path
+  exists, and the first live run (D-1470) forgot to bump `updated:`. Candidate:
+  `adef detection set-query D-XXXX` + a journal Find-seed seam (or MCP tools).
+  Skill carries interim guidance (edit-is-OK for `origin: authored` + bump
+  `updated:`) as of 2026-07-23.
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
 - `schema list`; `detection search`. (Per-detection validation shipped
   2026-07-23 as `schema check --detection D-XXXX` — a scope flag, not a

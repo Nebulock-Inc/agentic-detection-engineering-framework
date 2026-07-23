@@ -157,10 +157,17 @@ trigger, references, the one-sentence hypothesis, MITRE mapping, and the known
 false-positive notes. This is the durable "why" — write it for the engineer who
 inherits this rule, not for now.
 
+There is no CLI write-seam yet for the record's `query:` or the journal's Find
+template — editing those files directly is the supported interim path (they
+are ADEF's own `origin: authored` artifacts, never a user's rule repo). When
+you edit the record YAML, **also bump its `updated:` timestamp** — hand-edits
+that skip it make the record lie about its freshness.
+
 ### 6. Validate against ADEF's gates
 
-- `adef schema check` — the authored rule's fields are cross-referenced against
-  the schema. Fields flagged "missing from schema" mean a typo, an undeclared
+- `adef schema check --detection <D-XXXX>` — scope the check to the rule you
+  just authored (whole-catalog output buries it and drags in unrelated
+  findings). Fields flagged "missing from schema" mean a typo, an undeclared
   alias, or a real gap — resolve each with the engineer.
 - If they map ATT&CK, tag it: `adef detection tag-mitre <D-XXXX> <T…>` (or hand
   off to the mitre-tagger skill).
