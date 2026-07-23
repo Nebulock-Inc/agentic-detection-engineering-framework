@@ -1,6 +1,6 @@
 ---
 name: schema-declaration
-description: Help users generate data source declarations for ADEF schema system
+description: Set up or update ADEF schema declarations — the YAML listing a SIEM's data sources and their fields — from a real field export. Use when the user wants to declare data sources or build a field inventory, when `adef schema` commands report no schemas, when they ask how to set ADEF up for their SIEM (Splunk, Sentinel, Elastic, Chronicle, Sumo, QRadar), when they have a raw field export to reshape, or when SIEM fields changed and the schema needs refreshing (a re-ingest, not a separate sync). Drives `adef schema recipe → reshape → ingest`; never hand-writes the YAML or derives schemas from rules. For cataloging rules use catalog-onboarding; for field-vs-rule gaps use `adef schema check`.
 ---
 
 # Schema Declaration Workflow
@@ -159,6 +159,20 @@ Suggest:
 - `adef catalog <rule-repo>` to catalog existing rules
 - `adef detection new TITLE` to create a new detection
 - `adef schema check` to cross-reference rules vs schemas
+
+### 7. Keeping Schemas Current
+
+When the SIEM's fields change, there is **no separate schema sync** — updating a
+schema *is* a re-ingest:
+
+1. Re-run the recipe and re-export (or reshape a fresh export).
+2. `adef schema ingest <declaration>` again.
+
+Re-ingest **preserves human corrections** (`corrected`-provenance fields survive)
+and **reports drift** — fields added, removed, or changed since the last ingest —
+so you see what moved without losing edits. (Contrast the catalog, which
+reconciles via `adef sync` + the `catalog-sync` skill; schemas reconcile by
+re-ingesting the declaration.)
 
 ## Anti-Patterns
 
