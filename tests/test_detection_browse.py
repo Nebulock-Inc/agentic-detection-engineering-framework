@@ -115,6 +115,20 @@ def test_stage_advance_unknown_id_errors_cleanly(ws, catalogued):
         assert "not found" in result.output.lower(), f"{stage}: {result.output}"
 
 
+def test_tag_mitre_unknown_id_message_is_clean(ws, catalogued):
+    # Missing detection → a clean message, not the single-quote-wrapped KeyError repr.
+    result = CliRunner().invoke(detection_cli, ["tag-mitre", "D-8888", "T1059"])
+    assert result.exit_code != 0, result.output
+    assert "D-8888 is not in the catalog" in result.output
+    assert "'D-8888" not in result.output  # no stray leading quote
+
+
+def test_new_rejects_empty_title(ws):
+    result = CliRunner().invoke(detection_cli, ["new", ""])
+    assert result.exit_code != 0, result.output
+    assert "empty" in result.output.lower()
+
+
 def test_list_filter_engine(ws, catalogued):
     # Sigma folds to engine `sigma`; the .conf SPL rule folds to `sql`.
     result = CliRunner().invoke(detection_cli, ["list", "--engine", "sigma"])

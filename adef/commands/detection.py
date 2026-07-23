@@ -61,6 +61,8 @@ def new(
     journal captures *why*; the record holds the *what*). The rule lands in the
     ADEF catalog; getting it into your rules repo is your call.
     """
+    if not title.strip():
+        raise click.ClickException("TITLE must not be empty.")
     journals_dir = workspace_journals_dir(workspace)
     # Allocate from the SHARED id space (catalog + journals), not journals alone —
     # otherwise a workspace whose catalog index exceeds its journal index (e.g. a
@@ -454,7 +456,9 @@ def tag_mitre_cmd(
     try:
         result = tag_mitre(ws, detection_id, list(technique_ids))
     except KeyError as exc:
-        raise click.ClickException(str(exc).strip('"')) from exc
+        # tag_mitre raises KeyError only for a missing detection; emit our own clean
+        # message rather than the single-quote-wrapped KeyError repr.
+        raise click.ClickException(f"{detection_id} is not in the catalog") from exc
     except InvalidTechniqueError as exc:
         raise click.ClickException(str(exc)) from exc
 
