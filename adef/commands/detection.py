@@ -99,6 +99,13 @@ def new(
             f"grounded in schema [cyan]{source}[/cyan] "
             f"({record.platform} / {record.query_language})."
         )
+        if not record.query:
+            # Be honest: the starter query is empty (schema has no scope literals,
+            # or an unmodelled query language) — nothing was actually "grounded".
+            console.print(
+                f"  [yellow]note:[/yellow] schema [cyan]{source}[/cyan] has no scope "
+                "literals, so the starter query is empty — you'll write it from scratch."
+            )
         console.print(
             "  Next: fill in the query + author the Find context in the journal "
             "(the AI assistant / mitre-tagger can help)."

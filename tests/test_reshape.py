@@ -424,3 +424,15 @@ def test_cli_reshape_platform_from_config(tmp_path, monkeypatch):
     result = CliRunner().invoke(schema_cli, ["reshape", str(export), "-o", str(out)])
     assert result.exit_code == 0, result.output
     assert out.exists()
+
+
+def test_reshape_binary_file_is_clean_error(tmp_path):
+    """A binary file (or wrong encoding) → ReshapeError, not a raw
+    UnicodeDecodeError traceback (ISA 2026-07-22 guardrail audit)."""
+    binf = tmp_path / "export.bin"
+    binf.write_bytes(b"\x00\x01\x02\xff\xfe garbage \x80\x81")
+    with pytest.raises(ReshapeError, match="UTF-8"):
+        reshape_export(binf, "elastic")
+    # the text-fallback parser too
+    with pytest.raises(ReshapeError, match="UTF-8"):
+        reshape_export(binf, "some-unknown-platform")

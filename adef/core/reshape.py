@@ -383,7 +383,17 @@ def reshape_export(
 ) -> ReshapeResult:
     """Parse a raw export for ``platform`` and build a draft declaration."""
     parser = _PARSERS.get(platform.lower(), _parse_text)
-    raw_fields = parser(export_path)
+    try:
+        raw_fields = parser(export_path)
+    except UnicodeDecodeError as exc:
+        # A binary file (or wrong encoding) reaches the text/CSV/JSON readers as
+        # a decode error — surface it cleanly instead of a raw traceback.
+        raise ReshapeError(
+            f"{export_path.name}: not readable as UTF-8 text — is this the right "
+            f"export file? ({exc.reason})"
+        ) from exc
+    except OSError as exc:
+        raise ReshapeError(f"{export_path.name}: could not read ({exc})") from exc
     if not raw_fields:
         raise ReshapeError(f"{export_path.name}: no fields found")
 
