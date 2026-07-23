@@ -34,6 +34,16 @@ def test_template_frontmatter_keys_present():
     assert expected <= set(fm.keys())
 
 
+def test_init_honors_adef_workspace_env(tmp_path, monkeypatch):
+    # `adef init` with no PATH must scaffold at $ADEF_WORKSPACE — parity with every
+    # other command — not the hardcoded ~/work/adef-workspace.
+    target = tmp_path / "env-ws"
+    monkeypatch.setenv("ADEF_WORKSPACE", str(target))
+    result = CliRunner().invoke(init, [])
+    assert result.exit_code == 0, result.output
+    assert (target / "journals").is_dir(), f"init did not scaffold at ADEF_WORKSPACE: {result.output}"
+
+
 # --------------------------------------------------------------------------- #
 # Guided interactive setup (journey routing, capabilities, skills chaining)
 # --------------------------------------------------------------------------- #

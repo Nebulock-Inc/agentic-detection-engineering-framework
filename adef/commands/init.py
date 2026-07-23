@@ -16,6 +16,7 @@ per the project decision logged in ``ISA.md``.
 
 from __future__ import annotations
 
+import os
 import shutil
 from importlib import resources
 from pathlib import Path
@@ -159,7 +160,10 @@ def _copy_template(target_templates_dir: Path) -> Path:
 )
 def init(path: Path | None, force: bool, interactive: bool) -> None:
     """Initialize an ADEF workspace at PATH (default ``~/work/adef-workspace/``)."""
-    workspace = (path or DEFAULT_WORKSPACE).expanduser().resolve()
+    # Explicit PATH → ADEF_WORKSPACE → default. (Deliberately NOT the shared
+    # resolver's cwd-fallback: init *creates* a workspace, so it must not infer its
+    # target from cwd contents the way the read commands do.)
+    workspace = Path(path or os.environ.get("ADEF_WORKSPACE") or DEFAULT_WORKSPACE).expanduser().resolve()
     workspace.mkdir(parents=True, exist_ok=True)
 
     journals = workspace / "journals"
