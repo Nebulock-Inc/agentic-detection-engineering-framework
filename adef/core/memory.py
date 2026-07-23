@@ -17,7 +17,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 from adef.core.journal import Journal, JournalEntry
 
@@ -29,6 +29,34 @@ _BM25_B = 0.75
 
 def _tokenize(text: str) -> list[str]:
     return [t.lower() for t in _TOKEN_RE.findall(text)]
+
+
+# The first timestamped stage block marks the end of the static template
+# preamble — everything before it is fill-in scaffolding, not reasoning.
+_STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
+
+
+def _clean_for_snippet(text: str) -> str:
+    """Drop journal chrome so a snippet shows matched reasoning, not scaffolding:
+    the static-template preamble (up to the first ``## [ts] Stage:`` block), stage
+    headings, blockquotes, the echoed title, and 'Catalogued from…' housekeeping.
+    """
+    m = _STAGE_BLOCK_RE.search(text)
+    if m:
+        text = text[m.start():]  # keep only the real stage blocks (+ appended record text)
+    keep: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#") or line.startswith(">"):  # stage headings / blockquote
+            continue
+        if line.startswith("**Title:**"):                 # the echoed title
+            continue
+        if "Catalogued from" in line and "adef" in line:   # housekeeping note
+            continue
+        keep.append(line)
+    return "\n".join(keep)
 
 
 @dataclass
@@ -47,6 +75,7 @@ class SearchHit:
 class _Doc:
     entry: JournalEntry
     tokens: list[str]
+    text: str = ""  # the searchable text (journal body + any extra record text)
     tf: Counter = field(default_factory=Counter)
     length: int = 0
 
@@ -70,15 +99,32 @@ class MemoryIndex:
             return iter(())
         return Journal(self._journals_dir).iter_entries()
 
-    def build(self, entries: Optional[Iterable[JournalEntry]] = None) -> None:
+    def build(
+        self,
+        entries: Optional[Iterable[JournalEntry]] = None,
+        extra_text_for: Optional["Callable[[JournalEntry], str]"] = None,
+    ) -> None:
+        """Build the index over journal bodies.
+
+        ``extra_text_for(entry) -> str`` (optional) supplies extra searchable
+        text per detection — the catalog record's title/mitre/platform/query —
+        so a detection is findable by *what it detects*, not only what its
+        journal says. The command layer fills this from the catalog (keeping
+        this module decoupled from ``Catalog``).
+        """
         source = list(entries) if entries is not None else list(self._iter_source_entries())
         self._docs = []
         self._df = Counter()
         total_len = 0
         for entry in source:
-            tokens = _tokenize(entry.body)
+            text = entry.body
+            if extra_text_for is not None:
+                extra = extra_text_for(entry)
+                if extra:
+                    text = f"{text}\n{extra}"
+            tokens = _tokenize(text)
             tf = Counter(tokens)
-            doc = _Doc(entry=entry, tokens=tokens, tf=tf, length=len(tokens))
+            doc = _Doc(entry=entry, tokens=tokens, text=text, tf=tf, length=len(tokens))
             for term in tf:
                 self._df[term] += 1
             total_len += doc.length
@@ -107,17 +153,22 @@ class MemoryIndex:
         return score
 
     def _snippet(self, body: str, query_terms: list[str], width: int = 240) -> str:
+        # Snippet from a *cleaned* view: drop the empty template scaffolding
+        # (unfilled `- **Field:**` lines, the `## Stage` headers, the blockquote
+        # header) and housekeeping ("Catalogued from…") so the snippet shows the
+        # actual matched reasoning, not boilerplate. (ISA 2026-07-22.)
+        text = _clean_for_snippet(body)
         if not query_terms:
-            return body[:width].strip()
-        lowered = body.lower()
+            return text[:width].strip().replace("\n", " ")
+        lowered = text.lower()
         for term in query_terms:
             idx = lowered.find(term)
             if idx >= 0:
                 start = max(0, idx - width // 2)
-                end = min(len(body), start + width)
-                snippet = body[start:end].strip().replace("\n", " ")
-                return ("…" if start > 0 else "") + snippet + ("…" if end < len(body) else "")
-        return body[:width].strip().replace("\n", " ")
+                end = min(len(text), start + width)
+                snippet = text[start:end].strip().replace("\n", " ")
+                return ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else "")
+        return text[:width].strip().replace("\n", " ")
 
     def search(self, query: str, limit: int = 10) -> list[SearchHit]:
         """Return up to ``limit`` ranked hits for ``query``."""
@@ -141,7 +192,7 @@ class MemoryIndex:
                     score=round(score, 4),
                     title=entry.frontmatter.get("title", ""),
                     current_stage=entry.current_stage,
-                    snippet=self._snippet(entry.body, query_terms),
+                    snippet=self._snippet(doc.text or entry.body, query_terms),
                     path=entry.path,
                 )
             )

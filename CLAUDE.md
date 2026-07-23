@@ -155,13 +155,19 @@ adef detection list --origin authored          # created in ADEF vs catalogued f
 adef detection list --needs-review no_mitre    # triage the enrichment queue
 adef detection list --report json              # machine-readable (adds a derived `tactics` array)
 adef detection show D-0001                     # record + query + derived tactics + journal tail
+adef detection search "credential dumping windows"  # BM25 over journals + catalog metadata
 ```
 `list` filters on catalog record fields (`--platform`/`--status`/`--stage`/
 `--rule-format`/`--origin`/`--needs-review`) plus `--tactic` and `--engine`, which
 are resolved from each detection's ATT&CK technique IDs (`--tactic` accepts the
 tactic shortname or display name). `show` renders the record, its query, derived
 ATT&CK tactics, a `support` line for recognized-but-unsupported formats, and the
-tail of the paired journal. Both are read-only over the catalog.
+tail of the paired journal. `search` ranks detections by a BM25 index over the
+**journal reasoning (the *why*) AND the catalog record** (title, MITRE, platform,
+data_source, query — the *what*), so a detection is findable by what it detects
+even when its journal is sparse; snippets strip template scaffolding to show the
+matched content. All read-only over the workspace. (Also exposed as the
+`memory_search` MCP tool.)
 
 ### Coverage Report
 ```bash

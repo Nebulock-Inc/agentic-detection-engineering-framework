@@ -211,3 +211,22 @@ def test_detection_new_uses_shared_id_space(ws, catalogued):
     assert Catalog(ws).find_record("D-0002")[1]["title"] == "Sigma windows rule" \
         or Catalog(ws).find_record("D-0002")[1]["id"] == "D-0002"
     assert (ws / "journals" / "D-0003.md").exists()
+
+
+def test_search_finds_by_record_and_journal(ws, catalogued):
+    """`detection search` matches catalog metadata (mitre/platform) AND journal
+    notes — the durable-memory search seam (ISA 2026-07-22)."""
+    # The Sigma rule carries T1218.005 in its record; its journal is a skeleton.
+    # Search finds it by the record field alone (which id it got isn't the point).
+    r = CliRunner().invoke(detection_cli, ["search", "T1218.005"])
+    assert r.exit_code == 0, r.output
+    assert "Sigma windows rule" in r.output   # found by the record's MITRE field
+
+    # A journal note is searchable too — use a nonsense token so only the note matches.
+    CliRunner().invoke(detection_cli, ["observe", "D-0001", "--note", "zzbeaconzz marker"])
+    r2 = CliRunner().invoke(detection_cli, ["search", "zzbeaconzz"])
+    assert "D-0001" in r2.output
+
+    # No match → clean message, exit 0.
+    r3 = CliRunner().invoke(detection_cli, ["search", "nomatchxyzzy"])
+    assert r3.exit_code == 0 and "No detections match" in r3.output

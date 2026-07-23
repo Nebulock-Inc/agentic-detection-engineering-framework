@@ -464,4 +464,67 @@ def tag_mitre_cmd(
         console.print("Nothing to add.")
 
 
+def _record_search_text(data: dict) -> str:
+    """The catalog fields worth searching on — so a detection is findable by
+    *what it detects* (title, MITRE, platform, source, query), not only by what
+    its journal says."""
+    parts = [
+        str(data.get("title", "")),
+        " ".join(data.get("mitre") or []),
+        str(data.get("platform", "")),
+        str(data.get("data_source", "")),
+        str(data.get("format", "")),
+        str(data.get("query", "")),
+    ]
+    return " ".join(p for p in parts if p)
+
+
+@detection.command("search")
+@click.argument("query")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
+)
+@click.option("--limit", default=10, show_default=True, help="Max results.")
+def search(query: str, workspace: Path | None, limit: int) -> None:
+    """Search detections by journal reasoning AND catalog metadata (BM25).
+
+    Answers "have we looked at X before / do we cover Y?" across the *why*
+    (journals) and the *what* (catalog records: title, MITRE, platform, query).
+    """
+    from adef.core.catalog import Catalog
+    from adef.core.journal import Journal
+    from adef.core.memory import MemoryIndex
+
+    ws = _workspace_from(workspace)
+    journals_dir = ws / "journals"
+
+    # Map each detection id → its catalog record's searchable text.
+    record_text: dict[str, str] = {
+        det_id: _record_search_text(data)
+        for det_id, _path, data in Catalog(ws).iter_records()
+    }
+
+    index = MemoryIndex(journals_dir=journals_dir)
+    index.build(
+        entries=list(Journal(journals_dir).iter_entries()),
+        extra_text_for=lambda e: record_text.get(e.detection_id, ""),
+    )
+    hits = index.search(query, limit=limit)
+
+    if not hits:
+        console.print(f"[yellow]No detections match[/yellow] '{query}'.")
+        return
+    console.print(f"[bold]{len(hits)}[/bold] match(es) for '{query}':\n")
+    for h in hits:
+        console.print(
+            f"  [bold]{h.detection_id}[/bold]  {h.title}  "
+            f"[dim](stage={h.current_stage}, score={h.score})[/dim]"
+        )
+        if h.snippet:
+            console.print(f"    [dim]{h.snippet}[/dim]", highlight=False)
+
+
 __all__ = ["detection"]
