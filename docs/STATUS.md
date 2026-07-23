@@ -10,7 +10,7 @@ hands-on walkthrough, `docs/quickstart.md`.
 > now in `docs/archive/`.
 
 **Version:** v0.1.0 (unreleased — not on PyPI; install from source).
-**Last updated:** 2026-07-22.
+**Last updated:** 2026-07-23.
 
 ---
 
@@ -63,7 +63,9 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef schema ingest adef-sources.yml`** — build `schema/<source>.yml`
   (v2, `declared|corrected` provenance, drift on re-ingest).
 - **`adef schema lint`** — validate a declaration.
-- **`adef schema check`** — cross-reference rule field usage vs. schemas.
+- **`adef schema check`** — cross-reference rule field usage vs. schemas
+  (sql / spl / cql / kql / **sigma** — Sigma fields are the `detection:` block's
+  map keys, minus `|modifiers`).
 - **`adef schema show <source>`** — display a schema.
 - **`adef schema recipe [platform]`** — SIEM-specific field-extraction recipe
   (7 platforms). The Splunk query keeps distribution columns

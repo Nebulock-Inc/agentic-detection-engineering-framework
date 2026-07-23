@@ -1,10 +1,11 @@
-"""Rule parsing to extract field names from SQL/SPL/CQL/KQL queries."""
+"""Rule parsing to extract field names from SQL/SPL/CQL/KQL/Sigma queries."""
 
 from __future__ import annotations
 
 import re
 
 import sqlglot
+import yaml
 from sqlglot.expressions import Column
 
 
@@ -141,4 +142,49 @@ def extract_kql_fields(query: str) -> set[str]:
                 if field and not field.isdigit():
                     fields.add(field)
 
+    return fields
+
+
+def _sigma_fields_from_identifier(value: object, out: set[str]) -> None:
+    """Collect field keys from one Sigma search-identifier value.
+
+    An identifier is a map of ``field|modifier: value`` (fields = the keys), a
+    list of such maps, or a bare list of keyword strings (no fields at all).
+    Map keys are stripped of ``|modifier`` suffixes (``CommandLine|contains``
+    → ``CommandLine``). Value-only modifiers (``|all``) and pure keyword lists
+    contribute no field names.
+    """
+    if isinstance(value, dict):
+        for key in value:
+            name = str(key).split("|", 1)[0].strip()
+            if name:
+                out.add(name)
+    elif isinstance(value, list):
+        for item in value:
+            _sigma_fields_from_identifier(item, out)  # list of maps (OR-ed)
+
+
+def extract_sigma_fields(query: str) -> set[str]:
+    """Extract event-field names from a Sigma rule's ``detection:`` block.
+
+    Sigma has no query language — its fields are the map keys of each
+    search-identifier under ``detection:`` (``condition`` is boolean logic over
+    identifier *names*, not a field source, so it's skipped). Returns an empty
+    set on unparseable YAML or a rule with no ``detection`` map.
+    """
+    try:
+        data = yaml.safe_load(query)
+    except yaml.YAMLError:
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    detection = data.get("detection")
+    if not isinstance(detection, dict):
+        return set()
+
+    fields: set[str] = set()
+    for name, value in detection.items():
+        if name == "condition":  # boolean logic over identifier names, not fields
+            continue
+        _sigma_fields_from_identifier(value, fields)
     return fields

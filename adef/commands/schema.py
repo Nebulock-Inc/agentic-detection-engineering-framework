@@ -39,19 +39,22 @@ from adef.core.rule_discovery import shape_literals
 from adef.core.rule_parser import (
     extract_cql_fields,
     extract_kql_fields,
+    extract_sigma_fields,
     extract_spl_fields,
     extract_sql_fields,
 )
 
 console = Console()
 
-# Query-language field extractors, keyed by the record's ``query_language``.
-# Sigma is excluded on purpose — it's structured YAML, not a query language.
+# Field extractors keyed by the record's ``query_language`` (falling back to
+# ``format`` at the call site). Sigma has no query language — it's keyed by
+# format, and its fields are the ``detection:`` block's map keys.
 _FIELD_EXTRACTORS = {
     "sql": extract_sql_fields,
     "spl": extract_spl_fields,
     "cql": extract_cql_fields,
     "kql": extract_kql_fields,
+    "sigma": extract_sigma_fields,
 }
 
 # Routing/meta pseudo-fields — never findings: they address data rather than

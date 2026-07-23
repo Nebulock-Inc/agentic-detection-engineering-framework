@@ -373,3 +373,45 @@ def test_check_covers_profile_claimed_rules_via_query_language(ws, tmp_path):
     report = _check_report(ws)
     assert report["rules_checked"] == 1
     assert "NotAField" in report["missing_from_schema"].get("cloudtrail", {})
+
+
+def test_check_validates_sigma_detection_fields(ws, tmp_path):
+    """Sigma rules are now field-checked: fields are the detection-block map
+    keys (stripped of |modifiers). The rule matches a schema by its logsource
+    category (its data_source). Largest public rule format, previously skipped."""
+    from adef.commands.catalog import catalog as catalog_cli
+
+    repo = tmp_path / "sigma-repo"
+    (repo / "windows").mkdir(parents=True)
+    (repo / "windows" / "r.yml").write_text(
+        textwrap.dedent(
+            """\
+            title: Suspicious mshta child
+            id: 11111111-2222-3333-4444-555555555555
+            logsource:
+                category: process_creation
+                product: windows
+            detection:
+                selection:
+                    Image|endswith: '\\mshta.exe'
+                    BogusField: 1
+                condition: selection
+            tags: [attack.t1218.005]
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    # Schema named for the logsource category so the rule's data_source matches.
+    decl = {"version": 1, "sources": [{
+        "name": "process_creation", "platform": "windows", "query_language": "spl",
+        "fields": [{"name": "Image"}, {"name": "CommandLine"}],
+    }]}
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, decl, "pc.yml"))])
+    report = _check_report(ws)
+    assert report["rules_checked"] == 1              # Sigma no longer skipped
+    missing = report["missing_from_schema"].get("process_creation", {})
+    assert "BogusField" in missing                   # undeclared → flagged
+    assert "Image" not in missing                    # declared → clean
+    assert "condition" not in missing                # logic, not a field

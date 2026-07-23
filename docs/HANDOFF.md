@@ -95,11 +95,13 @@ consumed across both people's features.
 - ✅ *(fixed 2026-07-23)* `schema check` flags stats-derived output fields
   (`count` from `| stats count by ...`) as missing-from-schema — the SPL
   extractor now subtracts aggregation outputs (`count`, `... as total`).
-- **Sigma field validation in `schema check`.** The extractor map covers
-  sql/spl/cql/kql and skips Sigma entirely — the largest public rule format
-  gets zero field validation, yet its field names are literally the
-  `detection:` block's YAML keys (strip `|modifiers`). No declaration-format
-  change; likely the highest-value medium schema item.
+- ✅ *(fixed 2026-07-23)* **Sigma field validation in `schema check`.** The
+  extractor map now includes `sigma` (`extract_sigma_fields` in
+  `rule_parser.py`): fields are the `detection:` block's search-identifier map
+  keys, stripped of `|modifiers`; `condition` (logic over identifier names)
+  and pure keyword lists contribute none. A Sigma rule matches a schema by its
+  logsource category (its `data_source`). The largest public rule format now
+  gets field validation — previously skipped. No declaration-format change.
 - **v2 pair sequencing (per-alias values / namespace preference / data-model
   schemas):** next step is a design doc for sign-off, not code — it changes
   the declaration format (a shared surface). Reasoning in the 2026-07-23

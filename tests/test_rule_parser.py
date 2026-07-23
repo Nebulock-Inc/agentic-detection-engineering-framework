@@ -1,10 +1,13 @@
 """Tests for SQL rule parser."""
 
+import textwrap
+
 from adef.core.rule_parser import (
     extract_sql_fields,
     extract_spl_fields,
     extract_cql_fields,
     extract_kql_fields,
+    extract_sigma_fields,
 )
 
 
@@ -137,3 +140,56 @@ def test_extract_spl_fields_excludes_aggregation_outputs():
 
     # a genuine event field named count (field comparison, no stats) survives
     assert "count" in extract_spl_fields("index=x count=5")
+
+
+def test_extract_sigma_fields():
+    """Sigma fields are the detection-block map keys, stripped of |modifiers.
+    `condition` is boolean logic over identifier names, not a field source."""
+    query = textwrap.dedent(
+        """\
+        title: Suspicious mshta child
+        logsource:
+            category: process_creation
+            product: windows
+        detection:
+            selection:
+                Image|endswith: '\\mshta.exe'
+                ParentImage|contains:
+                    - '\\winword.exe'
+                    - '\\excel.exe'
+            filter:
+                CommandLine|contains: 'update.mshta'
+            condition: selection and not filter
+        """
+    )
+    fields = extract_sigma_fields(query)
+    assert fields == {"Image", "ParentImage", "CommandLine"}
+    assert "selection" not in fields and "condition" not in fields
+
+
+def test_extract_sigma_fields_list_of_maps_and_keyword_list():
+    """A search-identifier can be a list of maps (OR-ed); a bare keyword list
+    has no fields. Both must be handled without spurious field names."""
+    query = textwrap.dedent(
+        """\
+        detection:
+            selection:
+                - EventID: 4688
+                  NewProcessName|endswith: '\\rundll32.exe'
+                - EventID: 1
+                  Image|endswith: '\\rundll32.exe'
+            keywords:
+                - 'password'
+                - 'secret'
+            condition: selection or keywords
+        """
+    )
+    fields = extract_sigma_fields(query)
+    assert fields == {"EventID", "NewProcessName", "Image"}
+
+
+def test_extract_sigma_fields_malformed_returns_empty():
+    """Unparseable YAML or a rule with no detection map → empty set, no crash."""
+    assert extract_sigma_fields("this: is: not: valid: yaml:") == set()
+    assert extract_sigma_fields("title: no detection block here") == set()
+    assert extract_sigma_fields("") == set()
