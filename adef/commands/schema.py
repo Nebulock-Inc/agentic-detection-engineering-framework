@@ -321,6 +321,43 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
             console.print(f"  [cyan]·[/cyan] {fname}")
 
 
+@schema.command(name="list")
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="ADEF workspace path (defaults to ADEF_WORKSPACE or ~/work/adef-workspace/).",
+)
+def list_cmd(workspace: Path | None):
+    """List the declared schemas in the workspace (one line per source)."""
+    schema_dir = _get_workspace_schema_dir(workspace)
+    paths = sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []
+    if not paths:
+        console.print(
+            "No schemas declared yet. Run `adef schema ingest <declaration.yml>` first."
+        )
+        return
+    n = 0
+    for path in paths:
+        v2 = read_schema_v2(path)
+        if v2 is None:
+            console.print(
+                f"  [yellow]{path.stem}[/yellow]  (not a schema_version-2 file — skipped)"
+            )
+            continue
+        n += 1
+        platform = v2.get("platform") or "-"
+        ql = v2.get("query_language") or "unspecified"
+        nfields = len(v2.get("fields", []))
+        console.print(
+            f"  [bold]{v2['source']}[/bold]  {platform}  {ql}  "
+            f"({nfields} field{'s' if nfields != 1 else ''})"
+        )
+    console.print(
+        f"\n[bold]{n}[/bold] schema(s) — `adef schema show <source>` for detail."
+    )
+
+
 @schema.command()
 @click.argument("source")
 @click.option(

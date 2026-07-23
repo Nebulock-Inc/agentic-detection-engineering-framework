@@ -182,6 +182,20 @@ def test_cli_show_renders_v2(ws, tmp_path):
     assert "schema v2" in result.output and "EventCode" in result.output
 
 
+def test_cli_list_empty_workspace(ws):
+    result = CliRunner().invoke(schema_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    assert "No schemas declared" in result.output
+
+
+def test_cli_list_after_ingest(ws, tmp_path):
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path))])
+    result = CliRunner().invoke(schema_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    assert "wineventlog" in result.output
+    assert "1 schema(s)" in result.output
+
+
 def test_cli_check_reports_both_finding_types(ws, tmp_path):
     # Schema for wineventlog…
     CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path))])
@@ -224,7 +238,7 @@ def test_old_model_commands_are_gone():
     exports, never from rules.
     """
     commands = set(schema_cli.commands)
-    assert commands == {"ingest", "lint", "check", "show", "recipe", "reshape"}
+    assert commands == {"ingest", "lint", "check", "list", "show", "recipe", "reshape"}
 
 
 # --------------------------------------------------------------------------- #
