@@ -92,11 +92,9 @@ Everything below is implemented, tested, and exercised end-to-end.
   `description:` so the file is ingest-ready; closes with a reproducible
   `--no-fold` command). SIEM platform is never inferred; read from workspace
   config when omitted. `--append <decl.yml>` adds the source to an existing
-  declaration (multi-table flows). Also exposed as the `schema_reshape` MCP
-  tool (returns suspect evidence structurally for agent adjudication). `--append <decl.yml>`
-  adds the source to an existing declaration (multi-table flows; duplicate
-  source names refused). Also exposed as the `schema_reshape` MCP tool
-  (returns the report incl. suspect-merge evidence for agent adjudication).
+  declaration (multi-table flows; duplicate source names refused). Also exposed
+  as the `schema_reshape` MCP tool (returns the report incl. suspect-merge
+  evidence for agent adjudication).
 
 All workspace-reading commands resolve the workspace identically
 (`adef/core/workspace.py`): explicit `--workspace` → `ADEF_WORKSPACE` →
@@ -107,7 +105,10 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
   snapshot; `refresh` pulls newer from official STIX).
 - **`adef coverage [--navigator layer.json] [--gaps]`** — coverage *quality*
   report (solid/fragile tiers, log-source concentration, single points of
-  failure, fictional coverage) + scored Navigator export.
+  failure, fictional coverage) + scored Navigator export. Trust tiers key on
+  *integrity* doubts (`malformed`/`external_logic`/`invalid_mitre`) — metadata
+  gaps (`no_platform`, `no_mitre`) don't disqualify a detection from anchoring
+  solid coverage (2026-07-23; ESCU live test read 0% solid before this).
 
 ### Interfaces
 - **`adef-mcp`** — FastMCP server exposing lifecycle / memory / schema tools.

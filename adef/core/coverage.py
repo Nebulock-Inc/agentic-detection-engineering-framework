@@ -6,9 +6,11 @@ many detections back each technique — so it answers the questions a skeptical
 detection-engineering lead actually asks:
 
 - **How much coverage can I trust?** A technique backed only by one rule, or
-  only by rules still flagged ``needs_review``, is *fragile* — one tuning change
-  or one bad feed from a blind spot. That is not the same as ``solid`` coverage
-  and this model refuses to colour it the same green.
+  only by rules with *integrity* doubts (malformed, external logic, invalid
+  MITRE), is *fragile* — one tuning change or one bad feed from a blind spot.
+  Metadata gaps (``no_platform``, ``no_mitre``) don't disqualify: a rule ADEF
+  can't place on an OS still detects. That is not the same as ``solid``
+  coverage and this model refuses to colour it the same green.
 - **What's my single point of failure?** Techniques with exactly one detection.
 - **How concentrated is my log-source risk?** If most coverage rides one feed,
   that feed breaking takes a swath of the matrix dark at once.
@@ -31,12 +33,20 @@ class Tier(Enum):
     """Coverage quality for one technique. Ordered worst→best by value."""
 
     BLIND = "blind"      # no valid detection maps here (not represented in a build)
-    FRAGILE = "fragile"  # covered, but single-detection OR all detections need review
-    SOLID = "solid"      # depth ≥2 and at least one reviewed (not needs_review) detection
+    FRAGILE = "fragile"  # covered, but single-detection OR all detections doubted
+    SOLID = "solid"      # depth ≥2 and at least one detection with no integrity doubts
 
     @property
     def score(self) -> int:
         return {Tier.BLIND: 0, Tier.FRAGILE: 50, Tier.SOLID: 100}[self]
+
+
+# Review reasons that cast doubt on a detection's *correctness* — these
+# disqualify it from anchoring solid coverage. Metadata gaps (no_platform,
+# no_mitre) do NOT: a rule ADEF can't place on an OS still detects — treating
+# it as untrusted made mass-flagged corpora read as 0% solid (live finding,
+# ESCU endpoint: 1,468 × no_platform → 0/308 solid; ISA 2026-07-23).
+_INTEGRITY_REASONS = frozenset({"malformed", "external_logic", "invalid_mitre"})
 
 
 @dataclass
@@ -136,7 +146,12 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
             continue
         det_id = rec.get("id", "?")
         source = rec.get("data_source") or ""
-        needs_review = bool(rec.get("needs_review"))
+        reasons = rec.get("review_reasons") or []
+        if reasons:
+            doubted = any(r in _INTEGRITY_REASONS for r in reasons)
+        else:
+            # Legacy record: boolean flag only, reason unknown → stay conservative.
+            doubted = bool(rec.get("needs_review"))
         for raw in rec.get("mitre") or []:
             tid = str(raw).strip().upper()
             entry = ref.technique(tid)
@@ -154,7 +169,7 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
             tc.detection_ids.append(det_id)
             if source:
                 tc.sources.add(source)
-            if not needs_review:
+            if not doubted:
                 tc.reviewed_count += 1
             if source:
                 source_counter[source] += 1

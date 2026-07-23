@@ -137,3 +137,45 @@ def test_navigator_layer_scores_by_tier():
     assert layer["domain"] == "enterprise-attack"
     # every technique carries a why-comment
     assert all(t.get("comment") for t in layer["techniques"])
+
+
+def test_metadata_gaps_do_not_disqualify_solid():
+    """no_platform is a placement gap, not a correctness doubt — a technique
+    with depth >=2 backed only by no_platform-flagged rules is SOLID (live
+    finding: ESCU endpoint read as 0/308 solid; ISA 2026-07-23)."""
+    from adef.core.coverage import Tier, build_coverage
+
+    records = [
+        {"id": "D-0001", "mitre": ["T1059.001"], "data_source": "Sysmon EventID 1",
+         "needs_review": True, "review_reasons": ["no_platform"]},
+        {"id": "D-0002", "mitre": ["T1059.001"], "data_source": "Sysmon EventID 1",
+         "needs_review": True, "review_reasons": ["no_platform", "no_mitre"]},
+    ]
+    cov = build_coverage(records)
+    assert cov.techniques["T1059.001"].tier is Tier.SOLID
+
+
+def test_integrity_doubts_still_disqualify_solid():
+    from adef.core.coverage import Tier, build_coverage
+
+    records = [
+        {"id": "D-0001", "mitre": ["T1059.001"], "data_source": "s",
+         "needs_review": True, "review_reasons": ["malformed"]},
+        {"id": "D-0002", "mitre": ["T1059.001"], "data_source": "s",
+         "needs_review": True, "review_reasons": ["external_logic"]},
+    ]
+    cov = build_coverage(records)
+    assert cov.techniques["T1059.001"].tier is Tier.FRAGILE
+
+
+def test_legacy_boolean_flag_stays_conservative():
+    """A record with needs_review=true and NO review_reasons has an unknown
+    reason — keep treating it as doubted."""
+    from adef.core.coverage import Tier, build_coverage
+
+    records = [
+        {"id": "D-0001", "mitre": ["T1059.001"], "data_source": "s", "needs_review": True},
+        {"id": "D-0002", "mitre": ["T1059.001"], "data_source": "s", "needs_review": True},
+    ]
+    cov = build_coverage(records)
+    assert cov.techniques["T1059.001"].tier is Tier.FRAGILE

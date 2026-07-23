@@ -101,6 +101,11 @@ consumed across both people's features.
 - ✅ *(fixed 2026-07-23)* `schema check` flags stats-derived output fields
   (`count` from `| stats count by ...`) as missing-from-schema — the SPL
   extractor now subtracts aggregation outputs (`count`, `... as total`).
+- ✅ *(fixed 2026-07-23)* **Coverage trust tier vs metadata gaps.** `no_platform`
+  zeroed out solid coverage on mass-flagged corpora (ESCU: 0/308 solid → 219/308
+  after the fix). Trust now keys on integrity reasons only
+  (`malformed`/`external_logic`/`invalid_mitre`). **Jarrett: semantic change in
+  your coverage component — see ISA Decisions 2026-07-23.**
 - ✅ *(fixed 2026-07-23)* **Sigma field validation in `schema check`.** The
   extractor map now includes `sigma` (`extract_sigma_fields` in
   `rule_parser.py`): fields are the `detection:` block's search-identifier map
