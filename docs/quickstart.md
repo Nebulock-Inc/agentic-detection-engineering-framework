@@ -94,15 +94,19 @@ adef schema recipe sentinel
 # Recipe shows:
 #   - Exact command to run in your SIEM (e.g., index=... | fieldsummary)
 #   - How to export the results (CSV, JSON, etc.)
-#   - Python script to convert output → ADEF declaration YAML
+#   - The `adef schema reshape` invocation for that platform
 ```
 
 **Workflow:**
 1. Run the SIEM command from the recipe (e.g., Splunk `fieldsummary`)
 2. Export the results as CSV/JSON
-3. Use the reshaping script from the recipe to create `<platform>-sources.yml`
-4. Validate: `adef schema lint <platform>-sources.yml`
-5. Ingest: `adef schema ingest <platform>-sources.yml`
+3. Convert deterministically: `adef schema reshape fields.csv --platform splunk`
+   — prints a transformation report; `[SUSPECT]` merges show each spelling's
+   values so you decide keep vs split (`--no-fold <name>`, or walk them with
+   `--interactive`); `--append <decl.yml>` builds up a multi-source file
+4. Set `platform:` (never inferred) and `description:` in the output YAML
+5. Validate: `adef schema lint <platform>-sources.yml`
+6. Ingest: `adef schema ingest <platform>-sources.yml`
 
 Detailed per-SIEM guides: [`docs/siem-recipes.md`](./siem-recipes.md)
 
