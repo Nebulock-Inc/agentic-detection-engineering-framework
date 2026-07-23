@@ -50,6 +50,13 @@ form dump:
 - **What will false-positive?** Known benign patterns. This is gold for the
   future maintainer and often the hardest-won knowledge.
 
+Read the declared schema ONCE (`adef schema show <source>`) before the
+interview and work from context — don't re-run it between steps. When a
+question is about thresholds or trigger conditions, put the relevant schema
+evidence in front of the engineer as you ask (e.g. "the schema shows `action`
+values include `denied`, `dest_port` is typed `int`") — they should decide
+with data, not from memory.
+
 Don't proceed to a query until you can state the hypothesis and the source back
 to the engineer and they confirm it.
 
