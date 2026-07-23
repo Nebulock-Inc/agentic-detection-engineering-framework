@@ -27,6 +27,10 @@ from adef.core.journal import _atomic_write, _check_not_under_detections
 from adef.core.rule_discovery import DiscoveredRule
 
 
+class CatalogError(Exception):
+    """A catalog write would corrupt state (e.g. a duplicate-ID clobber)."""
+
+
 class _CatalogDumper(yaml.SafeDumper):
     """SafeDumper that renders multi-line strings as literal block scalars.
 
@@ -310,8 +314,33 @@ class Catalog:
         return candidate
 
     def write(self, rec: CatalogRecord) -> Path:
-        """Write a catalog record to ``catalog/<platform>/D-XXXX-<slug>.yml``."""
+        """Write a catalog record to ``catalog/<platform>/D-XXXX-<slug>.yml``.
+
+        Defense in depth against the duplicate-ID clobber (ISA 2026-07-22): if a
+        record with this ``id`` already exists at a *different* path (a different
+        detection minted the same ID), refuse rather than silently overwrite it.
+        Re-writing the same record — same ID, whether the slug/path changed or
+        not — is fine (sync MODIFIED, catalog re-slug); a stale same-ID sibling
+        at the old path is removed so the ID never has two files.
+        """
         path = self._path_for(rec)
+        existing = self.find_record(rec.id)
+        if existing is not None:
+            old_path, old_data = existing
+            if old_path.resolve() != path.resolve() and old_data.get("id") == rec.id:
+                # Same ID, different file. If the *slug* changed for the same
+                # detection (title edit), migrate: remove the stale sibling. But
+                # we can't tell "same detection, renamed" from "two detections,
+                # same ID" purely by ID — so treat a differing rule_ref as a
+                # genuine collision and refuse; otherwise migrate the slug.
+                same_detection = (old_data.get("rule_ref") or "") == (rec.rule_ref or "")
+                if same_detection:
+                    old_path.unlink()  # re-slug of the same rule; drop the old file
+                else:
+                    raise CatalogError(
+                        f"refusing to write {rec.id}: a different detection already "
+                        f"holds that ID at {old_path.name}. This would clobber it."
+                    )
         content = _dump_catalog_yaml(rec.to_yaml_dict())
         _atomic_write(path, content)
         return path

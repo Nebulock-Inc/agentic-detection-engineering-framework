@@ -191,3 +191,23 @@ def test_show_flags_recognized_unsupported(ws):
     assert result.exit_code == 0, result.output
     assert "support" in result.output
     assert "recognized_unsupported" in result.output
+
+
+def test_detection_new_uses_shared_id_space(ws, catalogued):
+    """`detection new` must allocate from catalog+journals, not journals alone —
+    else a catalog record whose journal is gone gets clobbered by a reused ID
+    (ISA 2026-07-22 guardrail audit)."""
+    from adef.core.catalog import Catalog
+
+    # Diverge: remove the highest journal so catalog index (D-0002) > journal index.
+    (ws / "journals" / "D-0002.md").unlink()
+    before = len(list((ws / "catalog").rglob("D-*.yml")))
+
+    result = CliRunner().invoke(detection_cli, ["new", "Brand new authored rule"])
+    assert result.exit_code == 0, result.output
+    # No catalog record was clobbered; the new journal took a fresh id (D-0003),
+    # not the reused D-0002.
+    assert len(list((ws / "catalog").rglob("D-*.yml"))) == before
+    assert Catalog(ws).find_record("D-0002")[1]["title"] == "Sigma windows rule" \
+        or Catalog(ws).find_record("D-0002")[1]["id"] == "D-0002"
+    assert (ws / "journals" / "D-0003.md").exists()

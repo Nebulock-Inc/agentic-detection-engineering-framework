@@ -15,6 +15,7 @@ import yaml
 
 from adef.core.catalog import (
     Catalog,
+    CatalogError,
     CatalogRecord,
     catalog_dir,
     record_from_discovered,
@@ -323,3 +324,33 @@ def test_next_id_accounts_for_both_catalog_and_journals(workspace):
 
 def test_catalog_dir_resolves_under_workspace(workspace):
     assert catalog_dir(workspace) == workspace / "catalog"
+
+
+def _rec(id, title, rule_ref, platform="windows"):
+    return CatalogRecord(
+        id=id, title=title, rule_ref=rule_ref, original_path="/x",
+        platform=platform, kind="atomic", engine="sigma", format="sigma",
+    )
+
+
+def test_write_refuses_duplicate_id_clobber(workspace):
+    """Two DIFFERENT detections (different rule_ref) at the same ID → refuse."""
+    cat = Catalog(workspace)
+    cat.write(_rec("D-0001", "First rule", "repo/a.yml"))
+    with pytest.raises(CatalogError, match="clobber"):
+        cat.write(_rec("D-0001", "Different rule", "repo/b.yml"))
+    # the original survives untouched
+    _p, data = cat.find_record("D-0001")
+    assert data["title"] == "First rule"
+
+
+def test_write_allows_same_detection_reslug(workspace):
+    """Same detection (same rule_ref), new title → migrate, no stale sibling."""
+    cat = Catalog(workspace)
+    cat.write(_rec("D-0001", "Old title", "repo/a.yml"))
+    cat.write(_rec("D-0001", "New title", "repo/a.yml"))  # title/slug changed
+    # exactly one file for D-0001, with the new title
+    files = list((workspace / "catalog").rglob("D-0001-*.yml"))
+    assert len(files) == 1
+    _p, data = cat.find_record("D-0001")
+    assert data["title"] == "New title"

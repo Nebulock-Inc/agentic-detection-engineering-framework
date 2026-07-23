@@ -21,7 +21,6 @@ from rich.console import Console
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
-    next_detection_id,
     workspace_journals_dir,
 )
 
@@ -61,15 +60,21 @@ def new(
     ADEF catalog; getting it into your rules repo is your call.
     """
     journals_dir = workspace_journals_dir(workspace)
-    detection_id = next_detection_id(journals_dir)
+    # Allocate from the SHARED id space (catalog + journals), not journals alone —
+    # otherwise a workspace whose catalog index exceeds its journal index (e.g. a
+    # catalog record whose journal was removed) would mint a duplicate D-XXXX and
+    # clobber the existing catalog record on write. (ISA 2026-07-22 guardrail audit.)
+    from adef.core.catalog import Catalog
+
+    ws = journals_dir.parent
+    detection_id = Catalog(ws).next_id()
 
     # If grounding a new rule, build the record FIRST so a bad --source fails
     # before we write a dangling journal.
     record = None
     if source:
-        from adef.core.catalog import Catalog, draft_record_from_schema
+        from adef.core.catalog import draft_record_from_schema
 
-        ws = journals_dir.parent
         try:
             record = draft_record_from_schema(ws, detection_id, title, source)
         except FileNotFoundError as exc:
