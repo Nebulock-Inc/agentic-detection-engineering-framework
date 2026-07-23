@@ -415,3 +415,43 @@ def test_check_validates_sigma_detection_fields(ws, tmp_path):
     assert "BogusField" in missing                   # undeclared → flagged
     assert "Image" not in missing                    # declared → clean
     assert "condition" not in missing                # logic, not a field
+
+
+# --------------------------------------------------------------------------- #
+# --detection scoping (authoring loop: validate the rule you just wrote)
+# --------------------------------------------------------------------------- #
+def test_check_scoped_to_one_detection(ws, tmp_path):
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(tmp_path, "clean", "index=wineventlog sourcetype=MSDNS query_type=A")
+    _catalog_conf_rule(tmp_path, "dirty", "index=wineventlog sourcetype=MSDNS BogusField=1")
+
+    result = CliRunner().invoke(
+        schema_cli, ["check", "--report", "json", "--detection", "D-0001"]
+    )
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert report["rules_checked"] == 1
+    all_missing = {f for fields in report["missing_from_schema"].values() for f in fields}
+    assert "BogusField" not in all_missing  # the other rule's finding is out of scope
+    assert report["unused_by_rules"] == {}  # whole-catalog concept, suppressed
+
+
+def test_check_scoped_unknown_id_errors(ws, tmp_path):
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(tmp_path, "clean", "index=wineventlog sourcetype=MSDNS query_type=A")
+    result = CliRunner().invoke(
+        schema_cli, ["check", "--report", "json", "--detection", "D-9999"]
+    )
+    assert result.exit_code != 0
+    assert "D-9999" in result.output
+
+
+def test_check_scoped_finds_that_rules_own_problems(ws, tmp_path):
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(tmp_path, "dirty", "index=wineventlog sourcetype=MSDNS BogusField=1")
+    result = CliRunner().invoke(
+        schema_cli, ["check", "--report", "json", "--detection", "D-0001"]
+    )
+    report = json.loads(result.output)
+    all_missing = {f for fields in report["missing_from_schema"].values() for f in fields}
+    assert "BogusField" in all_missing

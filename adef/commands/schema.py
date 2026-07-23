@@ -58,9 +58,12 @@ _FIELD_EXTRACTORS = {
 }
 
 # Routing/meta pseudo-fields — never findings: they address data rather than
-# describe events, so no declaration would (or should) list them.
+# describe events, so no declaration would (or should) list them. The second
+# row is SPL command parameters (`bin _time span=10m`, `head limit=5`) the
+# regex extractor captures as field=value; they configure commands, not events.
 _CHECK_IGNORED_FIELDS = {
     "index", "sourcetype", "source", "host", "earliest", "latest", "_time",
+    "span", "limit", "maxspan", "maxpause", "window", "keepevicted",
 }
 
 
@@ -165,7 +168,15 @@ def lint_cmd(declaration_file: Path):
     default=None,
     help="Emit a machine-readable findings report.",
 )
-def check(workspace: Path | None, report_format: str | None):
+@click.option(
+    "--detection",
+    "detection_ids",
+    multiple=True,
+    help="Scope the check to specific detection ID(s), e.g. --detection D-1470. "
+    "Repeatable. Suppresses the unused-declared-fields section (a whole-catalog "
+    "concept). Built for the authoring loop: validate the rule you just wrote.",
+)
+def check(workspace: Path | None, report_format: str | None, detection_ids: tuple[str, ...]):
     """Cross-reference rule field usage against declared schemas.
 
     For every catalogued rule whose literals match a schema_version-2 schema,
@@ -210,7 +221,13 @@ def check(workspace: Path | None, report_format: str | None):
     missing: dict[tuple[str, ...], dict[str, list[str]]] = {}
     used: dict[str, set[str]] = {s: set() for s in schemas}
     rules_checked = 0
+    scope = set(detection_ids)
+    seen_scoped: set[str] = set()
     for det_id, _path, data in cat.iter_records():
+        if scope:
+            if det_id not in scope:
+                continue
+            seen_scoped.add(det_id)
         query = data.get("query") or ""
         # query_language (persisted 2026-07-21) covers ESCU + profile-claimed
         # rules whose `format` isn't itself a query language.
@@ -242,11 +259,21 @@ def check(workspace: Path | None, report_format: str | None):
             else:
                 missing.setdefault(tuple(matched), {}).setdefault(f, []).append(det_id)
 
-    unused = {
-        source: sorted(declared_fields[source] - used[source])
-        for source in schemas
-        if declared_fields[source] - used[source]
-    }
+    # Whole-catalog concept: scoped to one detection it would claim nearly
+    # every declared field "unused" — suppress it under --detection.
+    unused = (
+        {}
+        if scope
+        else {
+            source: sorted(declared_fields[source] - used[source])
+            for source in schemas
+            if declared_fields[source] - used[source]
+        }
+    )
+    if scope and (not_found := sorted(scope - seen_scoped)):
+        raise click.ClickException(
+            f"detection id(s) not in the catalog: {', '.join(not_found)}"
+        )
 
     if report_format == "json":
         click.echo(

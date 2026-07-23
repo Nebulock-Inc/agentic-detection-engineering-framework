@@ -93,7 +93,11 @@ consumed across both people's features.
   source is the seam (roadmap v0.2.0 has the sketch; ISA Decisions 2026-07-22
   has the evidence).
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
-- `schema list` + per-detection `schema validate`; `detection search`.
+- `schema list`; `detection search`. (Per-detection validation shipped
+  2026-07-23 as `schema check --detection D-XXXX` — a scope flag, not a
+  separate command; a distinct `schema validate` verb was rejected as
+  check-duplication. CLI-design positions on this + sync namespacing are in
+  the 2026-07-23 Slack thread with Josh.)
 - Deploy-prep flow for SIEM-stored teams (prepare-don't-push + drift on export).
 - Shape-literal extractors beyond SPL `sourcetype=` (CQL `#event_simpleName`,
   Elastic `event.dataset`) — upgrades a platform from union- to exact-matching

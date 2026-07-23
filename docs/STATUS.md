@@ -73,7 +73,9 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef schema lint`** — validate a declaration.
 - **`adef schema check`** — cross-reference rule field usage vs. schemas
   (sql / spl / cql / kql / **sigma** — Sigma fields are the `detection:` block's
-  map keys, minus `|modifiers`).
+  map keys, minus `|modifiers`). `--detection D-XXXX` (repeatable) scopes the
+  check to specific rules — the authoring-loop validator ("check the rule I
+  just wrote"); suppresses the whole-catalog unused-fields section.
 - **`adef schema show <source>`** — display a schema.
 - **`adef schema recipe [platform]`** — SIEM-specific field-extraction recipe
   (7 platforms). The Splunk query keeps distribution columns
