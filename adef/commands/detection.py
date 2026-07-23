@@ -22,6 +22,7 @@ from rich.console import Console
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
+    JournalError,
     workspace_journals_dir,
 )
 
@@ -137,7 +138,12 @@ def _make_stage_command(stage: str) -> click.Command:
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
         journals_dir = workspace_journals_dir(workspace)
         journal = Journal(journals_dir)
-        result = journal.advance_stage(detection_id=detection_id, stage=stage, note=note)
+        try:
+            result = journal.advance_stage(detection_id=detection_id, stage=stage, note=note)
+        except JournalError as exc:
+            # Missing/malformed id → clean error, not a raw traceback (parity with
+            # `show`/`tag-mitre`).
+            raise click.ClickException(str(exc)) from exc
 
         if result.was_idempotent:
             console.print(

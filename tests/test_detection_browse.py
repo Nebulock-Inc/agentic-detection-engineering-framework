@@ -105,6 +105,16 @@ def test_show_unknown_id_fails(ws, catalogued):
     assert "not found" in result.output
 
 
+def test_stage_advance_unknown_id_errors_cleanly(ws, catalogued):
+    # A bad/missing detection id must be a clean click error, not a raw
+    # JournalError traceback (parity with `show`/`tag-mitre`). Covers all four
+    # generated stage-advance commands.
+    for stage in ("observe", "refine", "govern", "evolve"):
+        result = CliRunner().invoke(detection_cli, [stage, "D-9999"])
+        assert result.exit_code != 0, f"{stage}: {result.output}"
+        assert "not found" in result.output.lower(), f"{stage}: {result.output}"
+
+
 def test_list_filter_engine(ws, catalogued):
     # Sigma folds to engine `sigma`; the .conf SPL rule folds to `sql`.
     result = CliRunner().invoke(detection_cli, ["list", "--engine", "sigma"])
