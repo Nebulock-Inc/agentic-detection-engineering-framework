@@ -123,3 +123,42 @@ def test_adef_init_scaffolds_workspace(tmp_path):
     agents_md = (workspace / "AGENTS.md").read_text()
     assert "methodology.md" in agents_md
     assert "maturity-model.md" in agents_md
+
+
+def test_force_never_clobbers_config(tmp_path, monkeypatch):
+    """--force refreshes scaffolding (AGENTS.md, templates), never user
+    settings — it previously overwrote config with the commented default,
+    silently wiping the interactive platform (bit live, 2026-07-24)."""
+    monkeypatch.chdir(tmp_path)
+    ws = tmp_path / "ws"
+    runner = CliRunner()
+    r = runner.invoke(init, [str(ws), "--interactive"], input="1\nsentinel\nkql\nn\n")
+    assert r.exit_code == 0, r.output
+    assert yaml.safe_load((ws / "config" / ".adefconfig.yaml").read_text())["platform"] == "sentinel"
+
+    r = runner.invoke(init, [str(ws), "--force"])
+    assert r.exit_code == 0, r.output
+    config = yaml.safe_load((ws / "config" / ".adefconfig.yaml").read_text())
+    assert config["platform"] == "sentinel"  # survived --force
+    assert config["query_languages"] == ["kql"]
+
+
+def test_interactive_answers_persist_without_force(tmp_path, monkeypatch):
+    """Re-running --interactive on an existing workspace must persist the new
+    answers (previously discarded unless --force was also passed) and keep
+    keys it didn't prompt for."""
+    monkeypatch.chdir(tmp_path)
+    ws = tmp_path / "ws"
+    runner = CliRunner()
+    assert runner.invoke(init, [str(ws)]).exit_code == 0
+    # hand-added key a user might have set
+    cfg_path = ws / "config" / ".adefconfig.yaml"
+    data = yaml.safe_load(cfg_path.read_text())
+    data["rule_root"] = "~/rules"
+    cfg_path.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    r = runner.invoke(init, [str(ws), "--interactive"], input="1\nsplunk\nspl\nn\n")
+    assert r.exit_code == 0, r.output
+    config = yaml.safe_load(cfg_path.read_text())
+    assert config["platform"] == "splunk"      # new answer persisted
+    assert config["rule_root"] == "~/rules"    # unprompted key survived the merge

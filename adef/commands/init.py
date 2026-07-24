@@ -222,13 +222,24 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
 
         console.print(f"\n[green]✓[/green] Configured for {platform} with {', '.join(query_langs)}")
 
-    if not config_file.exists() or force:
-        # Write config with platform preferences if interactive was used
-        if interactive or not config_file.exists():
-            with config_file.open("w", encoding="utf-8") as f:
-                f.write("# .adefconfig.yaml — ADEF workspace configuration\n")
-                yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
-                f.write("""
+    # Config is USER SETTINGS, not scaffolding: written when missing, or when
+    # the user answered interactive prompts (their answers must persist —
+    # previously discarded without --force). Plain --force refreshes AGENTS.md
+    # and templates but never clobbers config (previously it overwrote it with
+    # DEFAULT_CONFIG, silently wiping the interactive platform — bit live,
+    # 2026-07-24).
+    if interactive and config_file.exists():
+        # Merge onto the existing file so keys we didn't prompt for survive.
+        try:
+            existing = yaml.safe_load(config_file.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            existing = {}
+        config_data = {**existing, **config_data}
+    if interactive or not config_file.exists():
+        with config_file.open("w", encoding="utf-8") as f:
+            f.write("# .adefconfig.yaml — ADEF workspace configuration\n")
+            yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
+            f.write("""
 # Path to an external rule directory (e.g. a Sigma repo). ADEF reads YAML
 # metadata from here for memory search; it never writes here. Override with
 # the ADEF_RULE_ROOT env var or the --rule-root flag.
@@ -238,8 +249,6 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
 # with the ADEF_HUNT_ROOT env var or the --hunt-root flag.
 # hunt_root: ~/path/to/hunts
 """)
-        else:
-            config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
 
     if not agents_md.exists() or force:
         agents_md.write_text(_workspace_agents_md(), encoding="utf-8")
