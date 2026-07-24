@@ -111,7 +111,11 @@ consumed across both people's features.
   `tag-mitre --remove` (retag seam, no_mitre re-queue on empty) and
   `adef reindex` (the CLAUDE.md-promised command that didn't exist).
   Remaining: set-query, journal Find-seed, title-rename (record title changed
-  → journal frontmatter + file slug go stale; both fixed by hand this time).
+  → journal frontmatter + file slug go stale; both fixed by hand this time),
+  and **status transitions** (live: D-1470 completed Govern with 300 lines of
+  "PRODUCTION READY" narrative while the record still says `status: draft` —
+  no CLI sets status; candidate: `--status ready|tuning|deprecated` on the
+  govern/evolve stage commands, mirroring the stage-mirror pattern).
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
   Live evidence for `forge-stage` (2026-07-23, D-1470 Observe): with no skill
   governing the stage, the agent drafted an excellent 8-query baseline
