@@ -1,7 +1,8 @@
 # README reshape — proposal (shape only, not a replacement)
 
-**Status:** proposal for discussion. `README.md` is **not** touched by this doc.
-Read it, mark it up, and we implement the agreed shape as a follow-up.
+**Status:** ✅ **implemented 2026-07-24** — `README.md` was reshaped on these
+recommendations (all four open questions resolved on the recommended defaults; see
+ISA Decisions 2026-07-24). Kept for the rationale + open-question record.
 
 **What this is:** a proposed *reorganization* of the existing README — same
 content, mostly the same words, in an order that reads as one linear journey

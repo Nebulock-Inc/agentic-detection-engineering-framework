@@ -90,9 +90,11 @@ consumed across both people's features.
    (filter validation, clean errors, `schema list`, `init` env-var precedence,
    `catalog --force` warning) + canonical `docs/cli-reference.md` + a
    `catalog-sync` skill / `schema-declaration` trigger rewrite /
-   `docs/skills-reference.md` all landed. README reshape **proposed**
-   (`docs/plans/2026-07-23-readme-reshape-proposal.md`); README rework + broad
-   E2E remain. Full detail: ISA Decisions 2026-07-23.
+   `docs/skills-reference.md` all landed. README reshape **implemented
+   2026-07-24** (three-tier shape + numbered Quick Start spine;
+   `docs/plans/2026-07-23-readme-reshape-proposal.md`). Remaining: broad E2E —
+   headless layers verified 2026-07-24, **§4 live skill activation** still to
+   run. Full detail: ISA Decisions 2026-07-23/24.
 
 ### Standing follow-ups (tracked, not scheduled)
 - **v2: per-alias values + namespace preference.** Folded fields keep only the

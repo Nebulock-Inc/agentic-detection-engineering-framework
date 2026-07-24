@@ -11,17 +11,7 @@ ADEF gives every detection a journal, every transition a timestamp, and every li
 - **Schema-grounded authoring** — new rules scaffolded against the fields and values that actually exist in your data, not guesses
 - **A journal per detection** — the reasoning, tuning history, and review cadence that normally lives in chat threads and leaves with the person who wrote it
 
-## The FORGE Lifecycle
-
-ADEF detections move through five stages:
-
-1. **Find** — a gap, a signal source, an intel report, a hunt outcome
-2. **Observe** — characterize real telemetry behavior; understand normal before defining weird
-3. **Refine** — iterate the rule with backtest, similarity, overlap, and verification feedback
-4. **Govern** — deploy with quality gates, ownership, review cadence
-5. **Evolve** — tune, deprecate, replace; detections never finish, they iterate
-
-See [`docs/methodology.md`](docs/methodology.md) for the full FORGE walkthrough.
+**FORGE in one line:** Find → Observe → Refine → Govern → Evolve. The full walkthrough is under [Work the FORGE lifecycle](#work-the-forge-lifecycle) below and in [`docs/methodology.md`](docs/methodology.md).
 
 ## Install
 
@@ -47,14 +37,75 @@ optional layers (MCP server, AI-assistant skills — inactive until installed)
 and offers to install the skills on the spot. Plain `adef init` works too.
 After release: `pip install agentic-detection-engineering-framework`.
 
-## Pick your on-ramp
+## Quick start — from zero to your first coverage report
 
-ADEF meets you where your detections are. Three starting points — they all
-end at the same place: a catalog, journals, and a coverage report.
+ADEF meets you where your detections are. This is the linear path; each step
+links to its deep-dive under [Building blocks](#building-blocks).
 
-### A. You have a detection repo
+1. **Scaffold a workspace.**
+   ```bash
+   adef init --interactive
+   ```
+2. **Teach ADEF your data** — one SIEM export; ADEF never connects to your SIEM:
+   ```bash
+   adef schema recipe splunk          # or: adef schema recipe sentinel
+   # …run the printed export in your SIEM, save the file, then:
+   adef schema reshape fields.csv --platform splunk
+   adef schema ingest splunk-sources.yml
+   ```
+3. **Bring in your detections — pick the line that's you:**
+   - **Have a repo?** `adef catalog /path/to/rules` — read-only; add `--dry-run` to preview first.
+   - **Only in your SIEM?** Export your rules to a folder, then `adef catalog /path/to/export`.
+   - **Starting fresh?** `adef detection new "…" --source <schema>` to author against your declared data.
+4. **See where you stand.**
+   ```bash
+   adef coverage --gaps
+   ```
+5. **Work a detection.** `adef detection show D-0001`, then advance it through FORGE (`observe` → `refine` → …).
 
-Point ADEF at it — the repo is never modified:
+Repo-only readers can catalog (step 3) before declaring schemas (step 2) — the
+order above suits authoring and `schema check`. The full repo-less path is
+[`docs/detection-home.md`](docs/detection-home.md).
+
+## Building blocks
+
+Each on-ramp and capability from the quick start, in depth. Dip in as needed.
+
+### Teach ADEF your data
+
+Detections are only as good as knowledge of the data they query. ADEF never
+connects to your SIEM — you run one export, ADEF does the rest:
+
+```bash
+adef schema recipe splunk              # the exact field-export command for YOUR SIEM
+adef schema recipe sentinel            # …recipes also cover Elastic, Chronicle, Sumo, QRadar
+adef schema reshape fields.csv --platform splunk   # export → draft declaration + report
+adef schema ingest splunk-sources.yml  # → schema/<source>.yml per source
+adef schema check                      # do your rules use fields that exist?
+```
+
+`recipe` knows Splunk, Sentinel, Elastic, Chronicle, Sumo Logic, and QRadar.
+`reshape` converts the raw export deterministically — filters platform
+internals, folds case-duplicate fields into aliases, harvests enum values,
+infers types — and prints a transformation report so you approve the
+transformations instead of hand-auditing YAML. Re-ingest anytime: your hand
+corrections survive, drift is reported.
+
+**Why the merge step matters.** SIEMs often expose one fact as two fields with
+two value formats — in Splunk a single logon failure carries both `Status =
+0xc000006d` (raw NTSTATUS) and `status = failure` (CIM-normalized). `reshape`
+merges such pairs into one declared field with `aliases:`, so a rule written
+against either spelling passes `adef schema check`. When it flags a merge
+`[SUSPECT]`, read the values it shows: the same information in two formats
+(`SYSTEM` vs `NT AUTHORITY\SYSTEM`) → keep the merge; two unrelated fields that
+collide on spelling → split with `--no-fold` (or walk them with
+`--interactive`). With the Claude plugin, the `schema-declaration` skill drives
+the whole flow — the keep-or-split call needs to know what a field *is*, which
+is exactly the domain knowledge an agent session adds.
+
+### Catalog & keep it current
+
+Point ADEF at a detection repo — the repo is never modified:
 
 ```bash
 adef catalog /path/to/rules --dry-run --report json   # see what ADEF recognizes first
@@ -73,32 +124,10 @@ entries survive a re-sync; rules edited outside ADEF get a journal note
 instead of silent loss. Rules that vanish from the repo are marked orphaned,
 never deleted.
 
-### B. Your rules live only in your SIEM
+### Author new rules
 
-No repo required. Export your rules once (Splunk `savedsearches.conf`,
-Sentinel analytics export, Panther bulk download — any folder of rule files),
-then catalog the export:
-
-```bash
-adef catalog /path/to/exported-rules
-```
-
-The ADEF workspace — catalog records plus journals — is now your first
-version-controlled detection inventory:
-
-```bash
-cd ~/work/adef-workspace
-git init && git add -A && git commit -m "detection inventory, day 0"
-```
-
-If you later adopt detection-as-code, your export becomes the repo and
-`adef sync` takes over from there. If you never do, that's fine too — see C
-and the full guide: [`docs/detection-home.md`](docs/detection-home.md).
-
-### C. You're starting fresh (or authoring new rules)
-
-Rules authored in ADEF live in ADEF. Declare a data source first (section
-below), then scaffold new detections against it:
+Rules authored in ADEF live in ADEF. Declare a data source first (above), then
+scaffold new detections against it:
 
 ```bash
 adef detection new "Suspicious mshta.exe child process" --source wineventlog_xml
@@ -113,51 +142,7 @@ repo is safe. Using ADEF as your system of record with no repo at all is a
 supported path: [`docs/detection-home.md`](docs/detection-home.md) covers
 making the workspace durable under git.
 
-## Teach ADEF your data
-
-Detections are only as good as knowledge of the data they query. ADEF never
-connects to your SIEM — you run one export, ADEF does the rest:
-
-```bash
-adef schema recipe                     # the exact field-export command for YOUR SIEM
-adef schema reshape fields.csv --platform splunk   # export → draft declaration + report
-adef schema ingest splunk-sources.yml  # → schema/<source>.yml per source
-adef schema check                      # do your rules use fields that exist?
-```
-
-`recipe` knows Splunk, Sentinel, Elastic, Chronicle, Sumo Logic, and QRadar.
-`reshape` converts the raw export deterministically — filters platform
-internals, folds case-duplicate fields into aliases, harvests enum values,
-infers types — and prints a transformation report so you approve the
-transformations instead of hand-auditing YAML. Re-ingest anytime: your hand
-corrections survive, drift is reported.
-
-**The mental model behind the merge step.** SIEMs often expose one underlying
-fact as *two* fields with *two* value formats. In Splunk, a single logon
-failure carries both the raw event field and its CIM-normalized sibling:
-
-```
-Status = 0xc000006d        # raw field: NTSTATUS codes
-status = failure           # normalized field, derived from Status
-```
-
-`reshape` merges such pairs into one declared field with `aliases:`, so a rule
-written against *either* spelling passes `adef schema check`. But in your SIEM
-each spelling only matches **its own** values — `status=failure` and
-`Status=0xc000006d` both fire; `Status=failure` is a syntactically fine query
-that matches nothing, forever. Two rules follow: pair values with the spelling
-they were harvested from, and when reshape marks a merge `[SUSPECT]` (the two
-spellings' observed values have nothing in common), read the values it shows —
-same information in two formats (`SYSTEM` vs `NT AUTHORITY\SYSTEM`) means one
-field, keep the merge; different information (code-signing publishers vs event
-descriptions) means two unrelated fields that collide on spelling — split them
-with `--no-fold`, or let `--interactive` walk you through each pair. Better
-still, with the Claude plugin installed, ask the `schema-declaration` skill to
-drive the whole flow: the keep-or-split call requires knowing what a field *is*
-(a code-signing publisher? a CIM constant?), and that domain knowledge is
-exactly what an agent session adds over a y/n prompt.
-
-## See your coverage — honestly
+### See your coverage — honestly
 
 ```bash
 adef detection tag-mitre D-0007 T1547.001    # enrich, validated against ATT&CK
@@ -172,7 +157,15 @@ calls out *fictional coverage* — mapped technique IDs that don't exist in
 ATT&CK. Every mapping is validated against a shipped ATT&CK snapshot
 (`adef attack show T1059.001`; refresh it anytime with `adef attack refresh`).
 
-## Work the lifecycle
+### Work the FORGE lifecycle
+
+ADEF detections move through five stages:
+
+1. **Find** — a gap, a signal source, an intel report, a hunt outcome
+2. **Observe** — characterize real telemetry behavior; understand normal before defining weird
+3. **Refine** — iterate the rule with backtest, similarity, overlap, and verification feedback
+4. **Govern** — deploy with quality gates, ownership, review cadence
+5. **Evolve** — tune, deprecate, replace; detections never finish, they iterate
 
 ```bash
 adef detection list --platform windows --needs-review no_mitre
@@ -184,14 +177,16 @@ adef detection evolve  D-0042 --note "raised threshold, FP rate halved"
 ```
 
 Every transition is a timestamped journal entry. Six months from now, the
-next engineer reads *why* the threshold is what it is.
+next engineer reads *why* the threshold is what it is. See
+[`docs/methodology.md`](docs/methodology.md) for the full FORGE walkthrough.
 
 ## Claude plugin & MCP
 
 The repo doubles as a plugin marketplace: one install wires up the `adef-mcp`
 server, the catalog-onboarding, catalog-sync, detection-explorer,
-coverage-review, mitre-tagger, detection-author, and schema-declaration skills,
-and the profile-author sub-agent.
+coverage-review, mitre-tagger, detection-author, schema-declaration, and
+forge-stage skills, and the profile-author sub-agent. Which skill fronts which
+command: [`docs/skills-reference.md`](docs/skills-reference.md).
 
 ```
 pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
