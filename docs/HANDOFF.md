@@ -26,8 +26,13 @@ Keep it short — historical session logs are archived, not accumulated here.
 - `sqlglot` is a real runtime dep (SQL parsing). The `.[llm]` extra and `jinja2`
   were removed 2026-07-20 — don't reference them.
 - **Before pushing:** run the full gate (`pytest` / `ruff check adef/` /
-  `mypy adef/`). Currently green: 309 passed / 2 skipped, ruff (adef/ + tests/)
-  + mypy clean.
+  `mypy adef/`). Currently green: **376 passed / 3 skipped** (2026-07-24),
+  mypy clean, ruff clean **under 0.15.x**. ⚠️ `pyproject` pins only
+  `ruff>=0.1.0` with no rule `select`, so a fresh `.[dev]` install pulls ruff
+  **0.16.0**, whose newer default rules flag ~120 *pre-existing* style items
+  (UP045 `Optional[X]`→`X|None`, import-sort) across the whole tree — not
+  regressions. Pin ruff to the gate version when reproducing (or decide to
+  migrate + `select` a rule set — a separate call).
 - Stale-metadata gotcha (bit twice on 2026-07-22): a stale repo-root
   `agentic_detection_engineering_framework.egg-info/` can mask newly-registered
   entry points (commands silently missing from `adef --help`). Fix:

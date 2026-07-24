@@ -52,6 +52,7 @@ cwd contents.
 | `adef catalog` | Walk a rule repo into the catalog (read-only on source) |
 | `adef sync` | Reconcile the catalog with the source repo |
 | `adef profile lint` | Validate an extraction profile against its schema |
+| `adef reindex` | Rebuild `catalog/INDEX.yml` from the catalog records |
 | `adef schema ingest` | Build schemas from a data-source declaration |
 | `adef schema lint` | Validate a data-source declaration |
 | `adef schema check` | Cross-reference rule field usage vs schemas |
@@ -129,11 +130,13 @@ entry point of `detection new`.
 |---|---|
 | `DETECTION_ID` (arg, required) | e.g. `D-0001`. |
 | `--note TEXT` | Note appended to the stage block. Repeatable — several `--note`s render as a bullet list. |
+| `--chain` (refine only) | Re-run the Similarity → Overlap → Verification chain even when already at refine (e.g. after wiring the wrapper agents). |
 | `--workspace` | Workspace path (see resolution). |
 
 `refine` additionally runs the orchestration chain (Similarity → Overlap →
-Verification) and appends each result to the journal; the chain does not abort
-on partial failure.
+Verification) **on the transition into refine**, appending each result to the
+journal (the chain does not abort on partial failure). Re-advancing to `refine`
+does *not* re-run it — use `--chain` to force a re-run.
 
 ```bash
 adef detection observe D-0001 --note "Checked 30d of process_create events"
@@ -256,6 +259,22 @@ live at `<workspace>/config/profiles/*.yml`.
 adef profile lint config/profiles/inhouse-yaml.yml
 ```
 
+### adef reindex
+
+**Synopsis:** `adef reindex [--workspace PATH]`
+
+Rebuild `catalog/INDEX.yml` from the catalog records — the only safe way to
+regenerate it (the INDEX is generated, never hand-edited). Use after any
+out-of-band edit to catalog record files.
+
+| Option | Meaning |
+|---|---|
+| `--workspace` | Workspace path (see resolution). |
+
+```bash
+adef reindex
+```
+
 ---
 
 ## Browse
@@ -329,7 +348,7 @@ adef detection search "credential dumping" --limit 25
 
 ### adef detection tag-mitre
 
-**Synopsis:** `adef detection tag-mitre DETECTION_ID TECHNIQUE_ID [TECHNIQUE_ID ...] [--workspace PATH]`
+**Synopsis:** `adef detection tag-mitre DETECTION_ID TECHNIQUE_ID [TECHNIQUE_ID ...] [--remove] [--workspace PATH]`
 
 Add ATT&CK technique IDs to a catalog record, draining the `no_mitre` review
 queue. Each ID is validated against the shipped ATT&CK reference — an invalid ID
@@ -342,10 +361,12 @@ replacement.
 |---|---|
 | `DETECTION_ID` (arg, required) | e.g. `D-0007`. |
 | `TECHNIQUE_IDS` (arg, one or more, required) | e.g. `T1547.001 T1055`. |
+| `--remove` | Remove the listed IDs instead of adding them (the retag seam — Observe findings can invalidate a mapping). Emptying the mapping re-queues the record as `no_mitre`. To replace: `--remove` the old, then tag the new. |
 | `--workspace` | Workspace path (see resolution). |
 
 ```bash
 adef detection tag-mitre D-0007 T1547.001 T1055
+adef detection tag-mitre D-0007 T1055 --remove      # untag (retag seam)
 ```
 
 ---
