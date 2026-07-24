@@ -141,7 +141,12 @@ def _make_stage_command(stage: str) -> click.Command:
         'times to capture separate points (e.g. --note "Baseline: 3/day" '
         '--note "FP source: admin scripts"); they render as a bullet list.',
     )
-    def cmd(detection_id: str, workspace: Path | None, notes: tuple[str, ...]) -> None:
+    def cmd(
+        detection_id: str,
+        workspace: Path | None,
+        notes: tuple[str, ...],
+        chain: bool = False,
+    ) -> None:
         # One note → plain line; several → a markdown bullet list.
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
         journals_dir = workspace_journals_dir(workspace)
@@ -181,11 +186,28 @@ def _make_stage_command(stage: str) -> click.Command:
                 console.print(f"  catalog record stage → {stage}")
 
         if stage == "refine":
-            from adef.orchestration.refine_chain import run_refine_chain
+            # Chain runs on the actual transition (or explicit --chain), never
+            # on idempotent note-appends — those were appending a fresh
+            # Similarity/Overlap/Verification block set to the journal on
+            # every `refine --note` (found live: D-1470 got duplicate
+            # WrapperUnavailable triplets one minute apart).
+            if chain or not result.was_idempotent:
+                from adef.orchestration.refine_chain import run_refine_chain
 
-            run_refine_chain(journal=journal, detection_id=detection_id)
-            console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
+                run_refine_chain(journal=journal, detection_id=detection_id)
+                console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
+            else:
+                console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
 
+    if stage == "refine":
+        cmd.params.append(
+            click.Option(
+                ["--chain"],
+                is_flag=True,
+                help="Re-run the Similarity → Overlap → Verification chain even if "
+                "already at refine (e.g. after configuring the wrapper agents).",
+            )
+        )
     return cmd
 
 

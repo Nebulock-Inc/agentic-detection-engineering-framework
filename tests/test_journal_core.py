@@ -88,3 +88,36 @@ def test_append_block_records_under_current_stage(journal):
     journal.append_block("D-0001", "Refine / Similarity", "- score: 0.8")
     body = journal.read("D-0001").body
     assert "### Refine / Similarity" in body and "score: 0.8" in body
+
+
+def test_refine_chain_not_rerun_on_idempotent_note(tmp_path, monkeypatch):
+    """`refine --note` on a detection already at refine appends the note only —
+    re-running the chain spammed duplicate Similarity/Overlap/Verification
+    blocks into the journal (live: D-1470, two triplets a minute apart).
+    `--chain` forces a re-run explicitly."""
+    from click.testing import CliRunner
+
+    from adef.commands.detection import detection as detection_cli
+
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    runner = CliRunner()
+    assert runner.invoke(detection_cli, ["new", "T", "--workspace", str(ws)]).exit_code == 0
+
+    r = runner.invoke(detection_cli, ["refine", "D-0001", "--workspace", str(ws)])
+    assert r.exit_code == 0, r.output
+    journal_text = (ws / "journals" / "D-0001.md").read_text(encoding="utf-8")
+    first_count = journal_text.count("### Refine / Similarity")
+    assert first_count == 1
+
+    r = runner.invoke(detection_cli, ["refine", "D-0001", "--workspace", str(ws), "--note", "n"])
+    assert r.exit_code == 0, r.output
+    assert "chain skipped" in r.output
+    journal_text = (ws / "journals" / "D-0001.md").read_text(encoding="utf-8")
+    assert journal_text.count("### Refine / Similarity") == 1  # no duplicate
+
+    r = runner.invoke(detection_cli, ["refine", "D-0001", "--workspace", str(ws), "--chain"])
+    assert r.exit_code == 0, r.output
+    journal_text = (ws / "journals" / "D-0001.md").read_text(encoding="utf-8")
+    assert journal_text.count("### Refine / Similarity") == 2  # explicit re-run
