@@ -107,6 +107,11 @@ consumed across both people's features.
   Skill carries interim guidance (edit-is-OK for `origin: authored` + bump
   `updated:`) as of 2026-07-23.
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
+  Live evidence for `forge-stage` (2026-07-23, D-1470 Observe): with no skill
+  governing the stage, the agent drafted an excellent 8-query baseline
+  methodology — and wrote it to `/tmp`. Workspace AGENTS.md now prescribes
+  `analysis/<D-XXXX>/` + a journal pointer note; the skill should encode the
+  same.
 - ✅ *(shipped 2026-07-23)* `adef schema list` (browse declared sources) and
   `adef detection search` (BM25 CLI over journals + records). (Per-detection
   validation shipped 2026-07-23 as `schema check --detection D-XXXX` — a scope

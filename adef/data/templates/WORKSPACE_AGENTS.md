@@ -33,6 +33,12 @@ over hand-editing generated files.
   `scope` (the literals queries use to address the source)
 - `config/profiles/` — extraction profiles teaching ADEF in-house rule formats
 - `templates/` — journal template used by `adef detection new`
+- `analysis/<D-XXXX>/` — working artifacts you produce for a detection
+  (baseline queries, tuning notebooks, interpretation guides). **Never write
+  these to /tmp or outside the workspace** — this workspace IS the durable
+  memory; an Observe-stage methodology in /tmp is gone at the next reboot.
+  Always add a journal note pointing at the files
+  (`adef detection <stage> D-XXXX --note "..."`).
 
 ## Command map
 
