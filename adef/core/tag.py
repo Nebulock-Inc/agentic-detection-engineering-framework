@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from adef.core.attack import attack_reference
-from adef.core.catalog import Catalog
+from adef.core.catalog import Catalog, _now_iso
 from adef.core.rule_discovery import (
     REVIEW_INVALID_MITRE,
     REVIEW_NO_MITRE,
@@ -84,10 +84,61 @@ def tag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) -> T
     ]
     data["review_reasons"] = reasons
     data["needs_review"] = bool(reasons)
+    data["updated"] = _now_iso()
 
     cat.write_raw(path, data)
     cat.rebuild_index()
     return result
 
 
-__all__ = ["InvalidTechniqueError", "TagResult", "tag_mitre"]
+@dataclass
+class UntagResult:
+    detection_id: str
+    removed: list[str] = field(default_factory=list)
+    not_present: list[str] = field(default_factory=list)
+    now_unmapped: bool = False  # mitre list emptied → back on the no_mitre queue
+
+
+def untag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) -> UntagResult:
+    """Remove MITRE technique IDs from a catalog record.
+
+    The retag seam: Observe-stage findings legitimately invalidate mappings
+    (live case: D-1470's hypothesis pivot, T1071/T1571 → T1046) and hand-edits
+    skip INDEX rebuilds and review-reason bookkeeping. If the removal empties
+    the mapping, the record rejoins the ``no_mitre`` enrichment queue.
+    """
+    cat = Catalog(workspace)
+    found = cat.find_record(detection_id)
+    if found is None:
+        raise KeyError(f"{detection_id} is not in the catalog")
+    path, data = found
+
+    targets = {t.strip().upper() for t in technique_ids if t.strip()}
+    result = UntagResult(detection_id=detection_id)
+    remaining = []
+    for t in data.get("mitre") or []:
+        if str(t).upper() in targets:
+            result.removed.append(str(t).upper())
+            targets.discard(str(t).upper())
+        else:
+            remaining.append(t)
+    result.not_present = sorted(targets)
+
+    if not result.removed:
+        return result  # nothing changed — don't touch disk
+
+    data["mitre"] = remaining
+    reasons = list(data.get("review_reasons") or [])
+    if not remaining and REVIEW_NO_MITRE not in reasons:
+        reasons.append(REVIEW_NO_MITRE)
+        result.now_unmapped = True
+    data["review_reasons"] = reasons
+    data["needs_review"] = bool(reasons)
+    data["updated"] = _now_iso()
+
+    cat.write_raw(path, data)
+    cat.rebuild_index()
+    return result
+
+
+__all__ = ["InvalidTechniqueError", "TagResult", "UntagResult", "tag_mitre", "untag_mitre"]

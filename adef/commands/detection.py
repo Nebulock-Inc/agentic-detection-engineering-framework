@@ -489,18 +489,44 @@ def show(detection_id: str, workspace: Path | None) -> None:
     default=None,
     help="Workspace path (defaults to current dir or ~/work/adef-workspace/).",
 )
+@click.option(
+    "--remove",
+    is_flag=True,
+    help="Remove the listed technique IDs instead of adding them (the retag "
+    "seam — Observe findings legitimately invalidate mappings). Emptying the "
+    "mapping puts the record back on the no_mitre queue. To replace: "
+    "tag-mitre D-X OLD --remove, then tag-mitre D-X NEW.",
+)
 def tag_mitre_cmd(
-    detection_id: str, technique_ids: tuple[str, ...], workspace: Path | None
+    detection_id: str, technique_ids: tuple[str, ...], workspace: Path | None, remove: bool
 ) -> None:
     """Add ATT&CK technique IDs to a catalog record (drains the no_mitre queue).
 
     IDs are validated against the shipped ATT&CK reference; an invalid ID
     aborts without writing. Writes only to ADEF's catalog record — never the
     source rule. Example: ``adef detection tag-mitre D-0007 T1547.001 T1055``.
+    With ``--remove``, the listed IDs are removed instead.
     """
-    from adef.core.tag import InvalidTechniqueError, tag_mitre
+    from adef.core.tag import InvalidTechniqueError, tag_mitre, untag_mitre
 
     ws = _workspace_from(workspace)
+    if remove:
+        try:
+            unresult = untag_mitre(ws, detection_id, list(technique_ids))
+        except KeyError as exc:
+            raise click.ClickException(f"{detection_id} is not in the catalog") from exc
+        if unresult.removed:
+            console.print(f"[green]Untagged[/green] {detection_id} -= {', '.join(unresult.removed)}")
+        if unresult.not_present:
+            console.print(f"  not present: {', '.join(unresult.not_present)}")
+        if unresult.now_unmapped:
+            console.print(
+                "  [yellow]![/yellow] no MITRE mappings left — back on the "
+                "no_mitre enrichment queue."
+            )
+        if not unresult.removed:
+            console.print("Nothing to remove.")
+        return
     try:
         result = tag_mitre(ws, detection_id, list(technique_ids))
     except KeyError as exc:

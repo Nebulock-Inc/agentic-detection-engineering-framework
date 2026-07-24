@@ -42,6 +42,10 @@ Everything below is implemented, tested, and exercised end-to-end.
   don't auto-query data sources.)
 - **`adef detection tag-mitre D-XXXX T####`** — add ATT&CK IDs to a catalog
   record, validated against the shipped reference; drops the `no_mitre` flag.
+  `--remove` untags instead (the retag seam — Observe findings legitimately
+  invalidate mappings); emptying the mapping rejoins the `no_mitre` queue.
+- **`adef reindex`** — regenerate `catalog/INDEX.yml` from the records. The
+  INDEX is generated, never hand-edited — this is the only safe rebuild path.
 - **`adef hunt-promote H-XXXX`** — promote an ATHF hunt to a draft detection.
 - **`adef backfill journals`** — bulk-create journals for existing rules.
 

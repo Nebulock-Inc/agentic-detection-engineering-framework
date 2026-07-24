@@ -76,6 +76,7 @@ profile = "adef.commands.profile:profile"
 attack = "adef.commands.attack:attack"
 coverage = "adef.commands.coverage:coverage"
 sync = "adef.commands.sync:sync"
+reindex = "adef.commands.reindex:reindex"
 install-skills = "adef.commands.install_skills:install_skills"
 
 [project.entry-points."adef.mcp_tools"]

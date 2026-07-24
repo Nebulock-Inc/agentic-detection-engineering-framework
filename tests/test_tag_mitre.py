@@ -86,3 +86,74 @@ def test_unknown_detection_raises(tmp_path: Path) -> None:
     Catalog(tmp_path)
     with pytest.raises(KeyError):
         tag_mitre(tmp_path, "D-9999", ["T1055"])
+
+
+# --------------------------------------------------------------------------- #
+# untag (--remove): the retag seam — live case D-1470's hypothesis pivot
+# --------------------------------------------------------------------------- #
+def test_untag_removes_and_rebuilds_index(tmp_path: Path) -> None:
+    from adef.core.tag import untag_mitre
+    import yaml
+
+    _seed(tmp_path, ["T1071", "T1571"], [])
+    result = untag_mitre(tmp_path, "D-0001", ["T1571"])
+    assert result.removed == ["T1571"]
+    data = _load(tmp_path, "D-0001")
+    assert data["mitre"] == ["T1071"]
+    assert not data["needs_review"]  # one mapping remains — not unmapped
+    index = yaml.safe_load((tmp_path / "catalog" / "INDEX.yml").read_text())
+    assert "D-0001" not in index["by_technique"].get("T1571", [])
+    assert "D-0001" in index["by_technique"].get("T1071", [])
+
+
+def test_untag_to_empty_rejoins_no_mitre_queue(tmp_path: Path) -> None:
+    from adef.core.tag import untag_mitre
+
+    _seed(tmp_path, ["T1071"], [])
+    result = untag_mitre(tmp_path, "D-0001", ["T1071"])
+    assert result.now_unmapped
+    data = _load(tmp_path, "D-0001")
+    assert data["mitre"] == []
+    assert "no_mitre" in data["review_reasons"]
+    assert data["needs_review"]
+
+
+def test_untag_not_present_writes_nothing(tmp_path: Path) -> None:
+    from adef.core.tag import untag_mitre
+
+    _seed(tmp_path, ["T1071"], [])
+    before = _load(tmp_path, "D-0001")["updated"]
+    result = untag_mitre(tmp_path, "D-0001", ["T1046"])
+    assert result.removed == []
+    assert result.not_present == ["T1046"]
+    assert _load(tmp_path, "D-0001")["updated"] == before  # untouched
+
+
+def test_cli_tag_mitre_remove_flag(tmp_path: Path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    from adef.commands.detection import detection as detection_cli
+
+    _seed(tmp_path, ["T1071", "T1571"], [])
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path))
+    result = CliRunner().invoke(
+        detection_cli,
+        ["tag-mitre", "D-0001", "T1071", "T1571", "--remove", "--workspace", str(tmp_path)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Untagged" in result.output
+    assert "no_mitre enrichment queue" in result.output
+
+
+def test_cli_reindex(tmp_path: Path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    from adef.commands.reindex import reindex as reindex_cli
+
+    _seed(tmp_path, ["T1071"], [])
+    (tmp_path / "catalog" / "INDEX.yml").unlink()  # simulate a broken/missing index
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path))
+    result = CliRunner().invoke(reindex_cli, ["--workspace", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "Reindexed 1 record(s)" in result.output
+    assert (tmp_path / "catalog" / "INDEX.yml").exists()

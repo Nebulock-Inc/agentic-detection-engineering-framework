@@ -105,7 +105,13 @@ consumed across both people's features.
   exists, and the first live run (D-1470) forgot to bump `updated:`. Candidate:
   `adef detection set-query D-XXXX` + a journal Find-seed seam (or MCP tools).
   Skill carries interim guidance (edit-is-OK for `origin: authored` + bump
-  `updated:`) as of 2026-07-23.
+  `updated:`) as of 2026-07-23. **Partially closed 2026-07-24** after the
+  D-1470 Observe pivot session hand-edited a retag AND hand-rolled an INDEX
+  rebuild that produced a *wrong* index (stale by_technique): shipped
+  `tag-mitre --remove` (retag seam, no_mitre re-queue on empty) and
+  `adef reindex` (the CLAUDE.md-promised command that didn't exist).
+  Remaining: set-query, journal Find-seed, title-rename (record title changed
+  → journal frontmatter + file slug go stale; both fixed by hand this time).
 - Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
   Live evidence for `forge-stage` (2026-07-23, D-1470 Observe): with no skill
   governing the stage, the agent drafted an excellent 8-query baseline
