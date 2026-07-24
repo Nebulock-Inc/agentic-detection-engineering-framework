@@ -124,8 +124,10 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
 - **`adef-mcp`** — FastMCP server exposing lifecycle / memory / schema tools.
 - **Claude plugin** (`claude-plugin/`) — skills: `catalog-onboarding`,
   `catalog-sync`, `detection-explorer`, `coverage-review`, `mitre-tagger`,
-  `detection-author`, `schema-declaration`; `profile-author` sub-agent. Inactive
-  until `/plugin install`.
+  `detection-author`, `schema-declaration`, `forge-stage` (Observe → Evolve
+  stage conventions: artifacts in `analysis/`, one summary per stage, honest
+  status claims — distilled from three live stage sessions); `profile-author`
+  sub-agent. Inactive until `/plugin install`.
 
 ## Not built yet (roadmap)
 

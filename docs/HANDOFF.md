@@ -116,12 +116,13 @@ consumed across both people's features.
   "PRODUCTION READY" narrative while the record still says `status: draft` —
   no CLI sets status; candidate: `--status ready|tuning|deprecated` on the
   govern/evolve stage commands, mirroring the stage-mirror pattern).
-- Plugin skills wave 2: `journal-backfill`, `forge-stage`, `coverage-gaps`.
-  Live evidence for `forge-stage` (2026-07-23, D-1470 Observe): with no skill
-  governing the stage, the agent drafted an excellent 8-query baseline
-  methodology — and wrote it to `/tmp`. Workspace AGENTS.md now prescribes
-  `analysis/<D-XXXX>/` + a journal pointer note; the skill should encode the
-  same.
+- Plugin skills wave 2: `journal-backfill`, `coverage-gaps`. ✅ `forge-stage`
+  **shipped 2026-07-24** — built directly from the three live D-1470 stage
+  sessions (Observe wrote to /tmp; Refine tripled its summaries and misread
+  the chain re-run; Govern declared "production ready" against a draft
+  record). Encodes: `analysis/<D-XXXX>/` placement, notes-per-transition, one
+  summary per stage, `--chain` semantics, seam usage (tag-mitre --remove /
+  reindex), record-honest claims. EVALS.md included.
 - ✅ *(shipped 2026-07-23)* `adef schema list` (browse declared sources) and
   `adef detection search` (BM25 CLI over journals + records). (Per-detection
   validation shipped 2026-07-23 as `schema check --detection D-XXXX` — a scope

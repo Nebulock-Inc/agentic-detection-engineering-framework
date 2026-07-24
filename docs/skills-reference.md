@@ -30,6 +30,7 @@ Skills ship in `claude-plugin/skills/` and are **inactive until `/plugin install
 | **mitre-tagger** | Drain the `no_mitre` queue with validated ATT&CK IDs | `adef detection list --needs-review no_mitre`, `adef detection tag-mitre`, `adef attack show` | coverage-review, detection-explorer |
 | **detection-author** | Author a new schema-grounded rule through Find/Observe | `adef detection new --source`, `adef detection observe`, `adef schema check --detection`, `adef schema show`, `adef detection tag-mitre` | schema-declaration, mitre-tagger |
 | **schema-declaration** | Build/refresh data-source schema declarations | `adef schema recipe` → `reshape` → `ingest`, `adef schema check`/`show` | catalog-onboarding, detection-author |
+| **forge-stage** | Drive Observe/Refine/Govern/Evolve with the workspace conventions (artifacts in `analysis/`, one summary per stage, honest status claims) | `adef detection observe/refine/govern/evolve` (`--note`/`--chain`), `adef schema check --detection`, `adef detection tag-mitre --remove`, `adef reindex` | detection-author, mitre-tagger, coverage-review |
 
 **Sub-agent:** `profile-author` (not a skill) drafts an extraction profile for an
 in-house rule format; validated with `adef profile lint`, consumed by
@@ -52,8 +53,9 @@ commands; the CLI reference documents the underlying behavior.
 | `adef profile lint` | **catalog-onboarding** | pairs with the `profile-author` sub-agent |
 | `adef sync` | **catalog-sync** | the reconciling re-run (never re-`catalog`) |
 | `adef detection new` | **detection-author** | `--source` grounds the draft in a schema |
-| `adef detection observe` | **detection-author** | Find → Observe authoring loop |
-| `adef detection refine/govern/evolve` | — | FORGE-stage skills deferred (post-release) |
+| `adef detection observe` | **forge-stage**, detection-author | baselining + hypothesis validation |
+| `adef detection refine/govern/evolve` | **forge-stage** | gates, deployment decision, tune/deprecate |
+| `adef reindex` | **forge-stage** | the only safe INDEX rebuild |
 | `adef detection list` | **detection-explorer**, coverage-review, mitre-tagger, detection-author | shared browse verb |
 | `adef detection show` | **detection-explorer** | record + query + tactics + journal tail |
 | `adef detection tag-mitre` | **mitre-tagger**, detection-author | validated against the ATT&CK reference |
@@ -66,6 +68,7 @@ commands; the CLI reference documents the underlying behavior.
 
 ## Not yet skilled (roadmap)
 
-`journal-backfill`, `forge-stage` (refine/govern/evolve), and `coverage-gaps` are
-planned for a second skills wave — post-release. Until then, drive those commands
-directly per `docs/cli-reference.md`.
+`journal-backfill` and `coverage-gaps` are planned for a second skills wave —
+post-release. (`forge-stage` shipped 2026-07-24, built from three live D-1470
+stage-session transcripts.) Until then, drive those commands directly per
+`docs/cli-reference.md`.

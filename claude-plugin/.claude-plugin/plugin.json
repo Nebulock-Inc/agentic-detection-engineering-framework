@@ -1,6 +1,6 @@
 {
   "name": "adef",
-  "description": "Agentic Detection Engineering Framework — FORGE lifecycle, detection catalog onboarding, and journal memory for detection engineering teams. Bundles the adef-mcp server, the catalog-onboarding, catalog-sync, detection-explorer, coverage-review, mitre-tagger, detection-author, and schema-declaration skills, and the profile-author sub-agent.",
+  "description": "Agentic Detection Engineering Framework — FORGE lifecycle, detection catalog onboarding, and journal memory for detection engineering teams. Bundles the adef-mcp server, the catalog-onboarding, catalog-sync, detection-explorer, coverage-review, mitre-tagger, detection-author, schema-declaration, and forge-stage skills, and the profile-author sub-agent.",
   "version": "0.1.0",
   "author": {
     "name": "Nebulock",
@@ -8,7 +8,13 @@
   },
   "homepage": "https://github.com/Nebulock-Inc/agentic-detection-engineering-framework",
   "license": "MIT",
-  "keywords": ["detection-engineering", "security", "sigma", "mitre-attack", "forge"],
+  "keywords": [
+    "detection-engineering",
+    "security",
+    "sigma",
+    "mitre-attack",
+    "forge"
+  ],
   "mcpServers": {
     "adef": {
       "command": "adef-mcp",
