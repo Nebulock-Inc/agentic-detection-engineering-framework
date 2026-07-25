@@ -92,9 +92,11 @@ consumed across both people's features.
    `catalog-sync` skill / `schema-declaration` trigger rewrite /
    `docs/skills-reference.md` all landed. README reshape **implemented
    2026-07-24** (three-tier shape + numbered Quick Start spine;
-   `docs/plans/2026-07-23-readme-reshape-proposal.md`). Remaining: broad E2E —
-   headless layers verified 2026-07-24, **§4 live skill activation** still to
-   run. Full detail: ISA Decisions 2026-07-23/24.
+   `docs/plans/2026-07-23-readme-reshape-proposal.md`). **Broad E2E complete
+   2026-07-24** — headless layers 37/37 (gate + all CLI behavior incl. the
+   overnight verbs + docs + regression) and live §4 skill activation passed (all
+   8 skills fired + routed correctly). **All five polish-push phases done.** Full
+   detail: ISA Decisions 2026-07-23/24.
 
 ### Standing follow-ups (tracked, not scheduled)
 - **v2: per-alias values + namespace preference.** Folded fields keep only the
