@@ -188,7 +188,7 @@ Every transition is a timestamped journal entry. Six months from now, the
 next engineer reads *why* the threshold is what it is. See
 [`docs/methodology.md`](docs/methodology.md) for the full FORGE walkthrough.
 
-## Claude plugin & MCP
+## Skills & MCP
 
 ADEF ships the `adef-mcp` server, the catalog-onboarding, catalog-sync,
 detection-explorer, coverage-review, mitre-tagger, detection-author,
