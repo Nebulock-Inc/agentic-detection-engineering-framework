@@ -11,13 +11,12 @@ ADEF gives every detection a journal, every transition a timestamp, and every li
 - **Schema-grounded authoring** — new rules scaffolded against the fields and values that actually exist in your data, not guesses
 - **A journal per detection** — the reasoning, tuning history, and review cadence that normally lives in chat threads and leaves with the person who wrote it
 
-**FORGE in one line:** Find → Observe → Refine → Govern → Evolve. The full walkthrough is under [Work the FORGE lifecycle](#work-the-forge-lifecycle) below and in [`docs/methodology.md`](docs/methodology.md).
+**The FORGE lifecycle.** A detection is never one-and-done — it's found, shaped against real data, deployed under review, then tuned or retired as the threat and your telemetry change. FORGE is ADEF's name for that arc and the five stages every detection moves through: **F**ind → **O**bserve → **R**efine → **G**overn → **E**volve. Each transition is journaled, so the *why* travels with the rule instead of leaving with whoever wrote it. Full walkthrough under [Work the FORGE lifecycle](#work-the-forge-lifecycle) and in [`docs/methodology.md`](docs/methodology.md).
 
 ## Install
 
-> **ADEF is not yet published to PyPI.** Until v0.1.0 ships, install from
-> source — see [`docs/quickstart.md`](docs/quickstart.md) for the full local
-> walkthrough (including a self-contained demo with sample rules and data).
+Install from source — the full local walkthrough (a self-contained demo with
+sample rules and data) is in [`docs/quickstart.md`](docs/quickstart.md).
 
 ```bash
 git clone https://github.com/Nebulock-Inc/agentic-detection-engineering-framework.git
@@ -35,7 +34,9 @@ adef init --interactive                # scaffold ~/work/adef-workspace/ + set y
 your SIEM and query language so later commands stop asking, surfaces the
 optional layers (MCP server, AI-assistant skills — inactive until installed)
 and offers to install the skills on the spot. Plain `adef init` works too.
-After release: `pip install agentic-detection-engineering-framework`.
+
+ADEF publishes to PyPI with its public release — once it's out,
+`pip install agentic-detection-engineering-framework` is all you need.
 
 ## Quick start — from zero to your first coverage report
 
@@ -61,7 +62,7 @@ links to its deep-dive under [Building blocks](#building-blocks).
    ```bash
    adef coverage --gaps
    ```
-5. **Work a detection.** `adef detection show D-0001`, then advance it through FORGE (`observe` → `refine` → …).
+5. **Work a detection.** Cataloguing (and `detection new`) land a detection at **Find**, so you drive it forward from there: `adef detection show D-0001`, then `observe` → `refine` → `govern` → `evolve`.
 
 Repo-only readers can catalog (step 3) before declaring schemas (step 2) — the
 order above suits authoring and `schema check`. The full repo-less path is
@@ -190,10 +191,10 @@ next engineer reads *why* the threshold is what it is. See
 
 ## Skills & MCP
 
-ADEF ships the `adef-mcp` server, the catalog-onboarding, catalog-sync,
-detection-explorer, coverage-review, mitre-tagger, detection-author,
-schema-declaration, and forge-stage skills, and the profile-author sub-agent.
-Which skill fronts which command: [`docs/skills-reference.md`](docs/skills-reference.md).
+ADEF ships the `adef-mcp` server, **eight task-specific Claude skills**
+(cataloging, coverage, authoring, schema setup, FORGE-stage work, and more), and
+the `profile-author` sub-agent. Which skill fronts which command:
+[`docs/skills-reference.md`](docs/skills-reference.md).
 
 Install the skills, then wire the MCP server:
 
@@ -228,17 +229,9 @@ See [`docs/maturity-model.md`](docs/maturity-model.md) for full descriptions and
 
 ## Why ADEF
 
-[`docs/why-adef.md`](docs/why-adef.md) is the adoption guide — what problem ADEF solves, where it fits in your stack, what you give up to use it, and how to bring it into an existing detection program.
+ADEF is for teams whose detection count has outgrown their ability to remember why each rule exists, whether it still earns its keep, and what changing it would cost. It's a memory-and-lifecycle layer *over* your existing detections — not a replacement for your SIEM, your rule repo, or your detection-as-code pipeline.
 
-## North-Star v1 Demo
-
-The target experience — not yet built:
-
-```bash
-adef detection new --from-intel https://example.com/cti-report
-```
-
-In minutes: a backtested, MITRE-tagged, deduplicated, journalled detection. Six months later, ADEF flags it for tuning when noise crosses threshold. See [`docs/north-star.md`](docs/north-star.md).
+[`docs/why-adef.md`](docs/why-adef.md) is the full adoption guide: the problem it solves, where it fits in your stack, what you give up to use it, and how to bring it into an existing detection program.
 
 ## License
 
