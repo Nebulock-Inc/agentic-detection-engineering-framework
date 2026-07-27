@@ -460,6 +460,31 @@ def test_check_scoped_unknown_id_errors(ws, tmp_path):
     assert "D-9999" in result.output
 
 
+def test_check_reports_unmatched_rules(ws, tmp_path):
+    """A rule whose literals match no declared schema is checked against
+    nothing — it must be named, not silently dropped from the count (issue #6).
+    """
+    CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
+    _catalog_conf_rule(tmp_path, "clean", "index=wineventlog sourcetype=MSDNS query_type=A")
+    _catalog_conf_rule(tmp_path, "orphan", "index=aws sourcetype=cloudtrail eventName=X")
+
+    report = _check_report(ws)
+    # The aws rule can't match the wineventlog-only schema → unmatched, not clean.
+    assert "D-0002" in report["rules_skipped"]["unmatched"]
+    assert report["rules_checked"] == 1  # only the wineventlog rule was checked
+
+    # Scoped to the unmatched rule: rules_checked=0 must not read as success.
+    scoped = CliRunner().invoke(
+        schema_cli, ["check", "--report", "json", "--detection", "D-0002"]
+    )
+    assert json.loads(scoped.output)["rules_skipped"]["unmatched"] == ["D-0002"]
+
+    # Terminal summary names it with an "N of M" count, not a bare "Checked N".
+    text = CliRunner().invoke(schema_cli, ["check"])
+    assert "of 2 rules" in text.output
+    assert "D-0002" in text.output
+
+
 def test_check_scoped_finds_that_rules_own_problems(ws, tmp_path):
     CliRunner().invoke(schema_cli, ["ingest", str(_decl(tmp_path, SCOPED_DECLARATION, "s.yml"))])
     _catalog_conf_rule(tmp_path, "dirty", "index=wineventlog sourcetype=MSDNS BogusField=1")
