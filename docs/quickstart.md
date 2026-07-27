@@ -170,38 +170,18 @@ ADEF's durable memory.
 - **Claude Code / Cursor / Copilot:** `pip install -e ".[mcp]"` and run
   `adef-mcp` for the MCP tool surface (portable to all assistants).
 
-## 5b. Claude users: install the plugin (do this — it matters)
+## 5b. Install the skills (do this — it matters)
 
-The skills and sub-agents in `claude-plugin/` are **inactive until the plugin
-is installed** — sitting in the repo does nothing. Without them, Claude can
-*describe* ADEF workflows (it reads the repo docs) but won't *drive* them —
-e.g. it will diagnose unclaimed rule formats and stop, instead of running the
-catalog-onboarding flow that drafts and validates extraction profiles for you.
-The install is user-level, so it follows you into your own detections repo:
-
-```
-# from a local checkout (works pre-release):
-/plugin marketplace add /path/to/agentic-detection-engineering-framework
-/plugin install adef@adef-marketplace
-/reload-plugins        # required — skills + MCP load on reload, not on install
-
-# or once you have the repo remote handy:
-/plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
-```
-
-This wires up the catalog-onboarding, detection-explorer, coverage-review,
-mitre-tagger, detection-author, and schema-declaration skills, the
-profile-author sub-agent, and the `adef-mcp`
-server in one step. The server needs the mcp extra installed
-(`pip install -e ".[mcp]"`) — without it the plugin points at an `adef-mcp`
-command that fails on import.
-
-### For teams + non-Claude agents: `adef install-skills`
+The skills and sub-agents are **inactive until they're installed** — sitting in
+the repo does nothing. Without them your assistant can *describe* ADEF workflows
+(it reads the repo docs) but won't *drive* them — e.g. it will diagnose
+unclaimed rule formats and stop, instead of running the catalog-onboarding flow
+that drafts and validates extraction profiles for you.
 
 `adef install-skills` copies the skills into an assistant's skills directory —
 so a team can **commit them into their shared detections repo** (everyone gets
-them on clone, no per-person plugin install), and so users on **ChatGPT / Codex**
-get them too, not just Claude Code.
+them on clone, no per-person setup), and so users on **Claude, ChatGPT, or
+Codex** get them.
 
 Run it bare and it prompts for the agent and project-vs-global (it's a rare
 one-time setup, so you don't have to memorize flags):
@@ -222,10 +202,20 @@ Flags skip the prompt: `adef install-skills --agent codex --global`. Claude →
 `.claude/skills/`; Codex/ChatGPT → `.agents/skills/` (same skill files, each
 agent's convention). `--force` overwrites edited local skills.
 
-This does *not* start the `adef-mcp` server — but note **MCP is already
-cross-agent**: `adef-mcp` works in any MCP client (Claude, Cursor, Copilot,
-ChatGPT desktop). Run it directly, or use the Claude plugin above for the
-all-in-one.
+### Wire the MCP server
+
+The skills drive ADEF's CLI; the `adef-mcp` server is the portable tool surface,
+and it works in any MCP client (Claude, Cursor, Copilot, ChatGPT desktop):
+
+```bash
+pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
+adef-mcp                  # start the server; point your assistant's MCP config at it
+```
+
+> Solo Claude Code user? The repo doubles as a plugin marketplace, which bundles
+> the skills **and** the MCP wiring in one step — `/plugin marketplace add
+> Nebulock-Inc/agentic-detection-engineering-framework` then `/plugin install
+> adef@adef-marketplace` and `/reload-plugins`. Still needs the `[mcp]` extra.
 
 ## 6. Developing
 
