@@ -210,14 +210,17 @@ location differs). Refuses to
 clobber edited local skills without `--force`.
 
 Two ways to get the skills in:
-- **Plugin marketplace (recommended for solo Claude use):**
-  `/plugin install adef@adef-marketplace` — also wires the `adef-mcp` server;
-  versioned/maintained by Claude Code.
-- **`adef install-skills` (teams + non-Claude agents):** copies the skills into
-  a `.claude/`/`.agents/` tree so a team can **commit them into their own repo**,
-  and so ChatGPT/Codex users get them too. Does *not* wire `adef-mcp` (the
-  deeper, agent-agnostic integration — run `adef-mcp` separately; it works in any
-  MCP client: Claude, Cursor, Copilot, ChatGPT desktop).
+- **`adef install-skills` (primary — all agents, all teams):** copies the skills
+  into a `.claude/`/`.agents/` tree so a team can **commit them into their own
+  repo**, and so ChatGPT/Codex users get them too, not just Claude. Does *not*
+  wire `adef-mcp` — run `adef-mcp` separately (it works in any MCP client:
+  Claude, Cursor, Copilot, ChatGPT desktop). This is the path the README and
+  quickstart lead with.
+- **Plugin marketplace (solo-Claude shortcut):** the repo doubles as a
+  marketplace (`.claude-plugin/marketplace.json` → `./claude-plugin`), so
+  `/plugin marketplace add Nebulock-Inc/…` then `/plugin install
+  adef@adef-marketplace` bundles the skills **and** the `adef-mcp` wiring in one
+  step. Still needs the `[mcp]` extra installed.
 
 ### Testing
 ```bash
