@@ -5,21 +5,11 @@ description: Set up or update ADEF schema declarations — the YAML listing a SI
 
 # Schema Declaration Workflow
 
-Guide users through extracting field inventories from their SIEM and building ADEF data source declarations.
-
-## When to Use
-
-- User mentions "schema", "data sources", "field inventory"
-- User runs `adef schema` commands and has no schemas
-- User asks how to set up ADEF for their SIEM
-- During catalog onboarding when rules reference undeclared data sources
-
-## The Problem
-
-ADEF's schema system needs a **data source declaration** — a YAML file listing sources and their fields — to build schemas. Users need:
-1. The right SIEM-specific command to extract field inventories
-2. Help reshaping that output into ADEF's declaration format
-3. Validation that the declaration is correct before ingestion
+Guide users through extracting field inventories from their SIEM and building
+ADEF data source declarations. ADEF's schema system needs a **declaration** — a
+YAML file listing sources and their fields — to build schemas; you get the user
+the right export command, reshape their export into the declaration, and
+validate it before ingestion. Never hand-write the YAML or derive it from rules.
 
 ## Workflow
 
@@ -60,16 +50,14 @@ Use MCP tool to get platform-specific recipe:
 schema_recipe platform="<platform>"
 ```
 
-This returns:
-- `command`: Exact query to run in their SIEM
-- `export_instructions`: How to save the output
-- `reshaping_guide`: The `adef schema reshape` invocation for this platform
-- `recipe_markdown`: Full formatted guide
+It returns the exact query to run, how to save the output, and the matching
+`adef schema reshape` invocation. **Present the recipe's own `command`
+verbatim** — never paraphrase or invent the export query. The recipe keeps the
+distribution columns (`count`, `distinct_count`, `values`) that reshape needs
+to harvest enums and infer types; a hand-shortened query silently drops them.
 
-**Present the recipe to the user:**
-- Show the command they need to run
-- Explain where to run it (UI, CLI, API)
-- Tell them to save the export to a file (do NOT hand-reshape pasted output)
+Then: show where to run it (UI/CLI/API) and tell the user to save the export to
+a file (do NOT hand-reshape pasted output).
 
 ### 4. Reshape with the deterministic command
 
@@ -192,48 +180,20 @@ re-ingesting the declaration.)
 - Ask for confirmation before ingesting
 - Show user what you're about to create
 
-## Example Flow
-
-**User:** "I need to set up schemas for my Splunk environment"
-
-**Assistant:**
-1. Check if schemas exist: `ls ~/work/adef-workspace/schema/`
-2. Call `schema_recipe platform="splunk"`
-3. Present recipe:
-   > "Run this search in Splunk Web:
-   > ```
-   > index=wineventlog earliest=-7d | fieldsummary | fields field
-   > ```
-   > Wait for it to complete, click Export → CSV, download the file."
-4. User provides the downloaded CSV file
-5. Run `adef schema reshape fields.csv --platform splunk`
-6. Review transformation report with user
-7. Call `schema_lint_declaration` to validate
-8. Show drafted YAML, ask for approval
-9. Write file and call `schema_ingest`
-10. Confirm success, suggest next steps
-
 ## Multi-Source Scenarios
 
-If user has multiple data sources (e.g., Windows logs, Linux logs, network logs):
+A declaration can hold several sources (Windows logs, Linux syslog, network) in
+one file. Don't merge YAML by hand — reshape each export and let `--append`
+grow the file:
 
-1. Generate one declaration file with multiple sources:
-   ```yaml
-   version: 1
-   sources:
-     - name: windows_security
-       platform: windows
-       query_language: spl
-       fields: [...]
-     - name: linux_syslog
-       platform: linux
-       query_language: spl
-       fields: [...]
-   ```
+```bash
+adef schema reshape win.csv   --platform splunk --source windows_security
+adef schema reshape linux.csv --platform splunk --source linux_syslog --append windows_security-sources.yml
+```
 
-2. Run recipe for each platform if needed
-3. Combine into single declaration
-4. Single `schema ingest` creates all schemas
+One `schema ingest <file>` then creates all schemas. (One reshape per event
+shape still holds — `--append` combines *sources*, it does not merge two
+sourcetypes into one source.)
 
 ## Chronicle/UDM Special Case
 
@@ -250,18 +210,7 @@ For Chronicle:
 
 ## Success Criteria
 
-Workflow succeeds when:
-- ✅ User has `schema/*.yml` files in their workspace
-- ✅ `adef schema show <source>` displays fields
-- ✅ Schemas match what user actually queries in their SIEM
-- ✅ User understands how to update schemas if fields change (re-run recipe, re-ingest)
-
-## Workflow Duration
-
-Typical session: 5-10 minutes
-- 1 min: Check state, determine platform
-- 2 min: Generate recipe, user runs command
-- 3-5 min: User exports, reshapes, validates
-- 1 min: Ingest and verify
-
-Offer to help again if user adds new data sources later.
+Done when the workspace has `schema/*.yml` files, `adef schema show <source>`
+displays fields that match what the user actually queries, and they know a
+field change is just a re-run + re-ingest. Offer to help again when they add a
+new source.

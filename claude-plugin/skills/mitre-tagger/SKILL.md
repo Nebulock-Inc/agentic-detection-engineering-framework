@@ -12,7 +12,7 @@ shipped ATT&CK reference**, and writing them through `adef detection tag-mitre`.
 
 ## Ground rules
 
-- **Never invent technique IDs from memory.** ATT&CK has 800+ techniques and IDs
+- **Never invent technique IDs from memory.** ATT&CK has ~860 techniques and IDs
   drift (renames, revocations). A plausible-looking `T####` is worthless if it's
   wrong. Every ID you propose must be confirmed against the shipped reference
   with `adef attack show <id>` before you offer it to the user.
@@ -60,11 +60,13 @@ Before proposing an ID to the user, run:
 adef attack show <id>
 ```
 
-Check the returned name and tactics actually match your intent. If `show`
-reports the ID is invalid, or names a technique unrelated to what you meant,
-you misremembered — find the right ID (search the shipped snapshot at
-`adef/data/attack/enterprise.json`, or `adef attack show` candidates) and
-re-confirm. **Do not propose an ID you haven't confirmed this run.**
+`adef attack show` takes one ID and looks it up — it is not a search. Check the
+returned name and tactics actually match your intent. If `show` reports the ID
+is invalid, or names a technique unrelated to what you meant, you misremembered
+— find the right ID by grepping the shipped snapshot at
+`adef/data/attack/enterprise.json` (technique IDs + names live there), then
+`adef attack show` the candidate to re-confirm. **Do not propose an ID you
+haven't confirmed this run.**
 
 If `show` reports the ID is revoked, use the replacement it names instead.
 
@@ -94,8 +96,9 @@ thought was valid, you skipped step 3 — go back and confirm.
 
 When done (or the user stops): how many detections tagged, how many techniques
 added, how many skipped and why, and how many remain in the `no_mitre` queue.
-Offer the coverage view next (`adef` coverage report / Navigator export, once
-available) — the freshly-tagged records now count toward tactic coverage.
+Offer the coverage view next (`adef coverage`, or `adef coverage --navigator
+layer.json` for a Navigator layer) — the freshly-tagged records now count
+toward tactic coverage.
 
 ## Why grounding matters
 
