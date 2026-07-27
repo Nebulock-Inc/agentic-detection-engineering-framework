@@ -14,11 +14,11 @@ broken plugin never kills CLI startup. Failures are logged via stderr (not the
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable, Iterable
 from importlib.metadata import EntryPoint, entry_points
-from typing import Any, Callable, Iterable
+from typing import Any
 
 import click
-
 
 _GROUPS = ("adef.commands", "adef.agents", "adef.mcp_tools")
 

@@ -79,4 +79,4 @@ class HypothesisFromIntelAgent:
         )
 
 
-__all__ = ["HypothesisFromIntelAgent", "HypothesisDraft"]
+__all__ = ["HypothesisDraft", "HypothesisFromIntelAgent"]

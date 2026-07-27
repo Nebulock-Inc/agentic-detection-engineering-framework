@@ -10,7 +10,7 @@ from __future__ import annotations
 import shutil
 from importlib import resources
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from adef.commands.init import DEFAULT_CONFIG, DEFAULT_WORKSPACE, WORKSPACE_AGENTS_MD
 from adef.core.journal import Journal, workspace_journals_dir
@@ -53,7 +53,7 @@ def register(server: Any) -> None:
 
     @server.tool()
     def workspace_init(
-        path: Optional[str] = None,
+        path: str | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
         """Initialize an ADEF workspace at ``path`` (default ``~/work/adef-workspace/``)."""
@@ -61,7 +61,7 @@ def register(server: Any) -> None:
         return _scaffold_workspace(ws, force=force)
 
     @server.tool()
-    def workspace_status(workspace: Optional[str] = None) -> dict[str, Any]:
+    def workspace_status(workspace: str | None = None) -> dict[str, Any]:
         """Return journal count + brief inventory for ``workspace``."""
         journals_dir = workspace_journals_dir(Path(workspace) if workspace else None)
         journal = Journal(journals_dir)

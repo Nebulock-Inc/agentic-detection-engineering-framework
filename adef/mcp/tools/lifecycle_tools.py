@@ -10,7 +10,7 @@ through a single choke point.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from adef.core.journal import (
     FORGE_STAGES,
@@ -21,7 +21,7 @@ from adef.core.journal import (
 )
 
 
-def _journal(workspace: Optional[str]) -> Journal:
+def _journal(workspace: str | None) -> Journal:
     return Journal(workspace_journals_dir(Path(workspace) if workspace else None))
 
 
@@ -34,7 +34,7 @@ def register(server: Any) -> None:
         owner: str = "",
         rule_uuid: str = "",
         note: str = "",
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ) -> dict[str, Any]:
         """Create a new D-XXXX journal at the Find stage."""
         journal = _journal(workspace)
@@ -57,7 +57,7 @@ def register(server: Any) -> None:
         detection_id: str,
         stage: str,
         note: str = "",
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ) -> dict[str, Any]:
         """Advance ``detection_id`` to ``stage`` (one of FORGE_STAGES). Idempotent."""
         if stage not in FORGE_STAGES:
@@ -76,7 +76,7 @@ def register(server: Any) -> None:
     @server.tool()
     def forge_status(
         detection_id: str,
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ) -> dict[str, Any]:
         """Return frontmatter + current stage for ``detection_id``."""
         try:

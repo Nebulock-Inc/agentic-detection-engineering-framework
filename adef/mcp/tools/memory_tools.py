@@ -8,7 +8,7 @@ before optimizing.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from adef.core.journal import workspace_journals_dir
 from adef.core.memory import MemoryIndex
@@ -21,7 +21,7 @@ def register(server: Any) -> None:
     def memory_search(
         query: str,
         limit: int = 10,
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ) -> dict[str, Any]:
         """Search journal markdown for ``query``. Returns ranked hits."""
         journals_dir = workspace_journals_dir(Path(workspace) if workspace else None)

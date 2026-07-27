@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ADEF_PKG = REPO_ROOT / "adef"
 
@@ -47,7 +46,7 @@ def test_no_write_path_under_detections_tree():
 @pytest.mark.unit
 def test_journal_module_blocks_detections_path(tmp_path):
     """``HardInvariantViolation`` is raised if a journals dir resolves under any ``detections/`` tree."""
-    from adef.core.journal import Journal, HardInvariantViolation
+    from adef.core.journal import HardInvariantViolation, Journal
 
     fake = tmp_path / "rules" / "detections" / "sigma" / "edr"
     fake.mkdir(parents=True)

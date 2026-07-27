@@ -15,12 +15,11 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Optional
 
 from adef.core.journal import Journal, JournalEntry
-
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _BM25_K1 = 1.5
@@ -58,7 +57,7 @@ class MemoryIndex:
     iterable of entries to skip filesystem traversal (used by tests).
     """
 
-    def __init__(self, journals_dir: Optional[Path] = None) -> None:
+    def __init__(self, journals_dir: Path | None = None) -> None:
         self._journals_dir = journals_dir
         self._docs: list[_Doc] = []
         self._df: Counter[str] = Counter()
@@ -70,7 +69,7 @@ class MemoryIndex:
             return iter(())
         return Journal(self._journals_dir).iter_entries()
 
-    def build(self, entries: Optional[Iterable[JournalEntry]] = None) -> None:
+    def build(self, entries: Iterable[JournalEntry] | None = None) -> None:
         source = list(entries) if entries is not None else list(self._iter_source_entries())
         self._docs = []
         self._df = Counter()

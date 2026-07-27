@@ -92,4 +92,4 @@ class TuneRecommenderAgent:
         )
 
 
-__all__ = ["TuneRecommenderAgent", "TuneRecommendation", "TuneSuggestion"]
+__all__ = ["TuneRecommendation", "TuneRecommenderAgent", "TuneSuggestion"]

@@ -20,7 +20,7 @@ import importlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from adef.core.journal import Journal, next_detection_id, workspace_journals_dir
 
@@ -37,7 +37,7 @@ class HuntPromotionResult:
     journal_path: Path
 
 
-def _resolve_optional_dir(explicit: Optional[Path], env_var: str) -> Optional[Path]:
+def _resolve_optional_dir(explicit: Path | None, env_var: str) -> Path | None:
     if explicit is not None:
         candidate = explicit.expanduser()
     elif env := os.environ.get(env_var):
@@ -48,7 +48,7 @@ def _resolve_optional_dir(explicit: Optional[Path], env_var: str) -> Optional[Pa
     return candidate if candidate.is_dir() else None
 
 
-def _resolve_required_dir(explicit: Optional[Path], env_var: str, label: str) -> Path:
+def _resolve_required_dir(explicit: Path | None, env_var: str, label: str) -> Path:
     if explicit is not None:
         candidate = explicit.expanduser()
     elif env := os.environ.get(env_var):
@@ -70,9 +70,9 @@ class HuntPromotionAgent:
 
     def __init__(
         self,
-        hunt_root: Optional[Path] = None,
-        rule_staging_root: Optional[Path] = None,
-        workspace_root: Optional[Path] = None,
+        hunt_root: Path | None = None,
+        rule_staging_root: Path | None = None,
+        workspace_root: Path | None = None,
     ) -> None:
         # ``hunt_root`` is informational for the caller (passed to the generator
         # if it accepts it); ADEF doesn't read hunt files itself.
@@ -112,7 +112,7 @@ class HuntPromotionAgent:
         Generator = self._load_generator()
         try:
             generated = Generator().run(hunt_id=hunt_id)
-        except Exception as exc:  # noqa: BLE001 — surface clean error to user
+        except Exception as exc:
             raise HuntPromotionError(
                 f"hunt-rule generator failed for {hunt_id}: {exc}"
             ) from exc
@@ -129,9 +129,8 @@ class HuntPromotionAgent:
         journal = Journal(journals_dir).create(
             detection_id=detection_id,
             title=(
-                generated.get("title")
-                if isinstance(generated, dict)
-                else f"Promoted from {hunt_id}"
+                (generated.get("title") if isinstance(generated, dict) else None)
+                or f"Promoted from {hunt_id}"
             ),
             owner="",
             rule_uuid=(generated.get("uuid") if isinstance(generated, dict) else "") or "",

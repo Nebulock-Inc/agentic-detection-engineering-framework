@@ -15,17 +15,15 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import sys
 import tempfile
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import resources
 from pathlib import Path
-from typing import Iterable, Optional
 
 import yaml
-
 
 FORGE_STAGES: tuple[str, ...] = ("find", "observe", "refine", "govern", "evolve")
 """The five FORGE lifecycle stages, in order."""
@@ -91,7 +89,7 @@ def _check_not_under_detections(path: Path) -> None:
         )
 
 
-def workspace_journals_dir(workspace: Optional[Path]) -> Path:
+def workspace_journals_dir(workspace: Path | None) -> Path:
     """Resolve the journals directory for ``workspace``.
 
     Resolution order:
@@ -321,7 +319,7 @@ class Journal:
             fm, body = _split_frontmatter(text)
             yield JournalEntry(path=child, frontmatter=fm, body=body)
 
-    def find_by_rule_uuid(self, rule_uuid: str) -> Optional[JournalEntry]:
+    def find_by_rule_uuid(self, rule_uuid: str) -> JournalEntry | None:
         """Return the journal paired with ``rule_uuid``, or ``None``."""
         if not rule_uuid:
             return None
@@ -342,10 +340,10 @@ class Journal:
 
 __all__ = [
     "FORGE_STAGES",
+    "HardInvariantViolation",
     "Journal",
     "JournalEntry",
     "JournalError",
-    "HardInvariantViolation",
     "StageAdvanceResult",
     "next_detection_id",
     "workspace_journals_dir",

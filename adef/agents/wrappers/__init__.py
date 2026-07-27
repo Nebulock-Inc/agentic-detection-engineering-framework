@@ -27,7 +27,6 @@ from adef.agents.wrappers.rule_similarity import RuleSimilarityWrapper
 from adef.agents.wrappers.threat_review import ThreatReviewWrapper
 from adef.agents.wrappers.verification import VerificationWrapper
 
-
 ALL_WRAPPERS: tuple[type[WrapperBase], ...] = (
     CoverageAnalysisWrapper,
     DetectionDecisionWrapper,
@@ -45,8 +44,6 @@ ALL_WRAPPERS: tuple[type[WrapperBase], ...] = (
 
 
 __all__ = [
-    "WrapperBase",
-    "WrapperUnavailable",
     "ALL_WRAPPERS",
     "CoverageAnalysisWrapper",
     "DetectionDecisionWrapper",
@@ -60,4 +57,6 @@ __all__ = [
     "RuleSimilarityWrapper",
     "ThreatReviewWrapper",
     "VerificationWrapper",
+    "WrapperBase",
+    "WrapperUnavailable",
 ]

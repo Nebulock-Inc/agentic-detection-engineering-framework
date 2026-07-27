@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-
 Verdict = Literal["keep", "tune", "deprecate"]
 
 
@@ -67,4 +66,4 @@ class DeprecationRecommenderAgent:
         )
 
 
-__all__ = ["DeprecationRecommenderAgent", "DeprecationRecommendation", "Verdict"]
+__all__ = ["DeprecationRecommendation", "DeprecationRecommenderAgent", "Verdict"]

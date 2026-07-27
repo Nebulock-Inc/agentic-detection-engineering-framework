@@ -22,9 +22,9 @@ Configuration:
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional
 
 import yaml
 
@@ -40,7 +40,7 @@ class RuleMetadata:
     path: Path
 
 
-def _resolve_rule_root(explicit: Optional[Path]) -> Optional[Path]:
+def _resolve_rule_root(explicit: Path | None) -> Path | None:
     """Resolve rule-store root from explicit arg → env."""
     if explicit is not None:
         candidate = explicit.expanduser()
@@ -58,7 +58,7 @@ def _iter_rule_files(detections_root: Path) -> Iterator[Path]:
         yield from detections_root.rglob(ext)
 
 
-def iter_rules(rule_root: Optional[Path] = None) -> Iterable[RuleMetadata]:
+def iter_rules(rule_root: Path | None = None) -> Iterable[RuleMetadata]:
     """Yield every external rule's metadata (read-only).
 
     Returns empty if the rule root isn't on disk; never raises ``ImportError``.

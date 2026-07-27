@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from adef.agents.deprecation_recommender import DeprecationRecommenderAgent
 from adef.agents.hypothesis_from_intel import HypothesisFromIntelAgent
@@ -40,7 +40,7 @@ def register(server: Any) -> None:
     @server.tool()
     def refine_chain(
         detection_id: str,
-        workspace: Optional[str] = None,
+        workspace: str | None = None,
     ) -> dict[str, Any]:
         """Run the Refine chain (Similarity → Overlap → Verification) for a detection."""
         journals_dir = workspace_journals_dir(Path(workspace) if workspace else None)
@@ -55,7 +55,7 @@ def register(server: Any) -> None:
     @server.tool()
     def tune_recommend(
         detection_id: str,
-        metrics: Optional[dict[str, Any]] = None,
+        metrics: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Recommend tuning actions from performance metrics (or live wrapper)."""
         return _to_dict(TuneRecommenderAgent().run(detection_id, metrics=metrics))
@@ -63,9 +63,9 @@ def register(server: Any) -> None:
     @server.tool()
     def deprecation_recommend(
         detection_id: str,
-        performance: Optional[dict[str, Any]] = None,
-        overlap: Optional[dict[str, Any]] = None,
-        findings: Optional[dict[str, Any]] = None,
+        performance: dict[str, Any] | None = None,
+        overlap: dict[str, Any] | None = None,
+        findings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Decide keep / tune / deprecate from three orthogonal signals."""
         return _to_dict(

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
+from adef.agents import wrappers as wrappers_pkg
 from adef.agents.deprecation_recommender import DeprecationRecommenderAgent
 from adef.agents.hypothesis_from_intel import HypothesisFromIntelAgent
 from adef.agents.tune_recommender import TuneRecommenderAgent
-from adef.agents import wrappers as wrappers_pkg
 
 
 def test_hypothesis_extracts_mitre_ids():
