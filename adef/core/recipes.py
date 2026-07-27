@@ -182,11 +182,40 @@ adef schema reshape fields.txt --platform other --source <source_name>
 }
 
 
+# Common spellings users reach for → canonical recipe key. Docs say "Sumo
+# Logic"/"Sumo", so `sumologic` must not error on a first schema command.
+# Every value MUST be a real key in RECIPES — aliasing an unsupported tool
+# (e.g. crowdstrike) would fake support; the "unknown platform" error is the
+# honest answer there. Microsoft's detection surface is KQL either way, so the
+# Defender/Azure family resolves to the Sentinel recipe.
+_PLATFORM_ALIASES = {
+    "sumologic": "sumo",
+    "sumo-logic": "sumo",
+    "sumo_logic": "sumo",
+    "google": "chronicle",
+    "elasticsearch": "elastic",
+    "elk": "elastic",
+    # Microsoft family → Sentinel (KQL)
+    "microsoft-sentinel": "sentinel",
+    "azure-sentinel": "sentinel",
+    "azure": "sentinel",
+    "azure-monitor": "sentinel",
+    "defender": "sentinel",
+    "microsoft-defender": "sentinel",
+    "mde": "sentinel",
+    # Splunk variants
+    "splunk-cloud": "splunk",
+    "splunkcloud": "splunk",
+    "splunk-enterprise": "splunk",
+    "spl": "splunk",
+}
+
+
 def get_recipe(platform: str) -> SIEMRecipe:
     """Retrieve recipe for a platform.
 
     Args:
-        platform: Platform name (case-insensitive)
+        platform: Platform name (case-insensitive; common aliases accepted)
 
     Returns:
         SIEMRecipe for the platform
@@ -195,6 +224,7 @@ def get_recipe(platform: str) -> SIEMRecipe:
         ValueError: If platform is unknown
     """
     platform_lower = platform.lower()
+    platform_lower = _PLATFORM_ALIASES.get(platform_lower, platform_lower)
     if platform_lower not in RECIPES:
         supported = ", ".join(sorted(RECIPES.keys()))
         raise ValueError(
