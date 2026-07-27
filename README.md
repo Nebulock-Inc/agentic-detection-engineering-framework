@@ -182,11 +182,12 @@ next engineer reads *why* the threshold is what it is. See
 
 ## Claude plugin & MCP
 
-The repo doubles as a plugin marketplace: one install wires up the `adef-mcp`
-server, the catalog-onboarding, catalog-sync, detection-explorer,
-coverage-review, mitre-tagger, detection-author, schema-declaration, and
-forge-stage skills, and the profile-author sub-agent. Which skill fronts which
-command: [`docs/skills-reference.md`](docs/skills-reference.md).
+ADEF ships the `adef-mcp` server, the catalog-onboarding, catalog-sync,
+detection-explorer, coverage-review, mitre-tagger, detection-author,
+schema-declaration, and forge-stage skills, and the profile-author sub-agent.
+Which skill fronts which command: [`docs/skills-reference.md`](docs/skills-reference.md).
+
+Install the plugin — it wires the `adef-mcp` server and every skill in one step:
 
 ```
 pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
@@ -195,9 +196,13 @@ pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install la
 /reload-plugins           # skills + MCP load on reload, not on install
 ```
 
-MCP alone works with Cursor/Copilot; the plugin is the Claude-native layer.
-With it installed, "help me set up schemas for my Splunk environment" drives
-the whole recipe → reshape → ingest flow conversationally.
+With it installed, "help me set up schemas for my Splunk environment" drives the
+whole recipe → reshape → ingest flow conversationally. MCP alone works with
+Cursor/Copilot; the plugin is the Claude-native layer.
+
+> Not using Claude, or want the skills committed into your own repo?
+> `adef install-skills` copies them into a `.claude/` (or `.agents/` for
+> Codex/ChatGPT) tree — run it separately from `adef-mcp`.
 
 ## ADEF and ATHF — paired siblings, not successor
 
