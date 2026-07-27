@@ -59,6 +59,41 @@ def test_catalog_creates_records_and_index(tmp_path, rule_repo, monkeypatch):
     assert "windows" in index["by_platform"]
 
 
+def test_majority_unclaimed_nudge_escalates(tmp_path, monkeypatch):
+    """When unclaimed files outnumber catalogued ones, the nudge is loud —
+    one recognized Sigma rule beside an in-house repo shouldn't read as success
+    (E2E 2026-07-27: real repo catalogued 9 of 127)."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "sigma.yml").write_text(
+        textwrap.dedent(
+            """\
+            title: A sigma rule
+            id: 03cc0c25-389f-4bf8-b48d-11878079f1ca
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            """
+        ),
+        encoding="utf-8",
+    )
+    for i in range(3):  # in-house envelope no recognizer claims → unclaimed
+        (root / f"inhouse{i}.yml").write_text(
+            f"name: In-house {i}\nmetadata:\n  id: x{i}\ndetection:\n  query: SELECT 1\n",
+            encoding="utf-8",
+        )
+
+    result = CliRunner().invoke(catalog, [str(root)])
+    assert result.exit_code == 0, result.output
+    assert "Most of this repo was not recognized" in result.output
+    assert "3 of 4 files" in result.output
+
+
 def test_recatalog_same_repo_is_refused(tmp_path, rule_repo, monkeypatch):
     """A second catalog of the same repo would mint duplicates → refused,
     pointing at `sync` (ISA 2026-07-22)."""

@@ -98,14 +98,34 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
     return resolved
 
 
-def _print_unclaimed_nudge(unclaimed: int) -> None:
+def _print_unclaimed_nudge(unclaimed: int, claimed: int = 0) -> None:
+    """Nudge toward profile authoring for unrecognized files.
+
+    Escalates when the unclaimed files are the *majority* of the repo — the
+    case where a bare catalog silently captures a fraction of the rules and
+    "N rules would be catalogued" reads like success (E2E 2026-07-27: a real
+    in-house repo catalogued 9 of 127 with the other 118 unclaimed). A quiet
+    trailing line loses that; a loud one names the proportion.
+    """
+    total = unclaimed + claimed
+    dominant = claimed == 0 or unclaimed >= claimed
+    if dominant and total:
+        console.print(
+            f"  [bold yellow]⚠ Most of this repo was not recognized[/bold yellow] — "
+            f"{unclaimed} of {total} files matched no recognizer or profile "
+            "(likely an in-house format).\n"
+            "  ADEF catalogs known formats (Sigma, Splunk ESCU, Panther, "
+            "KQL/SQL/CQL) out of the box; teach it yours with an extraction profile."
+        )
+    else:
+        console.print(
+            f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
+            "recognizer or profile claims their format (likely in-house YAML)."
+        )
     console.print(
-        f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
-        "recognizer or profile claims their format (likely in-house YAML).\n"
-        "  Teach ADEF the format with an extraction profile: "
-        "`adef catalog <root> --dry-run --report json` clusters them by shape;\n"
-        "  see docs/creating-extraction-profiles.md, then validate with "
-        "`adef catalog <root> --dry-run --profile <draft.yml>`."
+        "  Cluster them by shape with `adef catalog <root> --dry-run --report json`; "
+        "see docs/creating-extraction-profiles.md,\n"
+        "  then validate a draft with `adef catalog <root> --dry-run --profile <draft.yml>`."
     )
 
 
@@ -295,7 +315,7 @@ def catalog(
     if not discovered:
         console.print(f"[yellow]No detection rules found under[/yellow] {rule_root}")
         if unclaimed:
-            _print_unclaimed_nudge(unclaimed)
+            _print_unclaimed_nudge(unclaimed, claimed=0)
         return
 
     cat = Catalog(ws)
@@ -372,9 +392,16 @@ def catalog(
                     f"({label}; full list: --report json)"
                 )
         unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
+        # Ratio on the headline so the proportion can't be skimmed past — "N
+        # would be catalogued" alone reads as success even when most of the
+        # repo went unrecognized (E2E 2026-07-27).
+        unrecognized = (
+            f"; [yellow]{unclaimed} file(s) unrecognized[/yellow]" if unclaimed else ""
+        )
         console.print(
             f"\n[bold]{len(planned)}[/bold] rules would be catalogued "
-            f"([yellow]{needs_review}[/yellow] need review). Dry run — nothing written."
+            f"([yellow]{needs_review}[/yellow] need review){unrecognized}. "
+            "Dry run — nothing written."
         )
         if candidate is not None:
             claimed = [r for r in discovered if r.format == candidate.name]
@@ -384,10 +411,7 @@ def catalog(
                 + ", ".join(f"{f} {rates[f]:.0%}" for f in _RATE_FIELDS)
             )
         if unclaimed:
-            console.print(
-                f"  [yellow]{unclaimed} structured files unclaimed[/yellow] "
-                "(use --report json to cluster them for profile authoring)."
-            )
+            _print_unclaimed_nudge(unclaimed, claimed=len(planned))
         return
 
     for rec in planned:
@@ -409,7 +433,7 @@ def catalog(
     )
     console.print(f"  INDEX     → {index_path}")
     if unclaimed:
-        _print_unclaimed_nudge(unclaimed)
+        _print_unclaimed_nudge(unclaimed, claimed=len(planned))
     if inherited:
         console.print(f"  [green]{inherited}[/green] platform(s) inherited from declared schemas.")
     if needs_review:

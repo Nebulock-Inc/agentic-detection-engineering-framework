@@ -86,6 +86,37 @@ def test_list_empty_workspace(ws):
     assert "No detections match" in result.output
 
 
+def test_list_truncates_long_title_to_one_line(ws, tmp_path, monkeypatch):
+    """A long title ellipsizes so each row stays on one line (E2E 2026-07-27)."""
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    (repo / "windows").mkdir(parents=True)
+    long_title = "Suspicious mshta child process " * 6  # ~186 chars, far past budget
+    (repo / "windows" / "long.yml").write_text(
+        textwrap.dedent(
+            f"""\
+            title: {long_title.strip()}
+            id: 03cc0c25-389f-4bf8-b48d-11878079f1ca
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            tags: [attack.t1218.005]
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 100)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    row = next(ln for ln in result.output.splitlines() if "D-0001" in ln)
+    assert len(row) <= 100
+    assert row.rstrip().endswith("…")  # title was cut, not wrapped
+
+
 def test_show_renders_record_and_journal(ws, catalogued):
     listing = json.loads(
         CliRunner().invoke(detection_cli, ["list", "--report", "json"]).output

@@ -401,14 +401,24 @@ def list_cmd(
             ("legacy",) if "legacy" in _reasons(d) else ()
         )
         flag = f" [yellow]⚠ {','.join(structural)}[/yellow]" if structural else ""
+        flag_len = len(f" ⚠ {','.join(structural)}") if structural else 0
         if d.get("orphaned"):
             flag += " [red]orphaned[/red]"  # source rule gone from the repo
+            flag_len += len(" orphaned")
         mitre = ",".join(d.get("mitre") or []) or "-"
-        console.print(
+        prefix = (
             f"  {d.get('id', '?')}  {d.get('stage', '?'):<8} {d.get('status', '?'):<10} "
             f"{d.get('platform', '?'):<15} {d.get('format', '?'):<22} {mitre:<12} "
-            f"{d.get('title', '')}{flag}"
         )
+        # Truncate the title so each detection stays on ONE line — long in-house
+        # titles otherwise soft-wrap to 3 lines and a 100-rule list is a wall of
+        # text (E2E 2026-07-27). Budget = terminal width minus the fixed columns
+        # and the (unstyled) flag; ellipsize past that.
+        budget = console.width - len(prefix) - flag_len
+        title = d.get("title", "")
+        if budget > 1 and len(title) > budget:
+            title = title[: budget - 1] + "…"
+        console.print(f"{prefix}{title}{flag}", highlight=False)
     n_structural = sum(
         1 for d in records if structural_reasons(_reasons(d)) or "legacy" in _reasons(d)
     )
