@@ -239,8 +239,8 @@ def _workspace_from(workspace: Path | None) -> Path:
     "--tactic",
     default=None,
     help="Filter by ATT&CK tactic, resolved from each detection's technique IDs. "
-    "Accepts the tactic shortname (e.g. defense-evasion) or display name "
-    "(e.g. 'Defense Evasion').",
+    "Accepts the tactic shortname (e.g. execution) or display name "
+    "(e.g. 'Execution').",
 )
 @click.option(
     "--engine",
