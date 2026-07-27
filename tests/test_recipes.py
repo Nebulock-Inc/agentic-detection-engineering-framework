@@ -30,6 +30,27 @@ def test_get_recipe_is_case_insensitive():
     assert get_recipe("SPLUNK").platform == get_recipe("splunk").platform
 
 
+def test_get_recipe_accepts_doc_spelling_aliases():
+    # Docs say "Sumo Logic"; a user typing `sumologic` must not hit an error.
+    assert get_recipe("sumologic").platform == get_recipe("sumo").platform
+    assert get_recipe("SumoLogic").platform == get_recipe("sumo").platform
+    assert get_recipe("elasticsearch").platform == get_recipe("elastic").platform
+    # Microsoft family resolves to the Sentinel (KQL) recipe.
+    assert get_recipe("defender").platform == get_recipe("sentinel").platform
+    assert get_recipe("azure").platform == get_recipe("sentinel").platform
+    # Splunk variants resolve to Splunk.
+    assert get_recipe("splunk-cloud").platform == get_recipe("splunk").platform
+
+
+def test_every_alias_targets_a_real_recipe():
+    # A dead alias (typo'd target) would resurrect the "unknown platform" error
+    # for a name we meant to support — catch it here, not in a user's terminal.
+    from adef.core.recipes import _PLATFORM_ALIASES
+
+    for alias, target in _PLATFORM_ALIASES.items():
+        assert target in RECIPES, f"alias {alias!r} → missing recipe {target!r}"
+
+
 def test_get_recipe_unknown_platform_lists_supported():
     with pytest.raises(ValueError, match="crowdstrike"):
         get_recipe("crowdstrike")
