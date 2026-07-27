@@ -1,0 +1,7 @@
+# A made-up in-house rule format ADEF does NOT recognize out of the box —
+# exists so the quickstart can demonstrate the extraction-profile loop.
+hunt: Suspicious office-to-shell parent chain
+id: NH-0001
+severity: high
+tags: [T1059.001, initial-access]
+logic: index=thrunt sourcetype=XmlWinEventLog EventCode=1 ParentImage="*\\winword.exe" Image="*\\powershell.exe"

@@ -1,0 +1,5 @@
+hunt: ASA config change outside change window
+id: NH-0003
+severity: low
+tags: [T1562.004]
+logic: index=thrunt sourcetype="cisco:asa" Cisco_ASA_message_id=111008

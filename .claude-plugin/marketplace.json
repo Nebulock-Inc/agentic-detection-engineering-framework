@@ -1,0 +1,14 @@
+{
+  "name": "adef-marketplace",
+  "owner": {
+    "name": "Nebulock",
+    "url": "https://github.com/Nebulock-Inc"
+  },
+  "plugins": [
+    {
+      "name": "adef",
+      "source": "./claude-plugin",
+      "description": "Agentic Detection Engineering Framework — catalog onboarding, extraction-profile authoring, and FORGE lifecycle tools via adef-mcp."
+    }
+  ]
+}

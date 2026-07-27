@@ -19,6 +19,24 @@ The minimum viable framework: FORGE methodology, journal memory, twelve wrapped 
 
 The first autonomous agent loops.
 
+- **Per-alias values + namespace preference.** A folded field stores only the
+  canonical spelling's value vocabulary today; the alias's is discarded, so an
+  agent pairing the alias spelling with harvested values (`Status=failure`)
+  writes a legal-per-schema query that never matches. v2: each spelling keeps
+  its own `values` inside one folded entry, plus a `prefer: cim|raw` key so
+  schema-grounded authoring follows team convention instead of the
+  canonical-by-count accident — together they enable a value-aware
+  `schema check` that catches the never-fires class.
+- **Data-model schemas (the third field namespace).** Declarations currently
+  model the *index* namespace (raw + CIM alias fields from a `fieldsummary`
+  export). Splunk `tstats` rules reference accelerated data-model fields
+  (`Processes.process_name`) that never appear in an index export — measured
+  against ESCU: ~39% of its 2,113 active detections (49% of endpoint) query
+  data models and would union-miss in `schema check` against index-derived
+  schemas. v2 seam: declare a data model as a source (fields from
+  `| datamodel <name> ... | fieldsummary` or the DM JSON), same declaration
+  format, `scope: {datamodel: Endpoint.Processes}`.
+
 - Long-running orchestration daemon: `adef-daemon` watches detection health (FP ratio, signal volume, days-since-true-positive) and emits proposals.
 - Agent-to-agent handoff workflows: `HypothesisFromIntel → DraftRule → RuleSimilarity → RuleOverlap → Verification → DeploymentGate` as a single orchestrated DAG.
 - Autonomous deprecation recommendations: the `DeprecationRecommender` can open PRs against the configured upstream rule repository when its verdict is `deprecate` and confidence exceeds a configured floor. Humans review and approve.

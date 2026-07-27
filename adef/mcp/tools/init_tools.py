@@ -12,7 +12,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Optional
 
-from adef.commands.init import DEFAULT_CONFIG, DEFAULT_WORKSPACE, WORKSPACE_AGENTS_MD
+from adef.commands.init import DEFAULT_CONFIG, DEFAULT_WORKSPACE, _workspace_agents_md
 from adef.core.journal import Journal, workspace_journals_dir
 
 
@@ -31,7 +31,7 @@ def _scaffold_workspace(workspace: Path, force: bool) -> dict[str, str]:
     if not config_file.exists() or force:
         config_file.write_text(DEFAULT_CONFIG, encoding="utf-8")
     if not agents_md.exists() or force:
-        agents_md.write_text(WORKSPACE_AGENTS_MD, encoding="utf-8")
+        agents_md.write_text(_workspace_agents_md(), encoding="utf-8")
 
     template_target = templates_dir / "DETECTION_FORGE.md"
     with resources.as_file(

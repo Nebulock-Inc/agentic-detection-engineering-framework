@@ -16,9 +16,10 @@ Nothing. ADEF is a layer above your existing detection store, not a fork of it.
 
 What ADEF adds:
 
-- A workspace at `~/work/adef-workspace/` (configurable) with `journals/`, `templates/`, and `config/`.
-- A CLI (`adef`) that walks rules through FORGE.
-- An MCP server (`adef-mcp`) that exposes the same operations to Claude Code, Copilot, Cursor.
+- A workspace at `~/work/adef-workspace/` (configurable) with `journals/`, `catalog/`, `schema/`, `templates/`, and `config/`.
+- A CLI (`adef`) that walks rules through FORGE, catalogs your existing repo read-only (`adef catalog`), and builds data schemas from a declaration you provide (`adef schema ingest`).
+- **Extraction profiles** — in-house rule formats are taught with a small YAML profile (no code); an agent can draft one from samples, the engine validates it, you approve it.
+- An MCP server (`adef-mcp`) that exposes the same operations to Claude Code, Copilot, Cursor — plus a Claude plugin (skills + sub-agents; the repo doubles as a plugin marketplace).
 - Twelve upstream rule-engineering agents wrapped as lifecycle-aware tools, plus four ADEF-native agents.
 
 ## What ADEF and ATHF are to each other

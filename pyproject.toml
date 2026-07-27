@@ -38,8 +38,8 @@ dependencies = [
     "click>=8.0.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
-    "jinja2>=3.0.0",
     "python-dotenv>=1.0.0",
+    "sqlglot>=23.0.0",
 ]
 
 [project.optional-dependencies]
@@ -70,6 +70,14 @@ detection = "adef.commands.detection:detection"
 init = "adef.commands.init:init"
 hunt-promote = "adef.commands.hunt_promote:hunt_promote"
 backfill = "adef.commands.backfill:backfill"
+schema = "adef.commands.schema:schema"
+catalog = "adef.commands.catalog:catalog"
+profile = "adef.commands.profile:profile"
+attack = "adef.commands.attack:attack"
+coverage = "adef.commands.coverage:coverage"
+sync = "adef.commands.sync:sync"
+reindex = "adef.commands.reindex:reindex"
+install-skills = "adef.commands.install_skills:install_skills"
 
 [project.entry-points."adef.mcp_tools"]
 adef-builtin = "adef.mcp.register:register_mcp_tools"
@@ -82,6 +90,7 @@ packages = [
     "adef.commands",
     "adef.core",
     "adef.data",
+    "adef.data.attack",
     "adef.mcp",
     "adef.mcp.tools",
     "adef.orchestration",
@@ -91,6 +100,9 @@ packages = [
 "adef.data" = [
     "templates/*.md",
     "prompts/*.md",
+]
+"adef.data.attack" = [
+    "enterprise.json",
 ]
 
 [tool.pytest.ini_options]

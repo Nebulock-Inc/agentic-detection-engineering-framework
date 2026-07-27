@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from adef.agents.deprecation_recommender import DeprecationRecommenderAgent
 from adef.agents.hypothesis_from_intel import HypothesisFromIntelAgent
@@ -25,7 +25,7 @@ from adef.orchestration.refine_chain import run_refine_chain
 
 
 def _to_dict(obj: Any) -> Any:
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return asdict(obj)
     if isinstance(obj, (list, tuple)):
         return [_to_dict(x) for x in obj]
@@ -45,12 +45,12 @@ def register(server: Any) -> None:
         """Run the Refine chain (Similarity → Overlap → Verification) for a detection."""
         journals_dir = workspace_journals_dir(Path(workspace) if workspace else None)
         journal = Journal(journals_dir)
-        return _to_dict(run_refine_chain(journal, detection_id))
+        return cast("dict[str, Any]", _to_dict(run_refine_chain(journal, detection_id)))
 
     @server.tool()
     def hypothesis_from_intel(intel_url_or_text: str) -> dict[str, Any]:
         """Turn a CTI URL or pasted text into a draft Find/Observe block."""
-        return _to_dict(HypothesisFromIntelAgent().run(intel_url_or_text))
+        return cast("dict[str, Any]", _to_dict(HypothesisFromIntelAgent().run(intel_url_or_text)))
 
     @server.tool()
     def tune_recommend(
@@ -58,7 +58,9 @@ def register(server: Any) -> None:
         metrics: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Recommend tuning actions from performance metrics (or live wrapper)."""
-        return _to_dict(TuneRecommenderAgent().run(detection_id, metrics=metrics))
+        return cast(
+            "dict[str, Any]", _to_dict(TuneRecommenderAgent().run(detection_id, metrics=metrics))
+        )
 
     @server.tool()
     def deprecation_recommend(
@@ -68,13 +70,16 @@ def register(server: Any) -> None:
         findings: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """Decide keep / tune / deprecate from three orthogonal signals."""
-        return _to_dict(
-            DeprecationRecommenderAgent().run(
-                detection_id,
-                performance=performance,
-                overlap=overlap,
-                findings=findings,
-            )
+        return cast(
+            "dict[str, Any]",
+            _to_dict(
+                DeprecationRecommenderAgent().run(
+                    detection_id,
+                    performance=performance,
+                    overlap=overlap,
+                    findings=findings,
+                )
+            ),
         )
 
 

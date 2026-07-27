@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -91,28 +90,24 @@ def _check_not_under_detections(path: Path) -> None:
         )
 
 
-def workspace_journals_dir(workspace: Optional[Path]) -> Path:
+def workspace_journals_dir(workspace: Optional[Path], create: bool = True) -> Path:
     """Resolve the journals directory for ``workspace``.
 
-    Resolution order:
+    Delegates workspace resolution to the canonical ``resolve_workspace`` (one
+    resolver for every command — ISA 2026-07-22) so ``adef catalog .`` and
+    ``adef detection list`` in the same dir never disagree about *which*
+    workspace they mean.
 
-    1. Explicit ``workspace`` argument.
-    2. ``ADEF_WORKSPACE`` environment variable.
-    3. Current working directory if it contains a ``journals/`` subdirectory.
-    4. Default ``~/work/adef-workspace/`` (creating ``journals/`` on demand).
+    ``create=True`` (default, for write paths) ensures ``journals/`` exists;
+    **read paths must pass ``create=False``** so listing/showing never silently
+    scaffolds ``~/work/adef-workspace`` as a side effect.
     """
-    if workspace is not None:
-        ws = workspace
-    elif env := os.environ.get("ADEF_WORKSPACE"):
-        ws = Path(env)
-    elif (Path.cwd() / "journals").is_dir():
-        ws = Path.cwd()
-    else:
-        ws = Path.home() / "work" / "adef-workspace"
+    from adef.core.workspace import resolve_workspace
 
-    ws = ws.expanduser().resolve()
+    ws = resolve_workspace(workspace)
     journals = ws / "journals"
-    journals.mkdir(parents=True, exist_ok=True)
+    if create:
+        journals.mkdir(parents=True, exist_ok=True)
     return journals
 
 
@@ -133,18 +128,6 @@ def _load_template_text() -> str:
         .joinpath("DETECTION_FORGE.md")
         .read_text(encoding="utf-8")
     )
-
-
-def _load_prompt(stage: str) -> str:
-    """Return the stage-prompt body for ``stage`` (empty string if absent)."""
-    try:
-        return (
-            resources.files("adef.data.prompts")
-            .joinpath(f"{stage}.md")
-            .read_text(encoding="utf-8")
-        )
-    except (FileNotFoundError, ModuleNotFoundError):
-        return ""
 
 
 def _split_frontmatter(text: str) -> tuple[dict, str]:
@@ -173,15 +156,15 @@ class JournalEntry:
 
     @property
     def detection_id(self) -> str:
-        return self.frontmatter.get("id", self.path.stem)
+        return str(self.frontmatter.get("id", self.path.stem))
 
     @property
     def current_stage(self) -> str:
-        return self.frontmatter.get("current_stage", "find")
+        return str(self.frontmatter.get("current_stage", "find"))
 
     @property
     def rule_uuid(self) -> str:
-        return self.frontmatter.get("rule_uuid", "") or ""
+        return str(self.frontmatter.get("rule_uuid", "") or "")
 
 
 class Journal:
@@ -233,12 +216,12 @@ class Journal:
             "created": ts,
             "updated": ts,
         }
-        find_prompt = _load_prompt("find")
+        # Lean Find block, consistent with the other stages — the Find guidance
+        # lives in the template's `## Find` fill-in section, not re-printed here.
         find_block = (
             f"\n## [{ts}] Stage: find\n\n"
             f"**Title:** {title}\n\n"
-            + (f"{find_prompt.strip()}\n\n" if find_prompt else "")
-            + (f"_Note:_ {note}\n" if note else "")
+            + (f"{note}\n" if note else "")
         )
         text = _join_frontmatter(fm, body_template.rstrip() + "\n" + find_block)
         _atomic_write(path, text)
@@ -282,11 +265,13 @@ class Journal:
             if note:
                 new_body = entry.body.rstrip() + f"\n\n_Note ({ts}):_ {note}\n"
         else:
-            prompt = _load_prompt(stage)
+            # A lean transition record: timestamp + note. The FORGE guidance
+            # (what to capture at each stage) lives once in the template's
+            # fill-in sections — re-printing the prompt prose in every block
+            # duplicated it and buried the actual notes (ISA 2026-07-22).
             block = (
                 f"\n## [{ts}] Stage: {stage}\n\n"
-                + (f"{prompt.strip()}\n\n" if prompt else "")
-                + (f"_Note:_ {note}\n" if note else "")
+                + (f"{note}\n" if note else "_(no note)_\n")
             )
             new_body = entry.body.rstrip() + "\n" + block
 

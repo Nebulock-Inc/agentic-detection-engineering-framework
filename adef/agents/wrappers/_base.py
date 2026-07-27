@@ -56,7 +56,7 @@ class WrapperBase:
                 f"Install the package providing {type(self).__name__}'s upstream class."
             ) from exc
         cls = getattr(mod, class_name, None)
-        if cls is None:
+        if not isinstance(cls, type):
             raise WrapperUnavailable(f"{class_name} not found in {module_path}.")
         return cls
 

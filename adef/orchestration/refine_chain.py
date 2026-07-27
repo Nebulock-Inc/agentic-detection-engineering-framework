@@ -16,6 +16,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Any
 
+from adef.agents.wrappers import WrapperUnavailable
 from adef.core.journal import Journal
 
 
@@ -67,7 +68,16 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
             result = cls().run(detection_id=detection_id, **context)
             journal.append_block(detection_id, step.heading, _format_payload(result))
             summary[step.name] = {"ok": True, "result": result, "error": None}
+        except WrapperUnavailable as exc:
+            # Expected, not exceptional: the upstream agent simply isn't wired
+            # (the default state). A clean one-liner belongs in the journal — a
+            # Python traceback in a "readable memory" artifact undermines it.
+            # The exception message already names the exact env var to set.
+            body = f"_Not run — {step.name} agent isn't configured. {exc}_"
+            journal.append_block(detection_id, step.heading, body)
+            summary[step.name] = {"ok": False, "result": None, "error": "not-configured"}
         except Exception as exc:  # noqa: BLE001 — chain must not abort
+            # A genuine failure of a configured agent — keep the traceback.
             tb = traceback.format_exc(limit=2)
             body = f"**Failed:** {exc}\n\n```\n{tb}\n```"
             journal.append_block(detection_id, step.heading, body)

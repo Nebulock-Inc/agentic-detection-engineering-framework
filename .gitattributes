@@ -1,0 +1,27 @@
+# Line-ending policy for this repo.
+#
+# The team develops on macOS/Linux, where files use LF. This file makes LF the
+# single source of truth in git AND in every working tree — including the lone
+# WSL-on-Windows checkout — so line endings never surface as spurious diffs.
+#
+#   * text=auto  -> git auto-detects text vs binary; text is stored as LF.
+#   eol=lf       -> text files are checked out with LF on every platform.
+#
+# Because this lives in the repo, it applies to everyone regardless of their
+# personal core.autocrlf / core.eol git config.
+* text=auto eol=lf
+
+# Belt-and-suspenders: never convert known-binary types (no files like these are
+# tracked today, but this keeps them safe if any are added later).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.whl   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
