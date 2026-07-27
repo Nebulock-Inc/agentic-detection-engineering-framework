@@ -221,6 +221,11 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
     missing: dict[tuple[str, ...], dict[str, list[str]]] = {}
     used: dict[str, set[str]] = {s: set() for s in schemas}
     rules_checked = 0
+    # Rules dropped before checking — tracked so the summary can't report a
+    # skipped rule as clean (issue #6). Two distinct reasons the user must tell
+    # apart: can't parse its fields vs. no schema addresses its data.
+    unparseable: list[str] = []  # no field extractor / empty query
+    unmatched: list[str] = []    # literals match no declared schema
     scope = set(detection_ids)
     seen_scoped: set[str] = set()
     for det_id, _path, data in cat.iter_records():
@@ -234,6 +239,7 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
         language = data.get("query_language") or data.get("format", "")
         extractor = _FIELD_EXTRACTORS.get(language)
         if extractor is None or not query:
+            unparseable.append(det_id)
             continue
 
         literals = {(data.get("data_source") or "").strip()} - {""}
@@ -243,6 +249,7 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
             for source in addressed_by.get(literal, ()):
                 match_counts[source] = match_counts.get(source, 0) + 1
         if not match_counts:
+            unmatched.append(det_id)
             continue
         best = max(match_counts.values())
         matched = sorted(s for s, n in match_counts.items() if n == best)
@@ -280,6 +287,10 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
             json.dumps(
                 {
                     "rules_checked": rules_checked,
+                    "rules_skipped": {
+                        "unmatched": sorted(unmatched),
+                        "unparseable": sorted(unparseable),
+                    },
                     "sources_with_schemas": sorted(schemas),
                     "missing_from_schema": {
                         ", ".join(group): {f: ids for f, ids in sorted(fields.items())}
@@ -298,10 +309,25 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
             "`adef schema ingest <declaration.yml>` first."
         )
         return
+    total = rules_checked + len(unmatched) + len(unparseable)
+    of_total = f" of {total}" if (unmatched or unparseable) else ""
     console.print(
-        f"Checked [bold]{rules_checked}[/bold] rules against "
-        f"{len(schemas)} schema(s).\n"
+        f"Checked [bold]{rules_checked}[/bold]{of_total} rules against "
+        f"{len(schemas)} schema(s)."
     )
+    # A skipped rule is validated against nothing — the most interesting result,
+    # and the one that used to produce silence (issue #6). Name them.
+    if unmatched:
+        console.print(
+            f"  [yellow]{len(unmatched)} unmatched[/yellow] (no declared schema "
+            f"addresses its data source): {', '.join(sorted(unmatched))}"
+        )
+    if unparseable:
+        console.print(
+            f"  [yellow]{len(unparseable)} unparseable[/yellow] (no field extractor "
+            f"or empty query): {', '.join(sorted(unparseable))}"
+        )
+    console.print()
     if not missing and not unused:
         console.print("[green]No findings.[/green]")
         return

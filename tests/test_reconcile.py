@@ -51,6 +51,26 @@ def test_uuid_match_survives_rename(tmp_path):
     assert plan[0].detection_id == "D-0001"
 
 
+def test_duplicate_uuid_binds_each_file_by_path(tmp_path):
+    """Two files sharing one UUID (a real repo data-quality bug) must each bind
+    to the record with its own path — never collapse to one and orphan the
+    other (E2E 2026-07-27; ISA: wrong merge worse than duplicate)."""
+    (tmp_path / "a.yml").write_text("x")
+    (tmp_path / "b.yml").write_text("y")
+    existing = [
+        _existing("D-0001", uuid="dup", source_hash="h1", rule_ref=f"{tmp_path.name}/a.yml"),
+        _existing("D-0002", uuid="dup", source_hash="h2", rule_ref=f"{tmp_path.name}/b.yml"),
+    ]
+    discovered = [
+        _disc(uuid="dup", source_hash="h1", path=str(tmp_path / "a.yml")),
+        _disc(uuid="dup", source_hash="h2", path=str(tmp_path / "b.yml")),
+    ]
+    plan = reconcile(existing, discovered, rule_root=tmp_path)
+    by_id = {e.detection_id: e.action for e in plan}
+    assert by_id == {"D-0001": Action.UNCHANGED, "D-0002": Action.UNCHANGED}
+    assert not any(e.action is Action.ORPHANED for e in plan)
+
+
 def test_hash_match_without_uuid_is_unchanged():
     existing = [_existing("D-0002", source_hash="h9", rule_ref="repo/a.yml")]
     plan = reconcile(existing, [_disc(source_hash="h9", path="repo/a.yml")])

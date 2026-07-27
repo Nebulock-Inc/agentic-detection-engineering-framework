@@ -98,7 +98,14 @@ def reconcile(
     — the shared-ID-space guarantee, same as ``Catalog.next_id`` (ISA 2026-07-22).
     This stays a pure function: the caller reads the journal max and passes it in.
     """
-    by_uuid = {r["rule_uuid"]: r for r in existing if r.get("rule_uuid")}
+    # UUID → list, not single: a repo can (wrongly) reuse one UUID across two
+    # files. Collapsing them to a dict would silently drop one record and later
+    # orphan it (ISA: "a wrong identity merge is worse than a duplicate"). Keep
+    # every candidate and disambiguate by path at lookup time.
+    by_uuid: dict[str, list[dict]] = {}
+    for r in existing:
+        if r.get("rule_uuid"):
+            by_uuid.setdefault(r["rule_uuid"], []).append(r)
     by_hash = {r["source_hash"]: r for r in existing if r.get("source_hash")}
     by_ref = {r["rule_ref"]: r for r in existing if r.get("rule_ref")}
 
@@ -110,7 +117,14 @@ def reconcile(
         ref = _rule_ref_of(disc, rule_root)
         match = None
         if disc.rule_uuid and disc.rule_uuid in by_uuid:      # 1. UUID
-            match = by_uuid[disc.rule_uuid]
+            candidates = by_uuid[disc.rule_uuid]
+            if len(candidates) == 1:
+                match = candidates[0]
+            else:  # duplicate UUID: bind each file to the record with its path,
+                # never let one file's UUID hijack the other's record.
+                match = next(
+                    (c for c in candidates if c.get("rule_ref") == ref), None
+                ) or next((c for c in candidates if c["id"] not in matched_ids), None)
         elif disc.source_hash and disc.source_hash in by_hash:  # 2. content hash
             match = by_hash[disc.source_hash]
         elif ref and ref in by_ref:                            # 3. same path
