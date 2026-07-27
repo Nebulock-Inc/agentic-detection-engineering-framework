@@ -187,22 +187,20 @@ detection-explorer, coverage-review, mitre-tagger, detection-author,
 schema-declaration, and forge-stage skills, and the profile-author sub-agent.
 Which skill fronts which command: [`docs/skills-reference.md`](docs/skills-reference.md).
 
-Install the plugin — it wires the `adef-mcp` server and every skill in one step:
+Install the skills, then wire the MCP server:
 
-```
+```bash
+adef install-skills       # copies skills into .claude/ (or .agents/ for Codex/ChatGPT)
 pip install -e ".[mcp]"   # adef-mcp needs the mcp extra — the base install lacks it
-/plugin marketplace add Nebulock-Inc/agentic-detection-engineering-framework
-/plugin install adef
-/reload-plugins           # skills + MCP load on reload, not on install
+adef-mcp                  # start the server; point your assistant's MCP config at it
 ```
 
-With it installed, "help me set up schemas for my Splunk environment" drives the
-whole recipe → reshape → ingest flow conversationally. MCP alone works with
-Cursor/Copilot; the plugin is the Claude-native layer.
-
-> Not using Claude, or want the skills committed into your own repo?
-> `adef install-skills` copies them into a `.claude/` (or `.agents/` for
-> Codex/ChatGPT) tree — run it separately from `adef-mcp`.
+`install-skills` prompts for the agent and project-vs-global on the first run;
+commit the resulting `.claude/` (or `.agents/`) tree into your repo so your team
+gets the skills too. With them in place, "help me set up schemas for my Splunk
+environment" drives the whole recipe → reshape → ingest flow conversationally.
+The MCP server is the portable layer — it works in any MCP client (Claude,
+Cursor, Copilot, ChatGPT desktop).
 
 ## ADEF and ATHF — paired siblings, not successor
 
