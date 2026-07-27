@@ -683,6 +683,11 @@ def walk_outcomes(
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
+        # Never descend into VCS internals: .git holds packed refs, hook
+        # samples, and object blobs — never rules, and parsing them is pure
+        # noise (E2E 2026-07-27: .git objects surfaced as "unrecognized").
+        if ".git" in path.parts:
+            continue
         try:
             raw = path.read_bytes()
             text = raw.decode("utf-8")

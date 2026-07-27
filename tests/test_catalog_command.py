@@ -87,11 +87,19 @@ def test_majority_unclaimed_nudge_escalates(tmp_path, monkeypatch):
             f"name: In-house {i}\nmetadata:\n  id: x{i}\ndetection:\n  query: SELECT 1\n",
             encoding="utf-8",
         )
+    # A CI workflow is structured YAML but NOT rule-shaped — must not inflate
+    # the "rule-shaped files" count (E2E 2026-07-27).
+    (root / ".github").mkdir()
+    (root / ".github" / "ci.yml").write_text(
+        "name: CI\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-latest\n",
+        encoding="utf-8",
+    )
 
     result = CliRunner().invoke(catalog, [str(root)])
     assert result.exit_code == 0, result.output
     assert "Most of this repo was not recognized" in result.output
-    assert "3 of 4 files" in result.output
+    # 3 rule-shaped unclaimed of (3 + 1 catalogued) = 4; the CI file is excluded.
+    assert "3 of 4 rule-shaped files" in result.output
 
 
 def test_recatalog_same_repo_is_refused(tmp_path, rule_repo, monkeypatch):

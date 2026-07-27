@@ -247,3 +247,18 @@ def test_discovered_rule_query_text_present(rule_repo):
     """Every discovered rule carries the raw query text for downstream parsing."""
     for r in discover_rules(rule_repo):
         assert r.query_text.strip()
+
+
+def test_walk_skips_git_dir(tmp_path):
+    """.git internals are never walked — they're not rules and pollute the
+    report with packed objects (E2E 2026-07-27)."""
+    from adef.core.rule_discovery import walk_outcomes
+
+    root = tmp_path / "repo"
+    (root / ".git").mkdir(parents=True)
+    (root / ".git" / "config.yml").write_text("name: x\ndetection: {}\n", encoding="utf-8")
+    (root / "real.sql").write_text("SELECT 1 FROM logs", encoding="utf-8")
+
+    paths = {oc.path.name for oc in walk_outcomes(root)}
+    assert "real.sql" in paths
+    assert "config.yml" not in paths

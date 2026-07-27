@@ -98,28 +98,47 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
     return resolved
 
 
+# Top-level keys that mark an unclaimed YAML doc as *rule-shaped* — it carries
+# detection logic, so "teach ADEF your format" is the right advice. CI workflows
+# (jobs/permissions/env), policies, and schema docs have none of these, so the
+# nudge shouldn't count them as in-house detections (E2E 2026-07-27).
+_RULE_SHAPE_KEYS = frozenset({"detection", "query", "search", "rule", "logic"})
+
+
+def _rule_shaped_unclaimed(outcomes: list[FileOutcome]) -> int:
+    """Count UNCLAIMED files that look like detections, not generic config."""
+    return sum(
+        1
+        for oc in outcomes
+        if oc.outcome == UNCLAIMED and _RULE_SHAPE_KEYS.intersection(oc.top_level_keys)
+    )
+
+
 def _print_unclaimed_nudge(unclaimed: int, claimed: int = 0) -> None:
     """Nudge toward profile authoring for unrecognized files.
 
-    Escalates when the unclaimed files are the *majority* of the repo — the
-    case where a bare catalog silently captures a fraction of the rules and
-    "N rules would be catalogued" reads like success (E2E 2026-07-27: a real
-    in-house repo catalogued 9 of 127 with the other 118 unclaimed). A quiet
-    trailing line loses that; a loud one names the proportion.
+    ``unclaimed`` is the *rule-shaped* unclaimed count (see
+    ``_rule_shaped_unclaimed``) — CI/policy/schema YAML is excluded so the
+    ratio names in-house detections, not scaffolding. Escalates when those
+    files are the *majority* of the rule-relevant repo — the case where a bare
+    catalog silently captures a fraction of the rules and "N rules would be
+    catalogued" reads like success (E2E 2026-07-27: a real in-house repo
+    catalogued 10, with 123 rule-shaped files unclaimed). A quiet trailing line
+    loses that; a loud one names the proportion.
     """
     total = unclaimed + claimed
     dominant = claimed == 0 or unclaimed >= claimed
     if dominant and total:
         console.print(
             f"  [bold yellow]⚠ Most of this repo was not recognized[/bold yellow] — "
-            f"{unclaimed} of {total} files matched no recognizer or profile "
-            "(likely an in-house format).\n"
+            f"{unclaimed} of {total} rule-shaped files matched no recognizer or "
+            "profile (likely an in-house format).\n"
             "  ADEF catalogs known formats (Sigma, Splunk ESCU, Panther, "
             "KQL/SQL/CQL) out of the box; teach it yours with an extraction profile."
         )
     else:
         console.print(
-            f"  [yellow]{unclaimed} structured files were NOT catalogued[/yellow] — no "
+            f"  [yellow]{unclaimed} rule-shaped files were NOT catalogued[/yellow] — no "
             "recognizer or profile claims their format (likely in-house YAML)."
         )
     console.print(
@@ -311,7 +330,7 @@ def catalog(
         )
         return
 
-    unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
+    unclaimed = _rule_shaped_unclaimed(outcomes)
     if not discovered:
         console.print(f"[yellow]No detection rules found under[/yellow] {rule_root}")
         if unclaimed:
@@ -391,7 +410,7 @@ def catalog(
                     f"  … and [bold]{len(recs) - sample}[/bold] more like these "
                     f"({label}; full list: --report json)"
                 )
-        unclaimed = sum(1 for oc in outcomes if oc.outcome == UNCLAIMED)
+        unclaimed = _rule_shaped_unclaimed(outcomes)
         # Ratio on the headline so the proportion can't be skimmed past — "N
         # would be catalogued" alone reads as success even when most of the
         # repo went unrecognized (E2E 2026-07-27).
