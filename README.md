@@ -11,7 +11,7 @@ ADEF gives every detection a journal, every transition a timestamp, and every li
 - **Schema-grounded authoring** — new rules scaffolded against the fields and values that actually exist in your data, not guesses
 - **A journal per detection** — the reasoning, tuning history, and review cadence that normally lives in chat threads and leaves with the person who wrote it
 
-**The FORGE lifecycle.** A detection is never one-and-done — it's found, shaped against real data, deployed under review, then tuned or retired as the threat and your telemetry change. FORGE is ADEF's name for that arc and the five stages every detection moves through: **F**ind → **O**bserve → **R**efine → **G**overn → **E**volve. Each transition is journaled, so the *why* travels with the rule instead of leaving with whoever wrote it. Full walkthrough under [Work the FORGE lifecycle](#work-the-forge-lifecycle) and in [`docs/methodology.md`](docs/methodology.md).
+**The FORGE lifecycle.** A detection is never one-and-done — it's found, shaped against real data, deployed under review, then tuned or retired as the threat and your telemetry change. FORGE is ADEF's name for that arc and the five stages every detection moves through: **F**ind → **O**bserve → **R**efine → **G**overn → **E**volve. Each transition is journaled, so the *why* travels with the rule. Full walkthrough under [Work the FORGE lifecycle](#work-the-forge-lifecycle) and in [`docs/methodology.md`](docs/methodology.md).
 
 ## Install
 
@@ -42,6 +42,8 @@ ADEF publishes to PyPI with its public release — once it's out,
 
 ADEF meets you where your detections are. This is the linear path; each step
 links to its deep-dive under [Building blocks](#building-blocks).
+
+*Example IDs like `D-0001` are illustrative — ADEF assigns each detection its own `D-XXXX` when you catalog or author it.*
 
 1. **Scaffold a workspace.**
    ```bash
@@ -79,7 +81,6 @@ connects to your SIEM — you run one export, ADEF does the rest:
 
 ```bash
 adef schema recipe splunk              # the exact field-export command for YOUR SIEM
-adef schema recipe sentinel            # …recipes also cover Elastic, Chronicle, Sumo, QRadar
 adef schema reshape fields.csv --platform splunk   # export → draft declaration + report
 adef schema ingest splunk-sources.yml  # → schema/<source>.yml per source
 adef schema check                      # do your rules use fields that exist?
@@ -153,6 +154,8 @@ making the workspace durable under git.
 
 ### See your coverage — honestly
 
+Coverage reads straight from your ATT&CK tags, so enrich first, then measure:
+
 ```bash
 adef detection tag-mitre D-0007 T1547.001    # enrich, validated against ATT&CK
 adef coverage                                # coverage QUALITY report
@@ -172,7 +175,7 @@ ADEF detections move through five stages:
 
 1. **Find** — a gap, a signal source, an intel report, a hunt outcome
 2. **Observe** — characterize real telemetry behavior; understand normal before defining weird
-3. **Refine** — iterate the rule with backtest, similarity, overlap, and verification feedback
+3. **Refine** — iterate the rule with similarity, overlap, and verification feedback
 4. **Govern** — deploy with quality gates, ownership, review cadence
 5. **Evolve** — tune, deprecate, replace; detections never finish, they iterate
 
