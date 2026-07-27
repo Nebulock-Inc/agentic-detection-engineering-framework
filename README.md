@@ -91,17 +91,25 @@ infers types — and prints a transformation report so you approve the
 transformations instead of hand-auditing YAML. Re-ingest anytime: your hand
 corrections survive, drift is reported.
 
-**Why the merge step matters.** SIEMs often expose one fact as two fields with
-two value formats — in Splunk a single logon failure carries both `Status =
-0xc000006d` (raw NTSTATUS) and `status = failure` (CIM-normalized). `reshape`
-merges such pairs into one declared field with `aliases:`, so a rule written
-against either spelling passes `adef schema check`. When it flags a merge
-`[SUSPECT]`, read the values it shows: the same information in two formats
-(`SYSTEM` vs `NT AUTHORITY\SYSTEM`) → keep the merge; two unrelated fields that
-collide on spelling → split with `--no-fold` (or walk them with
-`--interactive`). With the Claude plugin, the `schema-declaration` skill drives
-the whole flow — the keep-or-split call needs to know what a field *is*, which
-is exactly the domain knowledge an agent session adds.
+**Why the merge step matters.** SIEMs often expose one fact as two fields in two
+value formats:
+
+```
+# Splunk — one logon failure, two fields
+Status = 0xc000006d    raw field, NTSTATUS codes
+status = failure       normalized field (CIM)
+```
+
+`reshape` merges such pairs into one declared field with `aliases:`, so a rule
+written against either spelling passes `adef schema check`. It marks a pair
+`[SUSPECT]` when it can't tell they're the same field — read the values it shows:
+
+- **Same fact, two formats** (`SYSTEM` vs `NT AUTHORITY\SYSTEM`) → keep the merge.
+- **Different fields colliding on spelling** → split with `--no-fold` (or `--interactive`).
+
+With the Claude plugin, the `schema-declaration` skill drives this — the
+keep-or-split call turns on knowing what a field *is*, exactly the domain
+knowledge an agent session adds.
 
 ### Catalog & keep it current
 
@@ -204,7 +212,7 @@ Cursor, Copilot, ChatGPT desktop).
 
 ## ADEF and ATHF — paired siblings, not successor
 
-ADEF and ATHF are *paired siblings*. ATHF owns the threat-hunting lifecycle (LOCK pattern, hunts repo). ADEF owns the detection-engineering lifecycle (FORGE pattern, journals repo). Hunts that earn detections cross the bridge via `adef hunt-promote H-XXXX`. Both frameworks share the same Click + entry-point + FastMCP shape, so analysts and agents that learn one recognize the other immediately.
+ADEF and ATHF are *paired siblings*, and the structural parallel is deliberate. ATHF runs the threat-hunting lifecycle (LOCK) to establish baseline visibility and answer "is this active in our environment?" ADEF runs the detection-engineering lifecycle (FORGE) to turn that insight into production alerts, answering "how do we codify this so it pages our security team?" Both are built on the same Click + entry-point + FastMCP foundation, so analysts and agents move between hunting and detection engineering without a learning curve.
 
 ## Maturity Model
 
