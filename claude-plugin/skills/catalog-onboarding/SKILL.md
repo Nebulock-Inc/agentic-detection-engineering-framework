@@ -52,7 +52,7 @@ Ask the user which clusters to onboard if there are more than two.
 For each cluster, launch the `profile-author` sub-agent. Give it:
 
 - the cluster's file paths (it samples up to 50 itself)
-- the profile schema (see `docs/plans/2026-07-20-claude-plugin-design.md`)
+- the profile schema (see [`docs/creating-extraction-profiles.md`](../../../docs/creating-extraction-profiles.md))
 - any hints the user volunteered ("those are our Sentinel exports")
 
 It returns a draft profile YAML, self-reported extraction stats, and a list
@@ -61,7 +61,16 @@ exactly the context the sub-agent exists to absorb.
 
 ### 4. Validate deterministically
 
-Write the draft to a temp file and run:
+Write the draft to a temp file and **lint its structure first** — this catches
+a malformed profile (bad container, missing required map field) in a second,
+before you spend a full repo walk on it:
+
+```
+adef profile lint <draft.yml>
+```
+
+If lint fails, send the errors straight back to the sub-agent; don't walk the
+repo with a profile that won't load. Once it lints clean, measure extraction:
 
 ```
 adef catalog <rule_root> --dry-run --profile <draft.yml>

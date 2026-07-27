@@ -26,7 +26,8 @@ engine how to recognize this format and where its fields live.
 name: <kebab-case, descriptive: acme-siem-export, sentinel-analytics-yaml>
 version: 1
 signature:
-  container: yaml | json | toml | conf | raw
+  container: yaml | json | toml   # implemented parsers only; toml needs Python 3.11+.
+                                   # conf/raw are reserved keys the linter rejects — don't emit them.
   all_keys: [...]        # top-level keys present in EVERY sampled file
   any_keys: [...]        # optional
   none_keys: [...]       # keys that identify near-misses to exclude (packs, stories, lookups)

@@ -1,6 +1,6 @@
 ---
 name: detection-author
-description: Author a new detection rule with the detection engineer, grounded in their declared schema and existing catalog. Use when the user wants to write a new detection, create a rule from a threat report or hunt finding, or "help me build a detection for X". Interviews the engineer for the context an AI can't infer (intent, threat model, assumptions, known false positives), scaffolds a schema-grounded draft, drafts the query against real fields, and runs it through ADEF's quality gates before it's done. The rule lands in the ADEF catalog; moving it into the user's rules repo is left to them.
+description: Author a new detection rule with the detection engineer, grounded in their declared schema and existing catalog. Use when the user wants to write a new detection, create a rule from a threat report or hunt finding, or "help me build a detection for X". Interviews the engineer for the context an AI can't infer (intent, threat model, assumptions, known false positives), scaffolds a schema-grounded draft, drafts the query against real fields, and runs the schema-field check before handing off (the deeper similarity/overlap/verification gates run later, at Refine). The rule lands in the ADEF catalog; moving it into the user's rules repo is left to them.
 ---
 
 # Detection Author
@@ -86,7 +86,14 @@ the schema's platform, query language, and scope literals. If `--source` errors
 Read the declared schema (`<workspace>/schema/<source>.yml`): field names,
 observed `values`, and `type`. Draft the detection logic in the source's query
 language, using **only** fields that exist in the schema and values consistent
-with what's been observed. Replace the scaffold's `<condition>` placeholder.
+with what's been observed.
+
+The scaffold gives you the *addressing*, not the logic: for spl/kql/cql/sql it
+seeds the real index/table literals plus a `<condition>` placeholder to
+replace. If the schema had no scope literals, or the source's query language
+isn't one of those four, the query field is **empty** — you write it from
+scratch (the `adef detection new` output tells you when this happens). Either
+way, the behavior clause is yours to author.
 
 Explain each clause to the engineer in terms of the behavior from step 1 — the
 query should be legible as "this is how we catch that hypothesis."

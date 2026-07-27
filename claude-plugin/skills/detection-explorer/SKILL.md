@@ -39,6 +39,11 @@ Add `--report json` to count, group, or pick precisely — it includes a derived
 for recognized-but-unsupported formats, and the paired-journal tail (the "why" a
 list can't show). Summarize — especially the journal.
 
+When the question is topical rather than a filter ("detections about credential
+dumping on Windows"), reach for `adef detection search "<query>"` — BM25 over
+the journals *and* catalog records, so a detection is findable by what it
+detects even when its journal is sparse. `--limit N` widens the default 10 hits.
+
 ## Notes
 
 - Both accept `--workspace PATH` (default: `ADEF_WORKSPACE` env or cwd).
