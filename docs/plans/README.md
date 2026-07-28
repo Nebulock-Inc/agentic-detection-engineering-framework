@@ -21,11 +21,11 @@ brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
   repo-less teams using ADEF as their detection system of record: the
   `origin: authored|catalogued` marker, sync-exclusion for authored records,
   git-friendly workspace. (`adef export` considered and deferred.)
-  *Proposed; no code yet.*
+  *Steps 1–2 shipped; `adef export` deferred.*
 - **[2026-07-22-unify-on-profiles-design.md](2026-07-22-unify-on-profiles-design.md)** —
   analysis of whether built-in extractors should collapse into shipped profiles
   (they can't without turning the profile format into a DSL). Decision record
-  for when the question recurs. *Analysis; keep-the-split recommended.*
+  for when the question recurs. *Analysis; P1/P2 shipped, keep-the-split holds.*
 
 ## Where else to look
 

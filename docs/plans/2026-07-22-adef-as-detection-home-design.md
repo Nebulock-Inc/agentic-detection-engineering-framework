@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-22
 **Status:** Proposed (design-before-build; no code yet)
+**Update 2026-07-27:** steps 1–2 (origin marker + sync-exclusion + `docs/detection-home.md`) shipped 2026-07-22; `adef export` still deferred. (The Status line above is the original 2026-07-22 framing, kept for the record.)
 **Motivated by:** the "no repo" usage scenario (Option 2 in
 `docs/archive/2026-07-21-handoff-full.md` §C) — a team with no detection-as-code
 repo that wants to author and keep detections in ADEF itself.

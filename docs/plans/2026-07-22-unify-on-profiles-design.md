@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-22
 **Status:** Analysis / open decision (no code — informs a future fork)
+**Update 2026-07-27:** P1 (TOML container) + P2 (Azure-Sentinel profile) shipped 2026-07-22; keep-the-split still holds. (The Status line above is the original 2026-07-22 framing, kept for the record.)
 **Motivated by:** "is having both built-in parsers *and* profiles confusing?"
 → sharpened to "does cataloging *scale* across real repos?" → answered with a
 **wide-corpus measurement** (below), which reframed the whole question.

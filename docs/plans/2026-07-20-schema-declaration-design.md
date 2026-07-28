@@ -198,4 +198,4 @@ types. Read-only on rule repos. No web UI.
   `declared | corrected` provenance and drift reporting on re-ingest.
 - Rules are demoted from schema *source* to schema *consumer*: `schema check`
   cross-references rule field usage against declarations; `from-catalog` field
-  derivation and the `schema init` wizard are deprecated (removal v0.2).
+  derivation and the `schema init` wizard are deprecated (removal v0.2). *(Superseded 2026-07-20: removed the same session, not deferred to v0.2.)*
