@@ -1,9 +1,9 @@
 name: Publish to PyPI
 
-# Mirrors the ATHF release flow: draft a GitHub Release with tag vX.Y.Z.
-# Mark it "pre-release" to publish to Test PyPI first; a normal release
-# publishes to PyPI. Auth uses an API token stored as a repo secret
-# (PYPI_API_TOKEN / TEST_PYPI_API_TOKEN) — see docs/publishing.md.
+# Release flow: draft a GitHub Release with tag vX.Y.Z to publish to PyPI.
+# Auth uses an API token stored as the repo secret PYPI_API_TOKEN.
+# Marking the release "pre-release" runs build + twine check only (a dry
+# run, no upload); a normal release publishes to PyPI.
 
 on:
   release:
@@ -49,14 +49,6 @@ jobs:
 
     - name: Check package with twine
       run: twine check dist/*
-
-    - name: Publish to Test PyPI
-      if: github.event.release.prerelease
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        skip-existing: true
 
     - name: Publish to PyPI
       if: "!github.event.release.prerelease"

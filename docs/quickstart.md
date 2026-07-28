@@ -1,4 +1,4 @@
-# Quickstart (local / pre-release)
+# Quickstart (local)
 
 ADEF is **not on PyPI yet** — `pip install agentic-detection-engineering-framework`
 will fail until v0.1.0 ships. Until then, everything runs from a source
