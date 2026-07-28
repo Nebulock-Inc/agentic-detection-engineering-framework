@@ -25,7 +25,7 @@ What you expected to happen.
 
 What actually happened. Include error messages if applicable.
 
-```
+```text
 Paste error message or output here
 ```
 
@@ -45,9 +45,10 @@ Add any other context about the problem here. Include (sanitized):
 
 ## Logs
 
-If applicable, paste relevant logs here (redact any org IDs, hostnames, or data):
+If applicable, paste relevant logs here. Redact org IDs, hostnames, sensitive
+data, credentials, API keys, access tokens, cookies, and private keys:
 
-```
+```text
 Paste logs here
 ```
 

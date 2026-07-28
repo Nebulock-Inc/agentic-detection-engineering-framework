@@ -33,6 +33,7 @@ and any notable tuning history.
 - [ ] No real IP addresses, hostnames, or domains
 - [ ] No usernames or email addresses
 - [ ] No organization IDs, customer names, or internal system names
+- [ ] No credentials, API keys, access tokens, cookies, or private keys
 - [ ] Queries use example/placeholder indexes and sourcetypes
 
 ## Contents

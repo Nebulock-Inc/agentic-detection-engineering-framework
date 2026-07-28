@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+# Least-privilege default token: this workflow only reads the repo.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test — Python ${{ matrix.python-version }} on ${{ matrix.os }}
