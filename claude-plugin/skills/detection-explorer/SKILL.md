@@ -1,6 +1,6 @@
 ---
 name: detection-explorer
-description: Browse and inspect the ADEF detection catalog (read-only). Use when the user asks which detections exist or wants to find/filter them (by platform, ATT&CK tactic, engine, status, stage, origin, or review state), asks what needs MITRE tagging or review, or wants one detection's record, query, tactics, and journal history. For coverage or gap analysis, use the coverage skill.
+description: Browse and inspect the ADEF detection catalog (read-only). Use when the user asks which detections exist or wants to find/filter them (by platform, ATT&CK tactic, engine, status, stage, origin, or review state), asks what needs MITRE tagging or review, or wants one detection's record, query, tactics, and journal history. For coverage or gap analysis, use the coverage-review skill.
 ---
 
 # Detection Explorer
@@ -15,7 +15,7 @@ Translate a "what do we have?" question into the right `adef detection list` /
 - Report only what the commands return. Empty result → check the catalog exists
   (`adef catalog <rule-root>`) before assuming zero coverage.
 - Hand off writes: onboarding → `catalog-onboarding`, authoring → `detection-author`,
-  MITRE tagging → `mitre-tagger`, coverage/gaps → the coverage skill.
+  MITRE tagging → `mitre-tagger`, coverage/gaps → `coverage-review`.
 
 ## Query — map the question to `adef detection list` (filters combine)
 

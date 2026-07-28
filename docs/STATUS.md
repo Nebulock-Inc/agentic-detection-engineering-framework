@@ -13,7 +13,7 @@ hands-on walkthrough, `docs/quickstart.md`.
 Release pipeline shipped and **validated on Test PyPI** 2026-07-23 (build +
 upload + index-install verified); real PyPI push on hold until v1 is further
 along. See `docs/publishing.md`.
-**Last updated:** 2026-07-23.
+**Last updated:** 2026-07-24.
 
 ---
 

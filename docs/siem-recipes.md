@@ -468,4 +468,4 @@ adef schema check
 - [Declaration format spec](./declaring-data-sources.md)
 - [Schema design doc](./plans/2026-07-20-schema-declaration-design.md)
 - Run `adef schema --help` for CLI options
-- File issue: [ADEF GitHub](https://github.com/nebulock/agentic-detection-engineering-framework/issues)
+- File issue: [ADEF GitHub](https://github.com/Nebulock-Inc/agentic-detection-engineering-framework/issues)

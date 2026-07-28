@@ -10,7 +10,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 - **Hands-on walkthrough:** `docs/quickstart.md`
 - **Prior session logs:** `docs/archive/` (the full pre-2026-07-22 HANDOFF + dated session docs)
 
-**Last updated:** 2026-07-23.
+**Last updated:** 2026-07-27.
 
 ---
 
@@ -48,7 +48,7 @@ Keep it short — historical session logs are archived, not accumulated here.
 | Browse (`adef detection list/show`) | Jarrett | shipped |
 | Coverage epic (attack layer / mitre-tagger / coverage report + gaps) | Jarrett | shipped |
 | Authoring (`detection new --source` + detection-author skill) | Jarrett | shipped |
-| Claude plugin (`claude-plugin/`) | shared | shipped (7 skills + profile-author agent) |
+| Claude plugin (`claude-plugin/`) | shared | shipped (8 skills + profile-author agent) |
 
 **Shared seam — coordinate before changing:** `adef/core/rule_discovery.py`, the
 catalog record shape (`adef/core/catalog.py`), or the schema YAML shape — each is

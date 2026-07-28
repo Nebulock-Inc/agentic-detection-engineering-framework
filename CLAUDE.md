@@ -64,6 +64,7 @@ adef detection observe D-0001 --note "Baseline: mshta-from-office ~3/day" \
 
 # Enrich a catalog record with ATT&CK technique IDs (drains the no_mitre queue)
 adef detection tag-mitre D-0007 T1547.001 T1055   # validated vs the shipped reference
+adef detection tag-mitre D-0007 T1055 --remove    # untag (retag seam); emptying re-queues no_mitre
 ```
 `tag-mitre` validates each ID against the ATT&CK reference (invalid ID aborts,
 nothing written), merges into the record's `mitre`, drops the `no_mitre` review
@@ -102,6 +103,8 @@ sync. Filter with `adef detection list --origin authored`.
 adef catalog /path/to/rules             # Walk a rule repo → catalog/ + INDEX.yml + skeleton journals
 adef catalog /path/to/rules --dry-run   # Preview what would be catalogued (nothing written)
 adef catalog /path/to/rules --force     # Catalog even if rules are already present (mints duplicates)
+adef profile lint <profile.yml>         # Validate an in-house-format extraction profile
+adef reindex                            # Rebuild catalog/INDEX.yml from the records
 ```
 Cataloging is read-only on the source repo. It sniffs each file's format
 (Sigma YAML, Splunk `.conf`, `.kql`, `.sql`, `.cql`), writes an enrichment

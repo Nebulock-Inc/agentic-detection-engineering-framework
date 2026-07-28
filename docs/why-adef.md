@@ -20,7 +20,7 @@ What ADEF adds:
 - A CLI (`adef`) that walks rules through FORGE, catalogs your existing repo read-only (`adef catalog`), and builds data schemas from a declaration you provide (`adef schema ingest`).
 - **Extraction profiles** — in-house rule formats are taught with a small YAML profile (no code); an agent can draft one from samples, the engine validates it, you approve it.
 - An MCP server (`adef-mcp`) that exposes the same operations to Claude Code, Copilot, Cursor — plus a Claude plugin (skills + sub-agents; the repo doubles as a plugin marketplace).
-- Twelve upstream rule-engineering agents wrapped as lifecycle-aware tools, plus four ADEF-native agents.
+- Four upstream rule-engineering agents wrapped as lifecycle-aware tools, plus four ADEF-native agents.
 
 ## What ADEF and ATHF are to each other
 
@@ -84,7 +84,7 @@ A framework's anti-goals say more than its goals. ADEF v0.1.0 is **not**:
 - A new YAML format. The four engine types (`sigma`, `sql`, `sch_sql`, `composite`) are taken as given. No new engines.
 - A vendor connector layer. No CrowdStrike, Splunk, SentinelOne, etc. ADEF reads upstream YAML metadata; nothing more.
 - A web app. No FastAPI, no Next.js, no Django. CLI and MCP only.
-- A rewrite of the upstream rule-engineering agents. The 12 existing agents are wrapped — not reimplemented — so improvements there flow downstream.
+- A rewrite of the upstream rule-engineering agents. The 4 existing agents are wrapped — not reimplemented — so improvements there flow downstream.
 - An autonomous deprecation tool. The DeprecationRecommender *recommends*. Humans approve.
 
 ## Where to go next

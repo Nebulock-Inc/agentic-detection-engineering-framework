@@ -10,7 +10,7 @@ adef/                    # importable Python package
   plugin_system.py       # entry-point discovery (defensive load, never kills CLI)
   __version__ via __init__.py
   agents/                # ADEF-native agents (Hypothesis, Tune, Deprecation, HuntPromotion)
-    wrappers/            # Thin wrappers around 12 upstream rule-engineering agents
+    wrappers/            # Thin wrappers around the 4 upstream rule-engineering agents
   commands/              # Click subgroups: detection, init, hunt-promote, backfill
   core/                  # Journal, MemoryIndex, rule_bridge
   data/                  # Package data — templates/, prompts/
@@ -40,7 +40,7 @@ These are CI-enforced. Do not work around them:
 
 ADEF never hardcodes upstream package names. Integration is configured via environment variables:
 
-- `ADEF_WRAPPER_<KEY>=module.path:ClassName` — bind a wrapper in `adef.agents.wrappers.*` to its upstream class. `<KEY>` matches the wrapper's `binding_key` (e.g. `COVERAGE_ANALYSIS`, `RULE_OVERLAP`, `VERIFICATION`).
+- `ADEF_WRAPPER_<KEY>=module.path:ClassName` — bind a wrapper in `adef.agents.wrappers.*` to its upstream class. `<KEY>` matches the wrapper's `binding_key` (e.g. `RULE_SIMILARITY`, `RULE_OVERLAP`, `VERIFICATION`).
 - `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName` — bind `adef hunt-promote` to a hunt-rule generator that exposes `run(hunt_id=...)`.
 - `ADEF_RULE_ROOT=/path/to/rules` (or `--rule-root`) — directory of upstream rule YAML for `adef backfill journals` and memory search.
 - `ADEF_HUNT_ROOT=/path/to/hunts` (or `--hunt-root`) — directory of upstream hunt artifacts.
