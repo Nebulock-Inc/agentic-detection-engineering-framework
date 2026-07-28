@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Nebulock-Inc/agentic-detection-engineering-framework/main/docs/assets/adef-logo.png" width="260" alt="ADEF logo: an anvil built from angular orange segments">
+</p>
+
 # Agentic Detection Engineering Framework (ADEF)
 
 > Detection engineering with durable memory, a five-stage lifecycle, and an agentic surface — the sibling of [ATHF](https://github.com/Nebulock-Inc/agentic-threat-hunting-framework).
