@@ -143,6 +143,10 @@ def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
     repo = _make_repo(tmp_path)
 
     CliRunner().invoke(catalog, [str(repo)])
+    # Enrich the record so the repair has real metadata to propagate.
+    path, data = Catalog(ws).find_record("D-0001")
+    data["owner"] = "alice"
+    Catalog(ws).write_raw(path, data)
     jpath = ws / "journals" / "D-0001.md"
     assert jpath.exists()
     jpath.unlink()
@@ -150,13 +154,13 @@ def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
     result = CliRunner().invoke(sync, [str(repo)])
     assert result.exit_code == 0
     assert jpath.exists()
-    text = jpath.read_text(encoding="utf-8")
-    # Journal carries the record's real metadata, not bare defaults.
-    assert "Rundll32 no args" in text
-    assert "rule_uuid: 03cc0c25-389f-4bf8-b48d-11878079f1ca" in text
-    assert "re-created by `adef sync`" in text
+    # Metadata lands in parsed frontmatter, not merely somewhere in the file.
     entry = Journal(ws / "journals").read("D-0001")
+    assert entry.frontmatter["title"] == "Rundll32 no args"
+    assert entry.frontmatter["owner"] == "alice"
+    assert entry.frontmatter["rule_uuid"] == "03cc0c25-389f-4bf8-b48d-11878079f1ca"
     assert entry.frontmatter["current_stage"] == "find"
+    assert "re-created by `adef sync`" in entry.body
 
 
 def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):

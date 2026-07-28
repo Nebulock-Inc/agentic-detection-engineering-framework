@@ -188,7 +188,7 @@ class Journal:
         # Every journal read/write routes through here: reject anything that
         # isn't an ADEF-minted id so a hand-edited record id ("../x", an
         # absolute path) can never become a path outside journals/.
-        if not _DETECTION_ID_RE.match(detection_id):
+        if not _DETECTION_ID_RE.fullmatch(detection_id):
             raise JournalError(f"Invalid detection id {detection_id!r} (expected D-XXXX).")
         candidate = self._dir / f"{detection_id}.md"
         _check_not_under_detections(candidate)
