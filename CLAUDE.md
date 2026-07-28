@@ -118,12 +118,6 @@ minting duplicates — it points you to `adef sync` (the reconciling re-run) or
 `--force`. Cataloging a genuinely new repo into a populated workspace still
 appends cleanly (no identity overlap → no block). `--dry-run` is never blocked.
 
-### Backfilling
-```bash
-adef backfill journals              # Create journals for existing upstream rules
-adef backfill journals --rule-root /path/to/rules
-```
-
 ### Schema Management (declaration-driven)
 ```bash
 adef schema ingest adef-sources.yml     # Build schemas from a data-source declaration
@@ -258,12 +252,10 @@ adef/
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
-│   ├── hunt_promote.py         # Hunt-to-detection promotion
-│   └── backfill.py             # Bulk journal creation
+│   └── hunt_promote.py         # Hunt-to-detection promotion
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
-│   ├── memory.py               # BM25 search over journals + upstream YAML
-│   └── rule_bridge.py          # Read-only bridge to upstream rule metadata
+│   └── memory.py               # BM25 search over journals + catalog records
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)

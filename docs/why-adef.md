@@ -61,9 +61,9 @@ A pragmatic four-week ramp from "installed" to "habit":
 - `adef init`
 - Pick one production rule. Write its journal by hand, walking FORGE backward (start from where the rule is now, fill in why it got there).
 
-**Week 2 — Backfill.**
-- `adef backfill journals` to scaffold journals for every existing upstream rule.
-- Audit: how many journals are blank? That's the size of the *why* gap. Don't try to fill them all at once.
+**Week 2 — Measure the gap.**
+- Cataloging in week 1 paired every rule with a skeleton journal. Count how many are still blank: that's the size of the *why* gap. Don't try to fill them all at once.
+- Work the enrichment queue (`adef detection list --needs-review no_mitre`) and run a first `adef coverage` for a baseline.
 
 **Week 3 — Habit loop.**
 - All new detections start with `adef detection new`.

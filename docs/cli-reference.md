@@ -48,7 +48,6 @@ cwd contents.
 | `adef detection search` | BM25 search over journals + catalog metadata |
 | `adef detection tag-mitre` | Add validated ATT&CK technique IDs to a record |
 | `adef hunt-promote` | Promote an upstream hunt to a draft detection |
-| `adef backfill journals` | Create skeleton journals for existing rules |
 | `adef catalog` | Walk a rule repo into the catalog (read-only on source) |
 | `adef sync` | Reconcile the catalog with the source repo |
 | `adef profile lint` | Validate an extraction profile against its schema |
@@ -167,25 +166,6 @@ The generator dotted path is configured via environment variable
 ```bash
 adef hunt-promote H-0042
 adef hunt-promote H-0042 --hunt-root ~/athf/hunts --rule-staging-root ~/staging
-```
-
-### adef backfill journals
-
-**Synopsis:** `adef backfill journals [--rule-root PATH] [--limit N] [--dry-run] [--workspace PATH]`
-
-Create skeleton journals for every external rule that doesn't already have one,
-so memory search is useful over an existing corpus.
-
-| Option | Meaning |
-|---|---|
-| `--rule-root` | External rule-store root (overrides `ADEF_RULE_ROOT`). |
-| `--limit N` | Backfill at most N rules (default `0` = all). |
-| `--dry-run` | Print the plan without writing files. |
-| `--workspace` | Workspace path (see resolution). |
-
-```bash
-adef backfill journals --dry-run
-adef backfill journals --rule-root ~/sigma/rules --limit 50
 ```
 
 ---

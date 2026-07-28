@@ -125,7 +125,9 @@ consumed across both people's features.
   "PRODUCTION READY" narrative while the record still says `status: draft` —
   no CLI sets status; candidate: `--status ready|tuning|deprecated` on the
   govern/evolve stage commands, mirroring the stage-mirror pattern).
-- Plugin skills wave 2: `journal-backfill`, `coverage-gaps`. ✅ `forge-stage`
+- Plugin skills wave 2: `coverage-gaps` (`journal-backfill` dropped with the
+  command — `adef backfill journals` retired 2026-07-27, subsumed by
+  catalog/sync journal pairing). ✅ `forge-stage`
   **shipped 2026-07-24** — built directly from the three live D-1470 stage
   sessions (Observe wrote to /tmp; Refine tripled its summaries and misread
   the chain re-run; Govern declared "production ready" against a draft

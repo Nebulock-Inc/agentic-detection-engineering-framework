@@ -11,8 +11,8 @@ adef/                    # importable Python package
   __version__ via __init__.py
   agents/                # ADEF-native agents (Hypothesis, Tune, Deprecation, HuntPromotion)
     wrappers/            # Thin wrappers around the 4 upstream rule-engineering agents
-  commands/              # Click subgroups: detection, init, hunt-promote, backfill
-  core/                  # Journal, MemoryIndex, rule_bridge
+  commands/              # Click subgroups: detection, init, hunt-promote, catalog, sync, schema
+  core/                  # Journal, MemoryIndex, Catalog
   data/                  # Package data — templates/, prompts/
   mcp/                   # FastMCP server + tool modules
   orchestration/         # Refine chain (Similarity → Overlap → Verification)
@@ -42,7 +42,6 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 
 - `ADEF_WRAPPER_<KEY>=module.path:ClassName` — bind a wrapper in `adef.agents.wrappers.*` to its upstream class. `<KEY>` matches the wrapper's `binding_key` (e.g. `RULE_SIMILARITY`, `RULE_OVERLAP`, `VERIFICATION`).
 - `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName` — bind `adef hunt-promote` to a hunt-rule generator that exposes `run(hunt_id=...)`.
-- `ADEF_RULE_ROOT=/path/to/rules` (or `--rule-root`) — directory of upstream rule YAML for `adef backfill journals` and memory search.
 - `ADEF_HUNT_ROOT=/path/to/hunts` (or `--hunt-root`) — directory of upstream hunt artifacts.
 
 If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.

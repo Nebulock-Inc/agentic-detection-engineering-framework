@@ -132,3 +132,36 @@ def test_sync_check_exits_nonzero_when_behind(tmp_path, monkeypatch):
     assert result.exit_code == 1  # behind
     # --check writes nothing: record is still its original (non-orphaned) form.
     assert _record(ws, "D-0001").get("orphaned") is not True
+
+
+def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
+    """A matched record whose journal was deleted gets a fresh skeleton on sync,
+    even when the source repo has no changes (the backfill-repair pass)."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    jpath = ws / "journals" / "D-0001.md"
+    assert jpath.exists()
+    jpath.unlink()
+
+    result = CliRunner().invoke(sync, [str(repo)])
+    assert result.exit_code == 0
+    assert jpath.exists()
+    # Journal carries the record's real title, not a bare detection id.
+    assert "Rundll32 no args" in jpath.read_text(encoding="utf-8")
+
+
+def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (ws / "journals" / "D-0001.md").unlink()
+
+    CliRunner().invoke(sync, [str(repo), "--dry-run"])
+    assert not (ws / "journals" / "D-0001.md").exists()

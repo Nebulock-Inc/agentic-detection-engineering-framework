@@ -20,9 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ADEF_PKG = REPO_ROOT / "adef"
 
 # Forbidden: any source line that would write into an upstream rule
-# ``detections/`` directory. The read-only rule bridge in
-# ``adef.core.rule_bridge`` is allowed to *read* YAML from such directories;
-# it is never allowed to mutate them.
+# ``detections/`` directory. Reading YAML from such directories is allowed;
+# mutating them never is.
 _FORBIDDEN_WRITE_PATTERNS = (
     re.compile(r"/detections/.*\.write_text"),
     re.compile(r"/detections/.*open\(.*['\"][wax]"),

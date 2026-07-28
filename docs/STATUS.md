@@ -47,7 +47,6 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef reindex`** — regenerate `catalog/INDEX.yml` from the records. The
   INDEX is generated, never hand-edited — this is the only safe rebuild path.
 - **`adef hunt-promote H-XXXX`** — promote an ATHF hunt to a draft detection.
-- **`adef backfill journals`** — bulk-create journals for existing rules.
 
 ### Cataloging (read-only over a rules repo)
 - **`adef catalog <rule-root>`** — walk a detection repo read-only; recognize
@@ -61,7 +60,9 @@ Everything below is implemented, tested, and exercised end-to-end.
 - **`adef sync <rule-root>`** — reconcile the catalog after the repo changes:
   identity cascade (`rule_uuid` → `source_hash` → path → new; gone → orphaned,
   never deleted); refreshes derived fields, **preserves enrichment** (mitre /
-  status / owner / journal); journals out-of-band edits. Skips `origin: authored`
+  status / owner / journal); journals out-of-band edits; re-creates a skeleton
+  journal for any record whose journal has gone missing (this repair pass
+  replaced the retired `adef backfill journals`). Skips `origin: authored`
   records (created in ADEF, no upstream). `--dry-run` /`--check` (CI). Fuzzy
   rename-match deferred (falls to `new`, never mis-attributes).
 
