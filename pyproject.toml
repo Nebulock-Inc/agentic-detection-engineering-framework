@@ -10,7 +10,10 @@ readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Sydney Marrone", email = "adef@nebulock.io"}
+    {name = "Eric Brown", email = "eric@nebulock.io"},
+    {name = "Joshua Hines", email = "josh@nebulock.io"},
+    {name = "Sydney Marrone", email = "sydney@nebulock.io"},
+    {name = "Jarrett Polcari", email = "jarrett@nebulock.io"},
 ]
 keywords = [
     "detection-engineering",
@@ -69,7 +72,6 @@ adef-mcp = "adef.mcp.server:cli"
 detection = "adef.commands.detection:detection"
 init = "adef.commands.init:init"
 hunt-promote = "adef.commands.hunt_promote:hunt_promote"
-backfill = "adef.commands.backfill:backfill"
 schema = "adef.commands.schema:schema"
 catalog = "adef.commands.catalog:catalog"
 profile = "adef.commands.profile:profile"

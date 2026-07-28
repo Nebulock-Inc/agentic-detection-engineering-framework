@@ -38,9 +38,6 @@ Examples:
   # Promote a hunt to a draft detection
   adef hunt-promote H-0042
 
-  # Backfill journals for existing rule files
-  adef backfill journals
-
 \b
 Documentation:
   • Methodology:   docs/methodology.md   (FORGE lifecycle)

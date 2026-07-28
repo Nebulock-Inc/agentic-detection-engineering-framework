@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/adef-logo.png" alt="ADEF — Agentic Detection Engineering Framework" width="360">
+  <img src="https://raw.githubusercontent.com/Nebulock-Inc/agentic-detection-engineering-framework/main/docs/assets/adef-logo.png" width="260" alt="ADEF logo: an anvil built from angular orange segments">
 </p>
 
 # Agentic Detection Engineering Framework (ADEF)
@@ -239,6 +239,15 @@ See [`docs/maturity-model.md`](docs/maturity-model.md) for full descriptions and
 ADEF is for teams whose detection count has outgrown their ability to remember why each rule exists, whether it still earns its keep, and what changing it would cost. It's a memory-and-lifecycle layer *over* your existing detections — not a replacement for your SIEM, your rule repo, or your detection-as-code pipeline.
 
 [`docs/why-adef.md`](docs/why-adef.md) is the full adoption guide: the problem it solves, where it fits in your stack, what you give up to use it, and how to bring it into an existing detection program.
+
+## Credits
+
+Built by the Detection Engineering & Threat Hunting (DE&TH) Team at [Nebulock, Inc.](https://nebulock.io):
+
+- Eric Brown ([eric@nebulock.io](mailto:eric@nebulock.io))
+- Joshua Hines ([josh@nebulock.io](mailto:josh@nebulock.io))
+- Sydney Marrone ([sydney@nebulock.io](mailto:sydney@nebulock.io))
+- Jarrett Polcari ([jarrett@nebulock.io](mailto:jarrett@nebulock.io))
 
 ## License
 

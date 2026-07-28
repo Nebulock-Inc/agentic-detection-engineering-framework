@@ -64,11 +64,9 @@ commands; the CLI reference documents the underlying behavior.
 | `adef coverage` | **coverage-review** | quality tiers + `--gaps`/`--navigator` |
 | `adef attack show/info/refresh` | **detection-explorer**, mitre-tagger | ATT&CK reference lookups |
 | `adef hunt-promote` | — | no skill yet |
-| `adef backfill journals` | — | `journal-backfill` deferred (wave 2) |
 
 ## Not yet skilled (roadmap)
 
-`journal-backfill` and `coverage-gaps` are planned for a second skills wave —
-post-release. (`forge-stage` shipped 2026-07-24, built from three live D-1470
+`coverage-gaps` is planned for a second skills wave — post-release. (`forge-stage` shipped 2026-07-24, built from three live D-1470
 stage-session transcripts.) Until then, drive those commands directly per
 `docs/cli-reference.md`.
