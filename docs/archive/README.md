@@ -12,6 +12,10 @@ part of the shipped, user-facing doc set.
   features (catalog, sync, schema declaration, extraction profiles, detection
   home). The *why* behind the code; kept as internal engineering reference, not
   public user docs. See `plans/README.md`.
+- **System of record** (`ISA.md`) — the project's Algorithm-v6.3.0 decision
+  log, changelog, and verification trail. Internal engineering reference,
+  actively maintained; moved here to keep it out of the public root while it
+  stays usable in-repo. `CLAUDE.md`/`AGENTS.md` point here.
 - **Dev-status snapshots** (`STATUS.md`, `HANDOFF.md`, `verification.md`) —
   the "what's real" status page, feature-branch handoff, and 31-fact
   verification trail from the v0.1.0 build. Point-in-time; the living sources

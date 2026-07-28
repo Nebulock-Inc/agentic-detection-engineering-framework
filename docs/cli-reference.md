@@ -622,4 +622,4 @@ adef install-skills --agent claude --global
 - `docs/quickstart.md` — hands-on walkthrough (tutorial).
 - `README.md` — what is shipped and working right now.
 - `CLAUDE.md` — repo guidance, architecture, and hard rules.
-- `ISA.md` — project system of record (decisions, changelog, verification).
+- `docs/archive/ISA.md` — project system of record (decisions, changelog, verification).

@@ -342,12 +342,12 @@ These are tested and will fail CI if violated:
 
 ## ISA.md — System of Record
 
-`ISA.md` at repo root uses **Algorithm v6.3.0** and is the authoritative project document:
+`docs/archive/ISA.md` uses **Algorithm v6.3.0** and is the authoritative project document:
 - All decisions go in `## Decisions`
 - All conjectures/refutations go in `## Changelog`
 - All verification facts go in `## Verification`
 
-When making architectural changes, update `ISA.md` first, then implement.
+When making architectural changes, update `docs/archive/ISA.md` first, then implement.
 
 ## Key Documentation
 
@@ -356,7 +356,7 @@ Read these to understand the framework:
 - **`docs/maturity-model.md`**: L0 (Ad-hoc) → L4 (Agentic) progression
 - **`docs/why-adef.md`**: Adoption guide, ADEF vs ATHF relationship
 - **`AGENTS.md`**: AI agent briefing for working in this repo
-- **`ISA.md`**: Project ISA (system of record)
+- **`docs/archive/ISA.md`**: Project ISA (system of record)
 
 ## ADEF and ATHF Relationship
 

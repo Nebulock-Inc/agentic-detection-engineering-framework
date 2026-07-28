@@ -31,7 +31,7 @@ public, user-facing doc set). For the earlier brainstorming/meeting artifacts
 ## Where else to look
 
 - **What's shipped:** the `README.md` at the repo root
-- **Decisions (system of record):** `../../../ISA.md`
+- **Decisions (system of record):** `../ISA.md`
 - **Branch state + roadmap (archived dev notes):** `../HANDOFF.md`
 - **Framework context:** `../../methodology.md`, `../../why-adef.md`,
   `../forge-framework-comparison.md`
