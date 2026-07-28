@@ -340,15 +340,6 @@ These are tested and will fail CI if violated:
 3. **`tests/test_no_vendor_connectors.py`**: Never add vendor API connectors (CrowdStrike, Splunk, SentinelOne, etc.). Connectors live in adapter packages.
 4. **`tests/test_no_web_ui_deps.py`**: No web UI dependencies (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). v0.1.0 is CLI + MCP only.
 
-## ISA.md — System of Record
-
-`docs/archive/ISA.md` uses **Algorithm v6.3.0** and is the authoritative project document:
-- All decisions go in `## Decisions`
-- All conjectures/refutations go in `## Changelog`
-- All verification facts go in `## Verification`
-
-When making architectural changes, update `docs/archive/ISA.md` first, then implement.
-
 ## Key Documentation
 
 Read these to understand the framework:
@@ -356,7 +347,6 @@ Read these to understand the framework:
 - **`docs/maturity-model.md`**: L0 (Ad-hoc) → L4 (Agentic) progression
 - **`docs/why-adef.md`**: Adoption guide, ADEF vs ATHF relationship
 - **`AGENTS.md`**: AI agent briefing for working in this repo
-- **`docs/archive/ISA.md`**: Project ISA (system of record)
 
 ## ADEF and ATHF Relationship
 

@@ -18,7 +18,6 @@ adef/                    # importable Python package
   orchestration/         # Refine chain (Similarity → Overlap → Verification)
 docs/                    # methodology.md, maturity-model.md, why-adef.md, roadmap.md, north-star.md
 tests/                   # unit + integration + parity tests
-docs/archive/ISA.md      # Algorithm v6.3.0 ISA — system of record for the project
 ```
 
 ## Hard Rules — Anti-Goals
@@ -106,4 +105,4 @@ a *source* — the rules-derived model was removed pre-release (ISA 2026-07-20).
 
 ## ISA Discipline
 
-`docs/archive/ISA.md` is the system of record for the project (Algorithm v6.3.0). Every meaningful decision lands in `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.
+The project's system of record is `ISA.md` (Algorithm v6.3.0) — kept out of this public repo as internal engineering reference. Every meaningful decision lands in its `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.
