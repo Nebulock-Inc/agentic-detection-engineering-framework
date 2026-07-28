@@ -8,6 +8,10 @@ part of the shipped, user-facing doc set.
 
 **What's here and why it's archived:**
 
+- **Design plans** (`plans/`) — the design specs behind shipped and in-progress
+  features (catalog, sync, schema declaration, extraction profiles, detection
+  home). The *why* behind the code; kept as internal engineering reference, not
+  public user docs. See `plans/README.md`.
 - **Dev-status snapshots** (`STATUS.md`, `HANDOFF.md`, `verification.md`) —
   the "what's real" status page, feature-branch handoff, and 31-fact
   verification trail from the v0.1.0 build. Point-in-time; the living sources
@@ -23,7 +27,7 @@ part of the shipped, user-facing doc set.
 - **Schema-storage specs** (`2026-07-14-schema-storage-design`,
   `2026-07-15-schema-storage-implementation*`) — the *rules-derived* schema
   model, replaced 2026-07-20 by the declaration-driven model
-  (`docs/plans/2026-07-20-schema-declaration-design.md`).
+  (`plans/2026-07-20-schema-declaration-design.md`).
 - **"What's real" snapshots** (`existing-vs-roadmap`, `whats-real-vs-proposed`,
   `v0.1.0-current-state`, `command-summary-for-team`) — 2026-06-25 point-in-time
   inventories, replaced by `STATUS.md` (now also archived here) and,

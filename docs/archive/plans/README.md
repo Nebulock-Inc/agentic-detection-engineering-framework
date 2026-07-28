@@ -1,8 +1,9 @@
 # ADEF Design Plans
 
-Living design specs for features that are shipped or in progress. For the early
-brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
-`docs/archive/`.
+Design specs for shipped and in-progress features — the *why* behind the
+implementation, kept as internal engineering reference (not part of the
+public, user-facing doc set). For the earlier brainstorming/meeting artifacts
+(June–early July 2026) that shaped v1, see the parent `docs/archive/`.
 
 ## Current specs
 
@@ -30,7 +31,7 @@ brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
 ## Where else to look
 
 - **What's shipped:** the `README.md` at the repo root
-- **Decisions (system of record):** `../../ISA.md`
-- **Branch state + roadmap (archived dev notes):** `../archive/HANDOFF.md`
-- **Framework context:** `../methodology.md`, `../why-adef.md`,
+- **Decisions (system of record):** `../../../ISA.md`
+- **Branch state + roadmap (archived dev notes):** `../HANDOFF.md`
+- **Framework context:** `../../methodology.md`, `../../why-adef.md`,
   `../forge-framework-comparison.md`

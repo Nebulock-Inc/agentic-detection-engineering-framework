@@ -1,10 +1,9 @@
 """Data-source declarations — the user-provided document schemas are built from.
 
 The declaration format (v1) is a YAML inventory of data sources and their
-fields (see ``docs/plans/2026-07-20-schema-declaration-design.md`` and ISA
-2026-07-20). Users produce it from artifacts they already have (Splunk
-``| fieldsummary``, KQL ``| getschema``, Elastic mappings, vendor data
-dictionaries) — by hand, recipe, or agent. ADEF ingests it into one
+fields (see ISA 2026-07-20). Users produce it from artifacts they already
+have (Splunk ``| fieldsummary``, KQL ``| getschema``, Elastic mappings, vendor
+data dictionaries) — by hand, recipe, or agent. ADEF ingests it into one
 ``schema/<source>.yml`` (``schema_version: 2``) per source.
 
 Provenance contract (what makes re-ingest safe):

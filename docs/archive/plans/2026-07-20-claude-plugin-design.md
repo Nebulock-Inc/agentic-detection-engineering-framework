@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-20
 **Status:** Proposed (plugin files drafted alongside this doc for review)
-**Depends on:** `docs/plans/2026-07-17-format-detection-plan.md` (recognizer registry) and the **profile engine** (new, specified here — not yet built)
+**Depends on:** `2026-07-17-format-detection-plan.md` (recognizer registry) and the **profile engine** (new, specified here — not yet built)
 **Touches:** new `claude-plugin/` tree, repo-root `.claude-plugin/marketplace.json`, later `adef/commands/catalog.py` (`--profile`, dry-run stats) and `adef init --claude`
 
 ---

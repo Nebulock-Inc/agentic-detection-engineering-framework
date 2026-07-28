@@ -10,7 +10,7 @@ catalogued rules actually use against the declared schemas.
 
 The former rules-derived model (interactive ``init`` wizard, ``from-catalog``
 field derivation, ``update``/``rescan`` stubs) was removed pre-release — see
-``docs/plans/2026-07-20-schema-declaration-design.md`` and ISA 2026-07-20.
+ISA 2026-07-20.
 """
 
 from __future__ import annotations

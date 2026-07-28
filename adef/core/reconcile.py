@@ -6,7 +6,7 @@ what to do about it. Pure logic: no I/O, no filesystem — takes dicts + a plan
 out, so the cascade is testable in isolation and `adef sync` just applies the
 plan.
 
-The cascade (first match wins), from ``docs/plans/2026-07-22-adef-sync-design.md``:
+The cascade (first match wins):
 
 1. embedded UUID match          → same detection
 2. content-hash match (no uuid) → unchanged

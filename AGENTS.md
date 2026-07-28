@@ -54,7 +54,7 @@ each rule's format, and writes an enrichment record to
 `<workspace>/catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
 `rule_ref`. It also generates `catalog/INDEX.yml` and a paired skeleton journal
 per rule. Ambiguous rules are flagged `needs_review: true` (infer-and-flag,
-never block). See `docs/plans/2026-07-15-catalog-design.md`.
+never block).
 
 **When `adef catalog` reports unclaimed files — drive the profile loop.**
 Unclaimed = structured files no recognizer or profile claims (in-house

@@ -116,6 +116,4 @@ before installing. Same artifact, no hand-authoring.
   Detections (170) and Hunting Queries (1158) dirs.
 
 The repo's Panther corpus has 95 scheduled-query files no built-in claims —
-two formats (`Query:` vs `SnowflakeQuery:`), so two profiles. See
-`docs/plans/2026-07-20-claude-plugin-design.md` for the full schema and
-matching semantics.
+two formats (`Query:` vs `SnowflakeQuery:`), so two profiles.
