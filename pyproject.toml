@@ -50,7 +50,10 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "mypy>=1.0.0",
-    "ruff>=0.1.0",
+    # Pinned below 0.16: newer default rules flag ~120 pre-existing style items
+    # (not regressions). Bump deliberately with a formatting pass, not by accident.
+    "ruff>=0.15,<0.16",
+    "pre-commit>=3.5.0",
 ]
 mcp = [
     "mcp[cli]>=1.0.0",
@@ -127,3 +130,8 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+
+[tool.bandit]
+# Security linting (pre-commit only). Tests use asserts by design (B101).
+exclude_dirs = ["tests"]
+skips = ["B101"]

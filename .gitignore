@@ -34,3 +34,15 @@ coverage.xml
 /templates/
 *.log
 .venv/
+
+# Env files
+.env
+.env.*
+
+# Node / npm (this is a Python project — these are stray build artifacts)
+node_modules/
+/package.json
+/package-lock.json
+
+# Local AI-assistant state (not part of the package)
+.claude/
