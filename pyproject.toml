@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentic-detection-engineering-framework"
-version = "0.1.0"
+version = "1.0.0"
 description = "Agentic Detection Engineering Framework — FORGE lifecycle, journal memory, and agent orchestration for detection engineers."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
