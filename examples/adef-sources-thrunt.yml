@@ -1,0 +1,2090 @@
+version: 1
+sources:
+- name: wineventlog_xml
+  platform: windows
+  query_language: spl
+  description: XmlWinEventLog in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: XmlWinEventLog
+  fields:
+  - name: Account_Domain
+  - name: Account_Name
+  - name: action
+    values:
+    - allowed
+    - modified
+    - blocked
+    - success
+    - created
+    - logoff
+  - name: answer
+  - name: answer_count
+    type: int
+    values:
+    - 1
+  - name: app
+  - name: Application
+  - name: authentication_method
+    type: int
+    values:
+    - 5
+    - 3
+  - name: authentication_service
+    values:
+    - Negotiate
+    - NTLM
+  - name: AuthenticationPackageName
+    values:
+    - Negotiate
+    - NTLM
+  - name: body
+  - name: Caller_Computer_Name
+  - name: Caller_Domain
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+  - name: Caller_Logon_ID
+  - name: Caller_Machine_Name
+  - name: Caller_User_Name
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+  - name: CallerProcessName
+  - name: CallTrace
+  - name: category
+  - name: CategoryString
+  - name: change_type
+    values:
+    - AAA
+    aliases:
+    - Change_Type
+  - name: Channel
+    values:
+    - Microsoft-Windows-Sysmon/Operational
+    - Security
+  - name: Client_Address
+  - name: Client_Domain
+  - name: Client_Logon_ID
+  - name: Client_Machine_Name
+  - name: Client_User_Name
+  - name: ClientInfo
+  - name: command
+  - name: CommandLine
+  - name: Company
+    values:
+    - Microsoft Corporation
+    - VMware, Inc.
+    - '-'
+    - Dell Inc.
+    - Cisco Systems, Inc.
+    - Google LLC
+  - name: Computer
+    values:
+    - DC-SUDO-01.sudoshipping.local
+    - WS-BUILD-01.sudoshipping.local
+    - WS-DEV-07.sudoshipping.local
+  - name: ComputerName
+  - name: Consumer
+  - name: Contents
+  - name: creation_time
+  - name: CreationUtcTime
+  - name: CurrentDirectory
+    values:
+    - C:\Windows\System32\
+    - C:\Users\alice.chmod\
+    - C:\Users\alice.chmod\AppData\Local\Temp\
+    - c:\windows\
+  - name: Description
+    aliases:
+    - description
+  - name: dest
+  - name: dest_host
+    values:
+    - DC-SUDO-01.sudoshipping.local
+    - FILE-01.sudoshipping.local
+    - MON-01.sudoshipping.local
+    - GIT-01.sudoshipping.local
+    - WIKI-01.sudoshipping.local
+    - DB-01.sudoshipping.local
+    - ARTIFACT-01.sudoshipping.local
+    - PROXY-01.sudoshipping.local
+  - name: dest_ip
+    values:
+    - 10.60.20.10
+    - 10.60.20.55
+    - 10.60.20.40
+    - 10.60.20.45
+    - 10.60.20.20
+    - 10.60.20.25
+    - 10.60.20.50
+    - 10.60.10.17
+    - 10.60.20.30
+  - name: dest_nt_domain
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+    - WS-DEV-07.sudoshipping.local
+  - name: dest_nt_host
+    values:
+    - FILE-01
+    - GIT-01
+    - MON-01
+    - WIKI-01
+  - name: dest_port
+    type: int
+    values:
+    - 88
+    - 53
+    - 443
+    - 445
+    - 22
+    - 3389
+    - 389
+    - 3128
+    - 135
+  - name: DestAddress
+    values:
+    - 10.60.20.10
+    - 10.60.20.55
+    - 10.60.20.20
+    - 10.60.20.40
+    - 10.60.20.45
+    - 10.60.20.25
+    - 10.60.10.17
+    - 10.60.20.50
+    - 10.60.20.30
+  - name: Destination
+  - name: DestinationHostname
+    values:
+    - DC-SUDO-01.sudoshipping.local
+    - FILE-01.sudoshipping.local
+    - MON-01.sudoshipping.local
+    - GIT-01.sudoshipping.local
+    - WIKI-01.sudoshipping.local
+    - DB-01.sudoshipping.local
+    - ARTIFACT-01.sudoshipping.local
+    - PROXY-01.sudoshipping.local
+  - name: DestinationIp
+    values:
+    - 10.60.20.10
+    - 10.60.20.55
+    - 10.60.20.45
+    - 10.60.20.25
+    - 10.60.20.40
+    - 10.60.20.50
+    - 10.60.20.20
+    - 10.60.20.30
+  - name: DestinationIsIpv6
+    values:
+    - 'false'
+  - name: DestinationPort
+    type: int
+    values:
+    - 88
+    - 22
+    - 3389
+    - 443
+    - 53
+    - 445
+    - 389
+    - 3128
+  - name: DestinationPortName
+    values:
+    - kerberos
+    - ssh
+    - ms-wbt-server
+    - https
+    - domain
+    - microsoft-ds
+    - ldap
+    - '-'
+  - name: DestPort
+    type: int
+    values:
+    - 88
+    - 53
+    - 443
+    - 445
+    - 22
+    - 389
+    - 135
+    - 3128
+    - 3389
+  - name: Details
+  - name: direction
+    values:
+    - outbound
+    - inbound
+    aliases:
+    - Direction
+  - name: Domain
+  - name: dvc
+    values:
+    - DC-SUDO-01.sudoshipping.local
+    - WS-BUILD-01.sudoshipping.local
+    - WS-DEV-07.sudoshipping.local
+  - name: dvc_ip
+    values:
+    - 10.60.10.11
+  - name: dvc_nt_host
+    values:
+    - DC-SUDO-01.sudoshipping.local
+    - WS-BUILD-01.sudoshipping.local
+    - WS-DEV-07.sudoshipping.local
+  - name: ElevatedToken
+    values:
+    - '%%1842'
+    - '%%1843'
+  - name: Error_Code
+    values:
+    - '-'
+    - '0x0'
+  - name: event_id
+    type: int
+  - name: EventChannel
+    values:
+    - Microsoft-Windows-Sysmon/Operational
+  - name: EventCode
+    type: int
+  - name: EventData_Xml
+  - name: EventDescription
+    values:
+    - Process creation
+    - RegistryEvent (Value Set)
+    - Process terminated
+    - ProcessAccess
+    - Image loaded
+    - Network connection
+    - DNSEvent (DNS query)
+    - FileCreate
+    - CreateRemoteThread
+  - name: EventID
+    type: int
+  - name: EventRecordID
+    type: int
+  - name: EventType
+    values:
+    - SetValue
+  - name: file_access_time
+  - name: file_create_time
+  - name: file_hash
+  - name: file_modify_time
+  - name: file_name
+  - name: file_path
+  - name: FileName
+  - name: FileVersion
+    values:
+    - 10.0.20348.1
+    - 10.0.22621.1
+    - 1.0.0.0
+    - 10.0.19041.1
+    - '-'
+    - 10.8049.22439.1065
+    - 5.1.4.74
+    - 4.18.2301.6
+    - 8.6.0.1
+    - 120.0.6099.225
+  - name: Filter
+  - name: FilterRTID
+    type: int
+  - name: granted_access
+    values:
+    - '0x1000'
+    - '0x0400'
+    - '0x1400'
+    - '0x1010'
+    - '0x1410'
+    - '0x0410'
+  - name: granted_access_description
+    values:
+    - PROCESS_QUERY_LIMITED_INFORMATION
+    - PROCESS_QUERY_INFORMATION
+    - PROCESS_VM_READ
+  - name: GrantedAccess
+    values:
+    - '0x1000'
+    - '0x0400'
+    - '0x1400'
+    - '0x1010'
+    - '0x1410'
+    - '0x0410'
+  - name: Group_Domain
+  - name: Group_Name
+  - name: Group_Type_Change
+  - name: Guid
+    values:
+    - '"{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"'
+    - '"{54849625-5478-4994-a5ba-3e3b0328c30d}"'
+  - name: Hashes
+  - name: http_referrer
+  - name: http_referrer_domain
+  - name: id
+    type: int
+  - name: Image
+  - name: Image_File_Name
+  - name: ImageLoaded
+  - name: ImpersonationLevel
+    values:
+    - '%%1833'
+  - name: IMPHASH
+  - name: Initiated
+    values:
+    - 'true'
+  - name: IntegrityLevel
+    values:
+    - System
+    - Medium
+  - name: IpAddress
+    values:
+    - '-'
+    - ::ffff:10.60.10.15
+  - name: IpPort
+    values:
+    - '-'
+    - '57965'
+  - name: KeyFilePath
+  - name: KeyLength
+    type: int
+    values:
+    - 0
+    - 128
+  - name: Keywords
+    values:
+    - '0x8000000000000000'
+    - Audit Success
+  - name: LayerName
+    values:
+    - '%%14611'
+    - '%%14610'
+  - name: LayerRTID
+    type: int
+    values:
+    - 48
+    - 44
+  - name: Level
+    type: int
+    values:
+    - 4
+    - 0
+  - name: LmPackageName
+    values:
+    - '-'
+    - NTLM V2
+  - name: loaded_file
+    values:
+    - vmStatsProvider.dll
+    - MpClient.dll
+    - SenseCncProxy.dll
+    - pcdrsysinfosoftware.p5x
+    - vpnapi.dll
+    - MpOAV.dll
+    - ntdll.dll
+    - MpOav.dll
+    - kernel32.dll
+  - name: loaded_file_path
+  - name: LogFileCleared_Xml
+  - name: Logon_Account
+    aliases:
+    - Logon_account
+  - name: Logon_ID
+  - name: Logon_Type
+    type: int
+    values:
+    - 5
+    - 10
+    - 3
+  - name: LogonGuid
+    values:
+    - '{ea109959-66e1-4f13-85b7-7b6c25cb4f66}'
+    - '{da25be5f-0e7e-45a7-ae48-d5877c911239}'
+    - '{00000000-0000-0000-0000-000000000000}'
+  - name: LogonId
+    values:
+    - '0x3e7'
+    - '0x1069e6cf'
+  - name: LogonProcessName
+    values:
+    - Advapi
+    - NtLmSsp
+  - name: LogonType
+    type: int
+    values:
+    - 5
+    - 10
+    - 3
+  - name: MandatoryLabel
+    values:
+    - S-1-16-16384
+    - S-1-16-8192
+  - name: MD5
+  - name: Member_ID
+  - name: Member_Name
+  - name: MemberName
+  - name: Message
+  - name: Name
+    values:
+    - '"Microsoft-Windows-Sysmon"'
+    - '"Microsoft-Windows-Security-Auditing"'
+    aliases:
+    - name
+  - name: NetworkAddress
+    values:
+    - 10.60.20.25
+    - 10.60.20.40
+    - 10.60.20.45
+    - 10.60.20.55
+  - name: NetworkPort
+    type: int
+    values:
+    - 54867
+    - 54911
+    - 55991
+    - 62684
+  - name: New_Account_Name
+  - name: New_Domain
+  - name: new_process
+  - name: new_process_id
+  - name: new_process_name
+  - name: NewProcessId
+  - name: NewProcessName
+  - name: NewThreadId
+    type: int
+    values:
+    - 1468
+    - 2572
+    - 5528
+    - 6228
+    - 684
+    - 8896
+  - name: object
+    values:
+    - henry.tar
+  - name: object_attrs
+    values:
+    - login session
+  - name: object_category
+    values:
+    - registry
+    - file
+    - user
+  - name: object_id
+  - name: object_path
+  - name: ObjectName
+  - name: Opcode
+    type: int
+    values:
+    - 0
+  - name: original_file_name
+  - name: OriginalFileName
+  - name: os
+    values:
+    - Microsoft Windows
+  - name: parent_process
+  - name: parent_process_exec
+  - name: parent_process_guid
+  - name: parent_process_id
+  - name: parent_process_name
+  - name: parent_process_path
+  - name: ParentCommandLine
+    values:
+    - svchost.exe -k netsvcs -p -s Winmgmt
+    - svchost.exe -k DcomLaunch
+    - svchost.exe -k LocalSystem
+    - services.exe
+    - csrss.exe
+    - explorer.exe
+    - SearchIndexer.exe
+    - svchost.exe -k netsvcs
+  - name: ParentImage
+    values:
+    - C:\Windows\System32\svchost.exe
+    - C:\Windows\System32\services.exe
+    - C:\Windows\System32\csrss.exe
+    - C:\Windows\explorer.exe
+    - C:\Windows\System32\SearchIndexer.exe
+  - name: ParentProcessGuid
+  - name: ParentProcessId
+    type: int
+  - name: ParentProcessName
+  - name: ParentUser
+    values:
+    - NT AUTHORITY\SYSTEM
+    - SUDOSHIPPING\alice.chmod
+    - NT AUTHORITY\NETWORK SERVICE
+  - name: pipe_name
+  - name: Primary_Domain
+  - name: Primary_User_Name
+  - name: PrivilegeList
+  - name: process
+  - name: Process_Command_Line
+  - name: process_command_line_arguments
+  - name: process_command_line_process
+  - name: process_current_directory
+    values:
+    - C:\Windows\System32\
+    - C:\Users\alice.chmod\
+    - C:\Users\alice.chmod\AppData\Local\Temp\
+    - c:\windows\
+  - name: process_exec
+  - name: process_guid
+  - name: process_hash
+  - name: process_id
+  - name: process_integrity_level
+    values:
+    - System
+    - Medium
+  - name: process_name
+  - name: process_path
+  - name: ProcessGuid
+  - name: ProcessID
+    aliases:
+    - ProcessId
+  - name: ProcessName
+  - name: Product
+    values:
+    - Microsoft Windows Operating System
+    - VMware, Inc.
+    - '-'
+    - Microsoft Defender for Endpoint
+    - Dell Inc.
+    - Cisco Secure Client
+    - Microsoft Defender Antivirus
+    - OpenSSH for Windows
+    - Microsoft Windows
+    - Google Chrome
+    aliases:
+    - product
+  - name: Protocol
+    values:
+    - '17'
+    - '6'
+    - tcp
+    - udp
+    aliases:
+    - protocol
+  - name: protocol_version
+    values:
+    - ipv4
+  - name: query
+  - name: query_count
+    type: int
+    values:
+    - 1
+  - name: QueryName
+  - name: QueryResults
+  - name: QueryStatus
+    type: int
+    values:
+    - 0
+    - 9003
+  - name: reason
+  - name: reason_id
+    values:
+    - '0x0'
+  - name: record_type
+  - name: record_type_id
+  - name: RecordID
+    type: int
+  - name: RecordNumber
+    type: int
+  - name: registry_hive
+    values:
+    - HKEY_LOCAL_MACHINE\\Software
+    - HKEY_CURRENT_USER
+  - name: registry_key_name
+  - name: registry_path
+  - name: registry_value_data
+  - name: registry_value_name
+  - name: registry_value_type
+    values:
+    - REG_DWORD
+  - name: RegistryValueData
+    values:
+    - '0x00000070'
+    - '0x00000001'
+    - '0x00000000'
+    - '0x00000002'
+    - '0x0000000f'
+  - name: RegistryValueType
+    values:
+    - DWORD
+  - name: RemoteMachineID
+    values:
+    - S-1-0-0
+  - name: RemoteUserID
+    values:
+    - S-1-0-0
+  - name: RenderingInfo_Xml
+  - name: reply_code_id
+    type: int
+    values:
+    - 0
+    - 9003
+  - name: RestrictedAdminMode
+    values:
+    - '-'
+  - name: result
+    values:
+    - An account was logged off
+  - name: rule
+    type: int
+  - name: RuleName
+    values:
+    - '-'
+  - name: Security_ID
+  - name: service
+  - name: service_dll_signature_exists
+    values:
+    - 'true'
+  - name: service_dll_signature_verified
+    values:
+    - 'true'
+  - name: service_id
+  - name: service_name
+  - name: service_signature_exists
+  - name: service_signature_verified
+  - name: session_id
+  - name: severity
+    values:
+    - informational
+  - name: severity_id
+    type: int
+    values:
+    - 4
+    - 0
+  - name: SHA1
+  - name: SHA256
+  - name: signature
+    aliases:
+    - Signature
+  - name: signature_id
+    type: int
+  - name: SignatureStatus
+    values:
+    - Valid
+  - name: Signed
+    values:
+    - 'true'
+  - name: Source_Network_Address
+  - name: Source_Port
+    values:
+    - '-'
+    - '57965'
+  - name: Source_Workstation
+    values:
+    - WS-DEV-07
+    - WS-DEV-05
+  - name: SourceAddress
+    values:
+    - 10.60.10.17
+    - 10.60.10.15
+    - 10.60.20.25
+    - 10.60.20.55
+  - name: SourceHostname
+    values:
+    - WS-BUILD-01.sudoshipping.local
+  - name: SourceImage
+  - name: SourceIp
+    values:
+    - 10.60.10.11
+  - name: SourceIsIpv6
+    values:
+    - 'false'
+  - name: SourceName
+  - name: SourcePort
+    type: int
+  - name: SourcePortName
+    values:
+    - '-'
+  - name: SourceProcessGUID
+    aliases:
+    - SourceProcessGuid
+  - name: SourceProcessId
+    type: int
+  - name: SourceThreadId
+    type: int
+  - name: SourceUser
+    values:
+    - NT AUTHORITY\SYSTEM
+    - NT AUTHORITY\NETWORK SERVICE
+  - name: splunk_server_group
+  - name: src
+    values:
+    - 10.60.10.17
+    - WS-BUILD-01.sudoshipping.local
+    - DC-SUDO-01.sudoshipping.local
+    - '-'
+    - 10.60.10.15
+    - 10.60.20.25
+    - 10.60.20.55
+    - ::ffff:10.60.10.15
+  - name: src_address
+    values:
+    - '0x7FFA28B17130'
+    - '0x7FFA40F16EE0'
+    - '0x7FFA40F1DF40'
+    - '0x7FFA40F24EF0'
+    - '0x7FFAE545E690'
+    - '0x7FFAE5460340'
+  - name: src_function
+    values:
+    - RtlUserThreadStart
+    - AmsiScanBuffer
+    - BaseThreadInitThunk
+  - name: src_host
+    values:
+    - WS-BUILD-01.sudoshipping.local
+  - name: src_ip
+    values:
+    - 10.60.10.17
+    - 10.60.10.11
+    - '-'
+    - 10.60.10.15
+    - 10.60.20.25
+    - 10.60.20.55
+    - ::ffff:10.60.10.15
+  - name: src_module
+  - name: src_nt_domain
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+  - name: src_nt_host
+    values:
+    - WS-DEV-07
+    - WS-DEV-05
+  - name: src_port
+  - name: src_user
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+  - name: src_user_id
+    values:
+    - S-1-5-20
+    - S-1-5-18
+    - S-1-5-19
+  - name: src_user_name
+    values:
+    - henry.tar
+  - name: StartAddress
+    values:
+    - '0x7FFA28B17130'
+    - '0x7FFA40F16EE0'
+    - '0x7FFA40F1DF40'
+    - '0x7FFA40F24EF0'
+    - '0x7FFAE545E690'
+    - '0x7FFAE5460340'
+  - name: StartFunction
+    values:
+    - RtlUserThreadStart
+    - AmsiScanBuffer
+    - BaseThreadInitThunk
+  - name: StartModule
+  - name: state
+    values:
+    - established
+  - name: status
+    values:
+    - success
+    aliases:
+    - Status
+  - name: subject
+  - name: SubjectDomainName
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+  - name: SubjectLogonId
+  - name: SubjectUserName
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+  - name: SubjectUserSid
+  - name: SubStatus
+  - name: Supplied_Realm_Name
+  - name: System_Props_Xml
+  - name: SystemTime
+  - name: ta_windows_action
+    values:
+    - failure
+  - name: ta_windows_security_CategoryString
+  - name: ta_windows_status
+    values:
+    - '0x0'
+  - name: Target_Account_ID
+  - name: Target_Account_Name
+  - name: Target_Domain
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+  - name: Target_Server_Name
+    values:
+    - FILE-01
+    - GIT-01
+    - MON-01
+    - WIKI-01
+  - name: Target_User_Name
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+    - svc-proxy
+    - svc-registry
+    - bob.chown
+  - name: TargetDomainName
+    values:
+    - NT AUTHORITY
+    - SUDOSHIPPING
+  - name: TargetFilename
+  - name: TargetImage
+  - name: TargetInfo
+    values:
+    - FILE-01
+    - GIT-01
+    - MON-01
+    - WIKI-01
+  - name: TargetLinkedLogonId
+    values:
+    - '0x0'
+  - name: TargetLogonGuid
+    values:
+    - '{00000000-0000-0000-0000-000000000000}'
+  - name: TargetLogonId
+  - name: TargetObject
+  - name: TargetOutboundDomainName
+    values:
+    - '-'
+  - name: TargetOutboundUserName
+    values:
+    - '-'
+  - name: TargetProcessGUID
+    aliases:
+    - TargetProcessGuid
+  - name: TargetProcessId
+    type: int
+  - name: TargetProcessName
+  - name: TargetServerName
+    values:
+    - FILE-01
+    - GIT-01
+    - MON-01
+    - WIKI-01
+  - name: TargetUser
+    values:
+    - NT AUTHORITY\SYSTEM
+    - SUDOSHIPPING\alice.chmod
+    - NT AUTHORITY\NETWORK SERVICE
+  - name: TargetUserName
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+    - svc-proxy
+    - svc-registry
+    - bob.chown
+  - name: TargetUserSid
+  - name: Task
+    type: int
+  - name: TaskCategory
+  - name: TerminalSessionId
+    type: int
+    values:
+    - 0
+    - 2
+  - name: ThreadID
+  - name: Token_Elevation_Type
+    values:
+    - '%%1936'
+    - '%%1938'
+  - name: Token_Elevation_Type_id
+    type: int
+    values:
+    - 1936
+    - 1938
+  - name: TokenElevationType
+    values:
+    - '%%1936'
+    - '%%1938'
+  - name: TransmittedServices
+    values:
+    - '-'
+  - name: transport
+    values:
+    - tcp
+    - udp
+  - name: transport_dest_port
+    values:
+    - udp/88
+    - tcp/22
+    - tcp/3389
+    - tcp/443
+    - tcp/88
+    - udp/53
+    - tcp/445
+    - tcp/389
+    - tcp/3128
+  - name: uri_path
+  - name: url
+  - name: url_domain
+  - name: url_length
+  - name: user
+    values:
+    - SYSTEM
+    - S-1-0-0
+    - alice.chmod
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+    - henry.tar
+    - svc-proxy
+    - svc-registry
+    - bob.chown
+    aliases:
+    - User
+  - name: user_group
+    values:
+    - SYSTEM
+    - henry.tar
+    - NETWORK SERVICE
+    - LOCAL SERVICE
+    - svc-proxy
+    - svc-registry
+    - bob.chown
+  - name: user_group_id
+  - name: user_id
+    values:
+    - '"S-1-5-18"'
+    - S-1-5-20
+    - S-1-5-18
+    - S-1-5-19
+    aliases:
+    - User_ID
+  - name: user_name
+    values:
+    - henry.tar
+    aliases:
+    - User_Name
+  - name: user_type
+  - name: UserData_Xml
+  - name: UserID
+    values:
+    - '"S-1-5-18"'
+  - name: UtcTime
+  - name: vendor
+    values:
+    - Microsoft
+  - name: vendor_privilege
+  - name: vendor_product
+    values:
+    - Microsoft Sysmon
+    - Microsoft Windows
+  - name: Version
+    type: int
+    values:
+    - 3
+    - 5
+    - 2
+    - 1
+    - 0
+  - name: VirtualAccount
+    values:
+    - '%%1843'
+  - name: Workstation
+  - name: Workstation_Name
+  - name: WorkstationName
+    values:
+    - WS-DEV-07
+    - WS-DEV-05
+- name: apache_access_json
+  platform: web
+  query_language: spl
+  description: apache:access:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: apache:access:json
+  fields:
+  - name: bytes_in
+    type: int
+  - name: bytes_out
+    type: int
+  - name: cache_result
+    values:
+    - NONE
+    - MISS
+    - DENIED
+    - REVALIDATED
+    - GATEWAY_ERROR
+    - AUTH_REQUIRED
+  - name: client
+  - name: dest_port
+    type: int
+    values:
+    - 443
+    - 80
+  - name: http_content_type
+  - name: http_method
+    values:
+    - CONNECT
+    - GET
+    - POST
+  - name: http_referrer
+  - name: http_user_agent
+  - name: http_version
+    values:
+    - HTTP/1.1
+  - name: ident
+    values:
+    - '-'
+  - name: proxy_action
+    values:
+    - tunnel
+    - ssl-inspect
+    - tunnel-setup
+    - deny
+    - gateway-error
+    - auth-required
+    - forward
+  - name: response_time_microseconds
+    type: int
+  - name: server
+  - name: splunk_server_group
+  - name: ssl_bump_action
+    values:
+    - bump
+    - peek
+    - terminate
+  - name: status
+    type: int
+  - name: uri_path
+  - name: uri_query
+  - name: url_category
+    values:
+    - Business/Economy
+    - Software/Updates
+    - Technology
+    - Blocked
+  - name: user
+    values:
+    - '-'
+    - SUDOSHIPPING\ivy.gzip
+    - SUDOSHIPPING\carol.grep
+    - SUDOSHIPPING\frank.curl
+    - SUDOSHIPPING\alice.chmod
+    - SUDOSHIPPING\dan.awk
+    - SUDOSHIPPING\henry.tar
+    - SUDOSHIPPING\bob.chown
+    - SUDOSHIPPING\grace.ssh
+    - SUDOSHIPPING\jack.rsync
+- name: zeek_conn
+  platform: network
+  query_language: spl
+  description: bro:conn:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:conn:json
+  fields:
+  - name: conn_state
+    values:
+    - SF
+    - S0
+    - RSTO
+    - RSTR
+    - REJ
+    - OTH
+    - S2
+    - S3
+    - S1
+  - name: duration
+    type: float
+  - name: history
+  - name: id.orig_h
+  - name: id.orig_p
+    type: int
+  - name: id.resp_h
+  - name: id.resp_p
+    type: int
+  - name: ip_proto
+    type: int
+    values:
+    - 6
+    - 17
+    - 1
+  - name: local_orig
+    values:
+    - 'true'
+  - name: local_resp
+    values:
+    - 'true'
+    - 'false'
+  - name: missed_bytes
+    type: int
+    values:
+    - 0
+    - 26926
+    - 4088
+  - name: orig_bytes
+    type: int
+  - name: orig_ip_bytes
+    type: int
+  - name: orig_pkts
+    type: int
+  - name: proto
+    values:
+    - tcp
+    - udp
+    - icmp
+  - name: resp_bytes
+    type: int
+  - name: resp_ip_bytes
+    type: int
+  - name: resp_pkts
+    type: int
+  - name: service
+    values:
+    - krb
+    - dns
+    - smb
+    - ssl
+    - http
+    - postgresql
+    - ldap
+    - ssh
+    - dhcp
+    - rdp
+  - name: splunk_server_group
+  - name: ts
+    type: float
+  - name: uid
+- name: zeek_dhcp
+  platform: network
+  query_language: spl
+  description: bro:dhcp:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:dhcp:json
+  fields:
+  - name: assigned_addr
+  - name: client_addr
+  - name: domain
+    values:
+    - sudoshipping.local
+  - name: duration
+    type: float
+  - name: host_name
+  - name: lease_time
+    type: float
+    values:
+    - '3600.0'
+    - '14400.0'
+    - '7200.0'
+    - '86400.0'
+  - name: mac
+  - name: msg_types{}
+    values:
+    - ACK
+    - REQUEST
+  - name: server_addr
+    values:
+    - 10.60.20.10
+  - name: splunk_server_group
+  - name: ts
+    type: float
+  - name: uids{}
+- name: zeek_dns
+  platform: network
+  query_language: spl
+  description: bro:dns:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:dns:json
+  fields:
+  - name: AA
+    values:
+    - 'true'
+    - 'false'
+  - name: answers{}
+  - name: id.orig_h
+  - name: id.orig_p
+    type: int
+  - name: id.resp_h
+    values:
+    - 10.60.20.10
+  - name: id.resp_p
+    type: int
+    values:
+    - 53
+  - name: opcode
+    type: int
+    values:
+    - 0
+  - name: opcode_name
+    values:
+    - query
+  - name: proto
+    values:
+    - udp
+  - name: qclass
+    type: int
+    values:
+    - 1
+  - name: qclass_name
+    values:
+    - C_INTERNET
+  - name: qtype
+    type: int
+    values:
+    - 1
+    - 28
+    - 33
+    - 12
+  - name: qtype_name
+    values:
+    - A
+    - AAAA
+    - SRV
+    - PTR
+  - name: query
+  - name: RA
+    values:
+    - 'true'
+  - name: rcode
+    type: int
+    values:
+    - 0
+    - 3
+  - name: rcode_name
+    values:
+    - NOERROR
+    - NXDOMAIN
+  - name: RD
+    values:
+    - 'true'
+  - name: rejected
+    values:
+    - 'false'
+  - name: rtt
+    type: float
+  - name: splunk_server_group
+  - name: TC
+    values:
+    - 'false'
+  - name: trans_id
+    type: int
+  - name: ts
+    type: float
+  - name: TTLs{}
+  - name: uid
+  - name: Z
+    type: int
+    values:
+    - 0
+- name: zeek_files
+  platform: network
+  query_language: spl
+  description: bro:files:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:files:json
+  fields:
+  - name: analyzers{}
+    values:
+    - MD5
+    - SHA1
+    - SHA256
+    - X509
+  - name: conn_uids{}
+  - name: depth
+    type: int
+    values:
+    - 0
+    - 1
+    - 2
+  - name: duration
+    type: float
+  - name: filename
+  - name: fuid
+  - name: is_orig
+    values:
+    - 'false'
+  - name: local_orig
+    values:
+    - 'false'
+    - 'true'
+  - name: md5
+  - name: mime_type
+  - name: missing_bytes
+    type: int
+  - name: overflow_bytes
+    type: int
+    values:
+    - 0
+  - name: rx_hosts{}
+  - name: seen_bytes
+    type: int
+  - name: sha1
+  - name: sha256
+  - name: splunk_server_group
+  - name: timedout
+    values:
+    - 'false'
+    - 'true'
+  - name: total_bytes
+    type: int
+  - name: ts
+    type: float
+  - name: tx_hosts{}
+- name: zeek_http
+  platform: network
+  query_language: spl
+  description: bro:http:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:http:json
+  fields:
+  - name: id.orig_h
+  - name: id.orig_p
+    type: int
+  - name: id.resp_h
+  - name: id.resp_p
+    type: int
+    values:
+    - 3128
+    - 80
+    - 8530
+  - name: method
+    values:
+    - CONNECT
+    - GET
+    - POST
+  - name: referrer
+  - name: request_body_len
+    type: int
+  - name: resp_fuids{}
+  - name: resp_mime_types{}
+    values:
+    - application/ocsp-response
+    - application/x-msi
+    - application/x-msdownload
+    - text/html
+    - text/css
+  - name: response_body_len
+    type: int
+  - name: splunk_server_group
+  - name: status_code
+    type: int
+    values:
+    - 200
+    - 403
+    - 407
+    - 503
+    - 502
+    - 504
+    - 302
+    - 301
+    - 304
+    - 404
+  - name: status_msg
+  - name: tags{}
+    values:
+    - ocsp
+  - name: trans_depth
+    type: int
+    values:
+    - 1
+  - name: ts
+    type: float
+  - name: uid
+  - name: uri
+  - name: user_agent
+  - name: version
+    type: float
+    values:
+    - '1.1'
+- name: zeek_ocsp
+  platform: network
+  query_language: spl
+  description: bro:ocsp:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:ocsp:json
+  fields:
+  - name: certStatus
+    values:
+    - good
+    - unknown
+    - revoked
+  - name: hashAlgorithm
+    values:
+    - sha1
+  - name: id
+  - name: issuerKeyHash
+    values:
+    - d8a6aa258894e37cd27cd90affcc9f93239812ed
+    - e92c44f24d4e287995436ee36e8487dfb21dd3fc
+    - 0502ee105492a1c90709e9b3c1080f15a9f08c1f
+    - acf576b565b00c67583a2d3a05c32aa34e9f014a
+    - 19cfc01579bf592e8567ada97496d193bbfefc79
+    - 8e4cd5b2dc8baa1678af6fc48a406a7d711c893a
+    - 93525c4fe49af9d50b57ae935546184ad8550026
+    - 2695ae2b8dfff3737edf02d5093f59d347c804d8
+    - 0fbc97051659cb89580cb9f74a65dfe4a151b346
+  - name: issuerNameHash
+    values:
+    - f39c234e61f5302d3fbc92d023ad45db3c222dd2
+    - 044c9fbe0cc3258dbb9d9f996595f9bdfdc0b8dc
+    - daa88a7e79abcd7d5800d60b2c1f3ec98ac48513
+    - b55b5c3bf06ffe5fbb7f4314c04e5bffbc62e733
+    - 21807217424227b8b147937b2a5ee3407934e8e6
+    - 49e963d317ab24741ffe0d01e4e0e0cfb32a68be
+    - 221bef60ee9fdb14c06eaa1bb769cf33d41730bd
+    - 3ae0253bac42004aa00ab9a81bd4677ff4526747
+    - 17903fe5c36480c12fa9f288b19804bafe84dae0
+  - name: nextUpdate
+    type: int
+  - name: revokereason
+    values:
+    - cessationOfOperation
+    - keyCompromise
+    - affiliationChanged
+    - superseded
+  - name: revoketime
+    type: float
+  - name: serialNumber
+  - name: splunk_server_group
+  - name: thisUpdate
+    type: int
+  - name: ts
+    type: float
+- name: zeek_pe
+  platform: network
+  query_language: spl
+  description: bro:pe:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:pe:json
+  fields:
+  - name: compile_ts
+    type: int
+  - name: has_cert_table
+    values:
+    - 'true'
+    - 'false'
+  - name: has_debug_data
+    values:
+    - 'true'
+    - 'false'
+  - name: has_export_table
+    values:
+    - 'false'
+    - 'true'
+  - name: has_import_table
+    values:
+    - 'true'
+  - name: id
+  - name: is_64bit
+    values:
+    - 'true'
+    - 'false'
+  - name: is_exe
+    values:
+    - 'true'
+  - name: machine
+    values:
+    - AMD64
+    - I386
+  - name: os
+    values:
+    - WINDOWS_NT
+  - name: section_names{}
+    values:
+    - .data
+    - .rsrc
+    - .text
+    - .rdata
+    - .reloc
+    - .idata
+    - .pdata
+  - name: splunk_server_group
+  - name: subsystem
+    values:
+    - WINDOWS_GUI
+  - name: ts
+    type: float
+  - name: uses_aslr
+    values:
+    - 'true'
+    - 'false'
+  - name: uses_code_integrity
+    values:
+    - 'false'
+    - 'true'
+  - name: uses_dep
+    values:
+    - 'true'
+  - name: uses_seh
+    values:
+    - 'true'
+- name: zeek_ssl
+  platform: network
+  query_language: spl
+  description: bro:ssl:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:ssl:json
+  fields:
+  - name: cert_chain_fuids{}
+  - name: cipher
+    values:
+    - TLS_AES_256_GCM_SHA384
+    - TLS_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_CHACHA20_POLY1305_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+  - name: established
+    values:
+    - 'true'
+  - name: id.orig_h
+    values:
+    - 10.60.20.30
+    - 10.60.20.25
+    - 10.60.20.60
+    - 10.60.20.20
+    - 10.60.20.50
+    - 10.60.20.40
+    - 10.60.20.55
+    - 10.60.20.45
+    - 10.60.20.10
+  - name: id.orig_p
+    type: int
+  - name: id.resp_h
+  - name: id.resp_p
+    type: int
+    values:
+    - 443
+    - 636
+    - 5000
+  - name: resumed
+    values:
+    - 'false'
+    - 'true'
+  - name: server_name
+  - name: splunk_server_group
+  - name: ssl_history
+    values:
+    - CSOFFD
+    - CSOXYFFD
+    - CSOXYFFTD
+    - CSIFIFD
+    - CSXKNGIFIFD
+    - CSXKNGIFIFT
+    - CSOXYFFL
+    - CSJOXYFFD
+    - CSXNGIFIFD
+    - CSXKNGIFIFL
+  - name: ts
+    type: float
+  - name: uid
+  - name: version
+    values:
+    - TLSv13
+    - TLSv12
+- name: zeek_x509
+  platform: network
+  query_language: spl
+  description: bro:x509:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: bro:x509:json
+  fields:
+  - name: basic_constraints.ca
+    values:
+    - 'false'
+    - 'true'
+  - name: certificate.exponent
+    values:
+    - '65537'
+    - ''
+  - name: certificate.issuer
+  - name: certificate.key_alg
+    values:
+    - rsaEncryption
+    - id-ecPublicKey
+  - name: certificate.key_length
+    type: int
+    values:
+    - 2048
+    - 4096
+    - 256
+  - name: certificate.key_type
+    values:
+    - rsa
+    - ecdsa
+  - name: certificate.not_valid_after
+    type: int
+  - name: certificate.not_valid_before
+    type: int
+  - name: certificate.serial
+  - name: certificate.sig_alg
+    values:
+    - sha256WithRSAEncryption
+    - ecdsa-with-SHA256
+  - name: certificate.subject
+  - name: certificate.version
+    type: int
+    values:
+    - 3
+  - name: client_cert
+    values:
+    - 'false'
+  - name: fingerprint
+  - name: host_cert
+    values:
+    - 'true'
+    - 'false'
+  - name: id
+  - name: san.dns{}
+  - name: splunk_server_group
+  - name: ts
+    type: float
+- name: cisco_asa
+  platform: network
+  query_language: spl
+  description: cisco:asa in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: cisco:asa
+  fields:
+  - name: access_group
+    values:
+    - access-group
+  - name: acl
+    values:
+    - workstations_access_in
+    - servers_access_in
+  - name: action
+    values:
+    - teardown
+    - allowed
+    - blocked
+  - name: app
+    values:
+    - ASA
+  - name: assigned_ip
+  - name: bytes
+    type: int
+  - name: category
+  - name: change_class
+  - name: change_description
+  - name: change_type
+  - name: Cisco_ASA_action
+    values:
+    - teardown
+    - allowed
+    - blocked
+  - name: Cisco_ASA_message_id
+    type: int
+    values:
+    - 302014
+    - 302013
+    - 302015
+    - 302016
+    - 106023
+    - 305011
+    - 305012
+  - name: Cisco_ASA_user
+  - name: Cisco_ASA_vendor_action
+    values:
+    - teardown
+    - built
+    - deny
+  - name: command
+  - name: communication_protocol
+    values:
+    - ipv4
+  - name: description
+    values:
+    - Informational messages only
+    - Warning conditions
+  - name: dest
+  - name: dest_host
+  - name: dest_interface
+    values:
+    - servers
+    - outside
+    - workstations
+  - name: dest_ip
+  - name: dest_nt_domain
+  - name: dest_port
+    type: int
+  - name: dest_public_port
+  - name: dest_sg_info
+  - name: dest_translated_host
+  - name: dest_translated_ip
+  - name: dest_translated_port
+    type: int
+  - name: dest_user
+  - name: dest_zone
+    values:
+    - servers
+    - outside
+    - workstations
+  - name: direction
+    values:
+    - outbound
+  - name: duration
+    type: int
+  - name: duration_day
+  - name: duration_hour
+    type: int
+    values:
+    - 0
+  - name: duration_minute
+    type: int
+  - name: duration_second
+    type: int
+  - name: dvc
+    values:
+    - FW-SUDO-EDGE
+  - name: group
+  - name: hash_codes
+  - name: icmp_code
+  - name: icmp_type
+  - name: ids_type
+    values:
+    - network
+  - name: IP
+  - name: laction
+    values:
+    - teardown
+    - built
+    - deny
+  - name: log_level
+    type: int
+    values:
+    - 6
+    - 4
+  - name: message_id
+    type: int
+    values:
+    - 302014
+    - 302013
+    - 302015
+    - 302016
+    - 106023
+    - 305011
+    - 305012
+  - name: object
+  - name: object_attrs
+  - name: object_category
+  - name: object_id
+  - name: object_type
+  - name: original_device_ip
+  - name: original_device_time
+  - name: packets
+  - name: product
+    values:
+    - ASA
+  - name: protocol
+    values:
+    - ip
+  - name: protocol_version
+    values:
+    - ipv4
+  - name: reason
+    values:
+    - TCP FINs
+    - TCP Reset-I
+    - TCP Reset-O
+    - Conn-timeout
+    - SYN Timeout
+  - name: result
+  - name: rule
+    values:
+    - workstations_access_in
+    - servers_access_in
+  - name: rule_id
+    values:
+    - workstations_access_in
+    - servers_access_in
+  - name: rule_name
+    values:
+    - workstations_access_in
+    - servers_access_in
+  - name: session_id
+    type: int
+  - name: severity
+  - name: severity_level
+    values:
+    - informational
+    - warning
+  - name: signature
+  - name: signature_id
+    type: int
+    values:
+    - 106023
+  - name: splunk_server_group
+  - name: src
+  - name: src_host
+  - name: src_interface
+    values:
+    - workstations
+    - servers
+  - name: src_ip
+  - name: src_nt_domain
+  - name: src_port
+    type: int
+  - name: src_public_port
+  - name: src_sg_info
+  - name: src_translated_host
+  - name: src_translated_ip
+  - name: src_translated_port
+    type: int
+  - name: src_user
+  - name: src_zone
+    values:
+    - workstations
+    - servers
+  - name: ssl_is_valid
+  - name: status
+  - name: teardown_initiator
+  - name: transport
+    values:
+    - tcp
+    - udp
+  - name: type
+  - name: user
+  - name: Username
+  - name: vendor
+    values:
+    - Cisco
+  - name: vendor_action
+    values:
+    - teardown
+    - built
+    - deny
+  - name: vendor_class
+    values:
+    - session
+    - xlate
+    - acl
+  - name: vendor_definition
+    values:
+    - User Session
+    - NAT and PAT
+    - Access Lists
+  - name: vendor_product
+    values:
+    - Cisco ASA
+  - name: vendor_severity
+- name: ecar
+  platform: windows
+  query_language: spl
+  description: evidenceforge:ecar:json in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: evidenceforge:ecar:json
+  fields:
+  - name: action
+    values:
+    - CREATE
+    - TERMINATE
+    - LOAD
+    - MODIFY
+    - OPEN
+    - READ
+    - WRITE
+    - LOGOUT
+    - CONNECT
+    - REMOTE_CREATE
+  - name: actorID
+  - name: hostname
+    values:
+    - WS-DEV-01
+  - name: id
+  - name: object
+    values:
+    - PROCESS
+    - MODULE
+    - REGISTRY
+    - FILE
+    - USER_SESSION
+    - FLOW
+    - THREAD
+  - name: objectID
+  - name: pid
+    type: int
+  - name: ppid
+    type: int
+  - name: principal
+    values:
+    - SYSTEM
+    - grace.ssh
+    - LOCAL SERVICE
+    - dan.awk
+    - mallory.nc
+    - eve.sed
+    - NETWORK SERVICE
+  - name: properties.call_trace
+  - name: properties.command_line
+  - name: properties.direction
+    values:
+    - OUTBOUND
+  - name: properties.dst_ip
+    values:
+    - 10.60.20.10
+    - 10.60.20.20
+  - name: properties.dst_port
+    type: int
+    values:
+    - 88
+    - 22
+  - name: properties.failure_reason
+  - name: properties.file_path
+  - name: properties.granted_access
+    values:
+    - '0x1000'
+    - '0x1400'
+    - '0x0400'
+    - '0x1010'
+  - name: properties.icmp_code
+  - name: properties.icmp_type
+  - name: properties.image_path
+  - name: properties.logon_guid
+  - name: properties.logon_id
+  - name: properties.logon_type
+    type: int
+    values:
+    - 2
+    - 10
+  - name: properties.outcome
+  - name: properties.parent_image_path
+  - name: properties.protocol
+    values:
+    - tcp
+    - udp
+  - name: properties.registry_key
+  - name: properties.registry_value
+  - name: properties.session_id
+    type: int
+  - name: properties.session_lifecycle
+  - name: properties.src_ip
+    values:
+    - 10.60.10.10
+    - 10.60.10.19
+    - 10.60.20.55
+    - 10.60.10.17
+    - 10.60.10.12
+    - 10.60.10.14
+    - 10.60.10.16
+    - 10.60.10.18
+  - name: properties.src_pid
+    type: int
+    values:
+    - 4976
+  - name: properties.src_port
+    type: int
+  - name: properties.src_tid
+    type: int
+    values:
+    - 3408
+    - 3796
+    - 4436
+  - name: properties.stack_base
+    values:
+    - 00000000c34a3000
+    - 00000000c3a89000
+    - 00000000c78ac000
+  - name: properties.stack_limit
+    values:
+    - 00000000c349d000
+    - 00000000c3a83000
+    - 00000000c78a6000
+  - name: properties.start_address
+    values:
+    - 00007ffa28b03a80
+    - 00007ffa28b040c0
+    - 00007ffa28b1ca00
+  - name: properties.status_code
+  - name: properties.sub_status
+  - name: properties.target_image_path
+  - name: properties.target_pid
+    type: int
+    values:
+    - 4880
+    - 5024
+    - 4900
+    - 5104
+  - name: properties.target_process_uuid
+    values:
+    - 814d1770-2bd5-4bb4-be81-ac715a2fd849
+    - 0c06a606-e935-4e89-bc79-c7043ea7989a
+    - 0aca2659-e3d3-43c4-b2ec-5bc0b71d337f
+    - dc1f2d77-aa71-4f00-b2f8-46742284be55
+    - 89abe78f-1647-444d-8673-da973cd04f8b
+  - name: properties.tgt_tid
+    type: int
+    values:
+    - 4848
+    - 7124
+    - 8788
+  - name: properties.user_stack_base
+    values:
+    - 00000000c34a3000
+    - 00000000c3a89000
+    - 00000000c78ac000
+  - name: properties.user_stack_limit
+    values:
+    - 00000000c33a3000
+    - 00000000c3989000
+    - 00000000c77ac000
+  - name: splunk_server_group
+  - name: tid
+    type: int
+  - name: timestamp_ms
+    type: int
+- name: syslog
+  query_language: spl
+  description: syslog in index=thrunt (declared from fieldsummary map export, 2026-07-21)
+  scope:
+    index: thrunt
+    sourcetype: syslog
+  fields:
+  - name: apparmor
+    values:
+    - ALLOWED
+  - name: euid
+    type: int
+    values:
+    - 0
+  - name: logname
+    values:
+    - LOGIN
+  - name: operation
+    values:
+    - open
+  - name: pid
+  - name: process
+  - name: profile
+    values:
+    - usr.sbin.mysqld
+  - name: splunk_server_group
+  - name: tty
+    values:
+    - /dev/tty1
+  - name: type
+    type: int
+    values:
+    - 1400
+  - name: uid
+    type: int
+  - name: user
+    values:
+    - svc_report

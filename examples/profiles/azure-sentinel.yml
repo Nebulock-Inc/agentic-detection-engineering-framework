@@ -1,0 +1,27 @@
+# Extraction profile for Azure/Azure-Sentinel (analytics + hunting queries).
+#
+# A worked example of a **YAML profile for a format ADEF has no built-in for**
+# (unify-on-profiles P2). Sentinel rules are rule-shaped YAML the recognizers
+# don't match — so they land `unclaimed` until a profile claims them. No new
+# profile-format features were needed: the fields sit at clean top-level paths.
+#
+# Validated against the real repo: Detections/ 170 claimed (title/query/uuid
+# 100%, mitre 91%); "Hunting Queries"/ 1158 claimed — one profile, both dirs.
+# The `all_keys: [id, name, query]` signature deliberately excludes the ~300
+# migration-stub files (id/name/description only, no query) → correctly unclaimed.
+#
+# Usage:  adef catalog "/path/to/Azure-Sentinel/Detections" --profile examples/profiles/azure-sentinel.yml
+name: azure-sentinel
+version: 1
+signature:
+  container: yaml
+  all_keys: [id, name, query]   # a real analytics rule has all three; stubs lack `query`
+  extension: [.yaml]
+query_language: kql
+map:
+  title: name
+  query: query
+  uuid: id
+  description: description
+  severity: severity
+  mitre: relevantTechniques[]   # flat list of technique IDs, e.g. [T1570, T1059.001]

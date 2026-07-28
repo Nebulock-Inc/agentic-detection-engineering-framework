@@ -1,0 +1,70 @@
+name: Publish to PyPI
+
+# Release flow: draft a GitHub Release with tag vX.Y.Z to publish to PyPI.
+# Auth uses an API token stored as the repo secret PYPI_API_TOKEN.
+# Marking the release "pre-release" runs build + twine check only (a dry
+# run, no upload); a normal release publishes to PyPI.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    name: Build and Publish to PyPI
+    runs-on: ubuntu-latest
+    # Gated by the 'pypi' environment: a PyPI publish requires approval from a
+    # DE&TH-core reviewer before this job runs. Configure reviewers in
+    # Settings → Environments → pypi.
+    environment: pypi
+
+    permissions:
+      contents: read
+      id-token: write  # present for a future switch to trusted publishing
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Verify version matches tag
+      run: |
+        PACKAGE_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+        TAG_VERSION=${GITHUB_REF#refs/tags/v}
+        echo "Package version: $PACKAGE_VERSION"
+        echo "Tag version: $TAG_VERSION"
+        if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+          echo "Version mismatch! Package version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
+          exit 1
+        fi
+
+    - name: Build package
+      run: python -m build
+
+    - name: Check package with twine
+      run: twine check dist/*
+
+    - name: Publish to PyPI
+      if: "!github.event.release.prerelease"
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+
+    - name: Create release notes
+      if: "!github.event.release.prerelease"
+      run: |
+        echo "### 🎉 Published to PyPI" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Install:** \`pip install agentic-detection-engineering-framework==${GITHUB_REF_NAME#v}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Package:** https://pypi.org/project/agentic-detection-engineering-framework/${GITHUB_REF_NAME#v}/" >> $GITHUB_STEP_SUMMARY

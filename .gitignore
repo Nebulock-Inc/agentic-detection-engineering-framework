@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+.python-version
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Third-party rule corpora for local testing of catalog/schema (not ours to commit)
+/test-rules/
+
+# Local workspace artifacts users may create at the root (root-anchored only)
+/journals/
+/config/
+/templates/
+*.log
+.venv/
+
+# Env files
+.env
+.env.*
+
+# Node / npm (this is a Python project — these are stray build artifacts)
+node_modules/
+/package.json
+/package-lock.json
+
+# Local AI-assistant state (not part of the package)
+.claude/
