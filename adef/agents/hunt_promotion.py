@@ -22,7 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from adef.core.journal import Journal, next_detection_id, workspace_journals_dir
+from adef.core.catalog import Catalog
+from adef.core.journal import Journal, workspace_journals_dir
 
 
 class HuntPromotionError(RuntimeError):
@@ -120,7 +121,9 @@ class HuntPromotionAgent:
         self.rule_staging_root.mkdir(parents=True, exist_ok=True)
 
         journals_dir = workspace_journals_dir(self.workspace_root)
-        detection_id = next_detection_id(journals_dir)
+        # Shared ID space: clear catalog records too, not just journals
+        # (same clobber class fixed in `detection new`, ISA 2026-07-22).
+        detection_id = Catalog(journals_dir.parent).next_id()
 
         staging_yaml = self.rule_staging_root / f"{detection_id.replace('D-', 'D-draft-')}.yml"
         body = generated.get("yaml") if isinstance(generated, dict) else str(generated)
