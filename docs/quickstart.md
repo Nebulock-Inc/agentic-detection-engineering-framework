@@ -1,9 +1,10 @@
 # Quickstart (local)
 
-ADEF is **not on PyPI yet** — `pip install agentic-detection-engineering-framework`
-will fail until v0.1.0 ships. Until then, everything runs from a source
-checkout. This walkthrough takes ~10 minutes and ends with a catalogued rules
-repo, browsable detections, ingested data schemas, and a schema-check finding.
+ADEF is on PyPI — `pip install agentic-detection-engineering-framework` — but
+this quickstart runs from a **source checkout**, because it uses the bundled
+demo (sample rules and data under `examples/`) that ships in the repo, not the
+wheel. This walkthrough takes ~10 minutes and ends with a catalogued rules repo,
+browsable detections, ingested data schemas, and a schema-check finding.
 
 ## 1. Install from source
 
@@ -24,8 +25,9 @@ Requires Python **3.10+** (`python3 --version` to check).
 
 Common gotchas from real attempts:
 
-- **`No matching distribution found`** → you ran the PyPI install; it doesn't
-  exist yet. Use `pip install -e .` from the repo root.
+- **`No matching distribution found`** → you're on an unsupported Python (need
+  3.10+) or a very old pip — upgrade pip. Note the demo needs the source
+  checkout (`pip install -e .` from the repo root), not the published wheel.
 - **`adef: command not found` after install** → the venv isn't activated, or
   the editable install silently failed on old pip. Upgrade pip and reinstall.
 - Don't name your venv folder `adef` — it works, but makes `adef` vs `./adef/`
