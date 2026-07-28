@@ -62,9 +62,11 @@ Everything below is implemented, tested, and exercised end-to-end.
   never deleted); refreshes derived fields, **preserves enrichment** (mitre /
   status / owner / journal); journals out-of-band edits; re-creates a skeleton
   journal for any record whose journal has gone missing (this repair pass
-  replaced the retired `adef backfill journals`). Skips `origin: authored`
-  records (created in ADEF, no upstream). `--dry-run` /`--check` (CI). Fuzzy
-  rename-match deferred (falls to `new`, never mis-attributes).
+  replaced the retired `adef backfill journals`, and covers *all* records,
+  authored included — every record should have a journal). Reconciliation
+  itself skips `origin: authored` records (created in ADEF, no upstream to
+  reconcile against). `--dry-run` /`--check` (CI). Fuzzy rename-match
+  deferred (falls to `new`, never mis-attributes).
 
 ### Browse
 - **`adef detection list`** — filter by `--platform / --rule-format / --status /

@@ -252,9 +252,16 @@ adef/
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
-│   └── hunt_promote.py         # Hunt-to-detection promotion
+│   ├── hunt_promote.py         # Hunt-to-detection promotion
+│   ├── catalog.py              # Walk a rule repo into the catalog (read-only on source)
+│   ├── sync.py                 # Reconcile catalog vs. repo; journal repair pass
+│   ├── schema.py               # Declaration-driven schemas (ingest/lint/check/recipe/reshape)
+│   ├── attack.py               # ATT&CK reference layer (info/show/refresh)
+│   ├── coverage.py             # Coverage-quality report + Navigator export
+│   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
+│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation
 │   └── memory.py               # BM25 search over journals + catalog records
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template

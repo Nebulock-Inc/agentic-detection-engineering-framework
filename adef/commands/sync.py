@@ -16,6 +16,7 @@ Read-only on the source repo, as always — writes only under `catalog/` and
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import click
@@ -112,6 +113,10 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
     journal = Journal(ws / "journals")
     repaired = 0
     for det_id, _rpath, rdata in cat.iter_records():
+        # Only ADEF-minted ids reach Journal.create — a hand-edited record id
+        # ("../x", absolute path) must not become a filesystem path.
+        if not re.fullmatch(r"D-\d{4,}", str(det_id)):
+            continue
         if not (journal.directory / f"{det_id}.md").exists():
             journal.create(
                 detection_id=det_id,

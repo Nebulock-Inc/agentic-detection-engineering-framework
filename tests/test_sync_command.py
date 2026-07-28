@@ -150,8 +150,13 @@ def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
     result = CliRunner().invoke(sync, [str(repo)])
     assert result.exit_code == 0
     assert jpath.exists()
-    # Journal carries the record's real title, not a bare detection id.
-    assert "Rundll32 no args" in jpath.read_text(encoding="utf-8")
+    text = jpath.read_text(encoding="utf-8")
+    # Journal carries the record's real metadata, not bare defaults.
+    assert "Rundll32 no args" in text
+    assert "rule_uuid: 03cc0c25-389f-4bf8-b48d-11878079f1ca" in text
+    assert "re-created by `adef sync`" in text
+    entry = Journal(ws / "journals").read("D-0001")
+    assert entry.frontmatter["current_stage"] == "find"
 
 
 def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):
@@ -165,3 +170,37 @@ def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):
 
     CliRunner().invoke(sync, [str(repo), "--dry-run"])
     assert not (ws / "journals" / "D-0001.md").exists()
+
+
+def test_sync_check_does_not_recreate_journal(tmp_path, monkeypatch):
+    """--check is read-only: a missing journal is not repaired, and with no
+    source drift the exit code stays 0."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (ws / "journals" / "D-0001.md").unlink()
+
+    result = CliRunner().invoke(sync, [str(repo), "--check"])
+    assert result.exit_code == 0  # no drift
+    assert not (ws / "journals" / "D-0001.md").exists()
+
+
+def test_sync_repair_skips_malformed_record_ids(tmp_path, monkeypatch):
+    """A hand-edited record id must never become a filesystem path."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    evil = ws / "catalog" / "windows" / "D-9999-evil.yml"
+    evil.parent.mkdir(parents=True, exist_ok=True)
+    evil.write_text("id: ../../escape\ntitle: evil\n", encoding="utf-8")
+
+    result = CliRunner().invoke(sync, [str(repo)])
+    assert result.exit_code == 0
+    assert not (ws / "escape.md").exists()
+    assert not (tmp_path / "escape.md").exists()
