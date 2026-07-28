@@ -16,6 +16,7 @@ Read-only on the source repo, as always — writes only under `catalog/` and
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import click
@@ -106,12 +107,33 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
         console.print("\nDry run — nothing written.")
         return
 
+    # Repair pass (replaces the retired `adef backfill journals`): a matched
+    # record whose journal has gone missing gets a fresh skeleton, even when
+    # the source repo has no drift.
+    journal = Journal(ws / "journals")
+    repaired = 0
+    for det_id, _rpath, rdata in cat.iter_records():
+        # Only ADEF-minted ids reach Journal.create — a hand-edited record id
+        # ("../x", absolute path) must not become a filesystem path.
+        if not re.fullmatch(r"D-\d{4,}", str(det_id)):
+            continue
+        if not (journal.directory / f"{det_id}.md").exists():
+            journal.create(
+                detection_id=det_id,
+                title=rdata.get("title") or det_id,
+                owner=rdata.get("owner") or "",
+                rule_uuid=rdata.get("rule_uuid") or "",
+                note="Journal missing for this record — re-created by `adef sync`.",
+            )
+            repaired += 1
+    if repaired:
+        console.print(f"[green]Re-created[/green] {repaired} missing journal(s).")
+
     if not drift:
         console.print("\n[green]Already current — nothing to do.[/green]")
         return
 
     # Apply.
-    journal = Journal(ws / "journals")
     catalog_sha = git_head_sha(rule_root)
     applied = 0
     for entry in plan:

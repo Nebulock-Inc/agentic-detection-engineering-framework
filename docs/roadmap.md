@@ -11,7 +11,6 @@ The minimum viable framework: FORGE methodology, journal memory, twelve wrapped 
 - Refine-stage orchestration chain: RuleSimilarity → RuleOverlap → Verification.
 - Four new agents: `HypothesisFromIntel`, `TuneRecommender`, `DeprecationRecommender`, `HuntPromotion`.
 - `adef hunt-promote` — convert an ATHF hunt to a draft ADEF detection.
-- `adef backfill journals` — scaffold journals for an existing upstream rule corpus.
 - MCP server (`adef-mcp`) exposing lifecycle, memory, and agent tools.
 - Public docs frame ADEF and ATHF as paired siblings.
 

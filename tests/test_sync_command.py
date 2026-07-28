@@ -132,3 +132,79 @@ def test_sync_check_exits_nonzero_when_behind(tmp_path, monkeypatch):
     assert result.exit_code == 1  # behind
     # --check writes nothing: record is still its original (non-orphaned) form.
     assert _record(ws, "D-0001").get("orphaned") is not True
+
+
+def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
+    """A matched record whose journal was deleted gets a fresh skeleton on sync,
+    even when the source repo has no changes (the backfill-repair pass)."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    # Enrich the record so the repair has real metadata to propagate.
+    path, data = Catalog(ws).find_record("D-0001")
+    data["owner"] = "alice"
+    Catalog(ws).write_raw(path, data)
+    jpath = ws / "journals" / "D-0001.md"
+    assert jpath.exists()
+    jpath.unlink()
+
+    result = CliRunner().invoke(sync, [str(repo)])
+    assert result.exit_code == 0
+    assert jpath.exists()
+    # Metadata lands in parsed frontmatter, not merely somewhere in the file.
+    entry = Journal(ws / "journals").read("D-0001")
+    assert entry.frontmatter["title"] == "Rundll32 no args"
+    assert entry.frontmatter["owner"] == "alice"
+    assert entry.frontmatter["rule_uuid"] == "03cc0c25-389f-4bf8-b48d-11878079f1ca"
+    assert entry.frontmatter["current_stage"] == "find"
+    assert "re-created by `adef sync`" in entry.body
+
+
+def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (ws / "journals" / "D-0001.md").unlink()
+
+    CliRunner().invoke(sync, [str(repo), "--dry-run"])
+    assert not (ws / "journals" / "D-0001.md").exists()
+
+
+def test_sync_check_does_not_recreate_journal(tmp_path, monkeypatch):
+    """--check is read-only: a missing journal is not repaired, and with no
+    source drift the exit code stays 0."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (ws / "journals" / "D-0001.md").unlink()
+
+    result = CliRunner().invoke(sync, [str(repo), "--check"])
+    assert result.exit_code == 0  # no drift
+    assert not (ws / "journals" / "D-0001.md").exists()
+
+
+def test_sync_repair_skips_malformed_record_ids(tmp_path, monkeypatch):
+    """A hand-edited record id must never become a filesystem path."""
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    evil = ws / "catalog" / "windows" / "D-9999-evil.yml"
+    evil.parent.mkdir(parents=True, exist_ok=True)
+    evil.write_text("id: ../../escape\ntitle: evil\n", encoding="utf-8")
+
+    result = CliRunner().invoke(sync, [str(repo)])
+    assert result.exit_code == 0
+    assert not (ws / "escape.md").exists()
+    assert not (tmp_path / "escape.md").exists()
