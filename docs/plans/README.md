@@ -29,8 +29,8 @@ brainstorming/meeting artifacts (June–early July 2026) that shaped v1, see
 
 ## Where else to look
 
-- **What's shipped:** `../STATUS.md`
+- **What's shipped:** the `README.md` at the repo root
 - **Decisions (system of record):** `../../ISA.md`
-- **Branch state + roadmap:** `../HANDOFF.md`
+- **Branch state + roadmap (archived dev notes):** `../archive/HANDOFF.md`
 - **Framework context:** `../methodology.md`, `../why-adef.md`,
   `../forge-framework-comparison.md`

@@ -1,6 +1,7 @@
 """Reshape a raw SIEM field export into a draft data-source declaration.
 
-Implements the five reshape rules specified in docs/2026-07-21-next-steps.md §5
+Implements the five reshape rules specified in
+docs/archive/2026-07-21-next-steps.md §5
 (distilled from hand-converting live Splunk exports):
 
 1. Internals filter — drop platform plumbing (``_*``, ``date_*``, ``punct``,

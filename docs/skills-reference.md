@@ -5,7 +5,7 @@
 runs under the hood, and — in reverse — which skill fronts a given command.
 
 - Command flags and behavior: **`docs/cli-reference.md`** (canonical).
-- What's actually shipped: **`docs/STATUS.md`**.
+- What's actually shipped: the **[README](../README.md)**.
 - Per-skill activation tests: each skill's **`EVALS.md`**.
 
 ## How skills relate to the CLI

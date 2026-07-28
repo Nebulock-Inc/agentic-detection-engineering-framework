@@ -11,7 +11,7 @@
 
 ADEF is meant to be **format-agnostic**, but the current sniffer is effectively
 **Sigma-shaped-YAML-only**. Testing `adef catalog` against three real corpora
-(`test-rules/`) exposed the problem — see `docs/HANDOFF.md` "Test corpora":
+(`test-rules/`) exposed the problem — see `docs/archive/HANDOFF.md` "Test corpora":
 
 | Repo | Found | Reality |
 |------|-------|---------|
