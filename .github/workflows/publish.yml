@@ -13,6 +13,10 @@ jobs:
   build-and-publish:
     name: Build and Publish to PyPI
     runs-on: ubuntu-latest
+    # Gated by the 'pypi' environment: a PyPI publish requires approval from a
+    # DE&TH-core reviewer before this job runs. Configure reviewers in
+    # Settings → Environments → pypi.
+    environment: pypi
 
     permissions:
       contents: read
