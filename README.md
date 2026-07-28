@@ -240,6 +240,15 @@ ADEF is for teams whose detection count has outgrown their ability to remember w
 
 [`docs/why-adef.md`](docs/why-adef.md) is the full adoption guide: the problem it solves, where it fits in your stack, what you give up to use it, and how to bring it into an existing detection program.
 
+## Credits
+
+Built by the Detection Engineering & Threat Hunting (DE&TH) Team at [Nebulock, Inc.](https://nebulock.io):
+
+- Eric Brown ([eric@nebulock.io](mailto:eric@nebulock.io))
+- Joshua Hines ([josh@nebulock.io](mailto:josh@nebulock.io))
+- Sydney Marrone ([sydney@nebulock.io](mailto:sydney@nebulock.io))
+- Jarrett Polcari ([jarrett@nebulock.io](mailto:jarrett@nebulock.io))
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
