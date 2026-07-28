@@ -129,9 +129,12 @@ adef sync /path/to/rules --check # CI mode: exit 1 if the catalog is behind
 ```
 
 Sigma, Splunk ESCU / `savedsearches.conf`, Panther, raw KQL/SQL/CQL work out
-of the box. In-house formats are taught with a small **extraction profile**
-(YAML, no code) — draft one by hand or let the bundled agent draft it from
-samples: `adef profile lint` validates, you approve, every future run uses it.
+of the box. Nebulock ships as an **extraction profile** — copy
+`examples/profiles/nebulock-hunt.yml` into `$ADEF_WORKSPACE/config/profiles/`,
+and `catalog`/`sync` claim those rules too. In-house formats are taught the
+same way (YAML, no code) — draft one by hand or let the bundled agent draft it
+from samples: `adef profile lint` validates, you approve, every future run uses
+it.
 
 `sync` preserves everything you've added — MITRE tags, stage, owner, journal
 entries survive a re-sync; rules edited outside ADEF get a journal note
