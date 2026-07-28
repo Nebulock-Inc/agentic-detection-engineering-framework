@@ -12,11 +12,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
+from adef.core.catalog import Catalog
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
     JournalError,
-    next_detection_id,
     workspace_journals_dir,
 )
 
@@ -38,7 +38,9 @@ def register(server: Any) -> None:
     ) -> dict[str, Any]:
         """Create a new D-XXXX journal at the Find stage."""
         journal = _journal(workspace)
-        detection_id = next_detection_id(journal.directory)
+        # Shared ID space: clear catalog records too, not just journals
+        # (same clobber class fixed in `detection new`, ISA 2026-07-22).
+        detection_id = Catalog(journal.directory.parent).next_id()
         entry = journal.create(
             detection_id=detection_id,
             title=title,
