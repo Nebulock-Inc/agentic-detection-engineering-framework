@@ -1,11 +1,10 @@
 """``adef profile`` — manage declarative extraction profiles.
 
-Profiles teach ADEF's discovery engine a rule format without code (see
-``docs/plans/2026-07-20-claude-plugin-design.md`` and ISA 2026-07-20). They
-live at ``<workspace>/config/profiles/*.yml`` and are checked before built-in
-recognizers. ``lint`` validates a profile against the v1 schema — used by the
-catalog-onboarding skill before proposing a profile for human approval, and by
-CI on contributed profiles.
+Profiles teach ADEF's discovery engine a rule format without code (see ISA
+2026-07-20). They live at ``<workspace>/config/profiles/*.yml`` and are
+checked before built-in recognizers. ``lint`` validates a profile against the
+v1 schema — used by the catalog-onboarding skill before proposing a profile
+for human approval, and by CI on contributed profiles.
 """
 
 from __future__ import annotations

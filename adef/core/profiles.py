@@ -3,8 +3,7 @@
 A *profile* tells the discovery engine how to recognize a rule format
 (``signature``: container + key sets) and where its fields live (``map``:
 dot-paths). Profiles are the only mechanism for supporting org-specific
-in-house formats: agent-drafted, engine-validated, human-approved (see
-``docs/plans/2026-07-20-claude-plugin-design.md``).
+in-house formats: agent-drafted, engine-validated, human-approved.
 
 Design commitments (ISA 2026-07-20):
 

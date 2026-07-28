@@ -18,7 +18,6 @@ adef/                    # importable Python package
   orchestration/         # Refine chain (Similarity → Overlap → Verification)
 docs/                    # methodology.md, maturity-model.md, why-adef.md, roadmap.md, north-star.md
 tests/                   # unit + integration + parity tests
-ISA.md                   # Algorithm v6.3.0 ISA — system of record for the project
 ```
 
 ## Hard Rules — Anti-Goals
@@ -53,7 +52,7 @@ each rule's format, and writes an enrichment record to
 `<workspace>/catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
 `rule_ref`. It also generates `catalog/INDEX.yml` and a paired skeleton journal
 per rule. Ambiguous rules are flagged `needs_review: true` (infer-and-flag,
-never block). See `docs/plans/2026-07-15-catalog-design.md`.
+never block).
 
 **When `adef catalog` reports unclaimed files — drive the profile loop.**
 Unclaimed = structured files no recognizer or profile claims (in-house
@@ -105,4 +104,4 @@ a *source* — the rules-derived model was removed pre-release (ISA 2026-07-20).
 
 ## ISA Discipline
 
-`ISA.md` at the repo root is the system of record for the project (Algorithm v6.3.0). Every meaningful decision lands in `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.
+The project's system of record is `ISA.md` (Algorithm v6.3.0) — kept out of this public repo as internal engineering reference. Every meaningful decision lands in its `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.

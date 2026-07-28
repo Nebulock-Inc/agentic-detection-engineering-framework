@@ -110,7 +110,7 @@ Cataloging is read-only on the source repo. It sniffs each file's format
 (Sigma YAML, Splunk `.conf`, `.kql`, `.sql`, `.cql`), writes an enrichment
 record to `catalog/<platform>/D-XXXX-<slug>.yml` that references the source via
 `rule_ref`, and flags rules whose platform/MITRE couldn't be inferred with
-`needs_review: true`. See `docs/plans/2026-07-15-catalog-design.md` for the spec.
+`needs_review: true`.
 
 **Re-catalog guard:** if some incoming rules are *already* in the workspace
 (matched by the identity cascade), `catalog` **refuses** rather than silently
@@ -129,8 +129,7 @@ Users provide a declaration document (sources + fields, produced from
 `| fieldsummary` / `| getschema` / index mappings). Ingest writes
 `schema/<source>.yml` with `declared | corrected` field provenance; re-ingest
 preserves human corrections and reports drift. Rules are a schema *consumer*
-(via `check`), never a schema *source*. See
-`docs/plans/2026-07-20-schema-declaration-design.md`.
+(via `check`), never a schema *source*.
 
 ### ATT&CK Reference Layer
 ```bash
@@ -340,15 +339,6 @@ These are tested and will fail CI if violated:
 3. **`tests/test_no_vendor_connectors.py`**: Never add vendor API connectors (CrowdStrike, Splunk, SentinelOne, etc.). Connectors live in adapter packages.
 4. **`tests/test_no_web_ui_deps.py`**: No web UI dependencies (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). v0.1.0 is CLI + MCP only.
 
-## ISA.md — System of Record
-
-`ISA.md` at repo root uses **Algorithm v6.3.0** and is the authoritative project document:
-- All decisions go in `## Decisions`
-- All conjectures/refutations go in `## Changelog`
-- All verification facts go in `## Verification`
-
-When making architectural changes, update `ISA.md` first, then implement.
-
 ## Key Documentation
 
 Read these to understand the framework:
@@ -356,7 +346,6 @@ Read these to understand the framework:
 - **`docs/maturity-model.md`**: L0 (Ad-hoc) → L4 (Agentic) progression
 - **`docs/why-adef.md`**: Adoption guide, ADEF vs ATHF relationship
 - **`AGENTS.md`**: AI agent briefing for working in this repo
-- **`ISA.md`**: Project ISA (system of record)
 
 ## ADEF and ATHF Relationship
 

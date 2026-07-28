@@ -66,8 +66,6 @@ checked against the union of its shapes; a rule that also pins the shape
 (`sourcetype=...`) is checked against exactly that schema. Platforms where
 one table = one schema (Sentinel, warehouse tables) don't need scope at all.
 
-Full semantics: `docs/plans/2026-07-20-schema-declaration-design.md`.
-
 ## Four ways to produce one
 
 1. **Use `adef schema recipe` + `adef schema reshape`** (easiest for supported

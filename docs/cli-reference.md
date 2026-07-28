@@ -5,7 +5,7 @@ Observe → Refine → Govern → Evolve) over a workspace of per-detection jour
 and an enrichment catalog. This is the canonical, source-derived reference for
 every command and option — a technical *reference*, not a walkthrough. For a
 hands-on tutorial see `docs/quickstart.md`; for what is actually shipped and
-working today see `docs/STATUS.md`.
+working today see the [README](../README.md).
 
 Commands are registered through the `adef.commands` entry-point group (see
 `pyproject.toml`), so first-party and third-party plugins look identical. A
@@ -600,6 +600,5 @@ adef install-skills --agent claude --global
 ## See also
 
 - `docs/quickstart.md` — hands-on walkthrough (tutorial).
-- `docs/STATUS.md` — what is shipped and working right now.
+- `README.md` — what is shipped and working right now.
 - `CLAUDE.md` — repo guidance, architecture, and hard rules.
-- `ISA.md` — project system of record (decisions, changelog, verification).
