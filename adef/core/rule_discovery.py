@@ -601,7 +601,9 @@ def _extract_one_nebulock(rule: dict) -> DiscoveredRule:
     from the ``os.<name>`` tag; data_source from the ``nebulock_im_source``
     literal in the query.
     """
-    content = rule.get("content") or {}
+    content = rule.get("content")
+    if not isinstance(content, dict):  # null/str/list — one bad rule must not sink the envelope
+        content = {}
     rule_type = str(rule.get("rule_type") or "")
     query = str(content.get(_NEBULOCK_QUERY_FIELD.get(rule_type, "sql_query")) or "").strip()
     tags = rule.get("tags") or []

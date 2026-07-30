@@ -164,6 +164,23 @@ def test_envelope_fans_out_to_multiple_rules():
     }
 
 
+def test_malformed_content_does_not_sink_the_envelope():
+    """One rule with a non-dict `content` must not discard its siblings.
+
+    `content: null` was already handled (`or {}`), but a truthy non-dict
+    (string/list) hit `.get()` and raised, and the single list comprehension
+    took the whole envelope down with it — losing every good rule too.
+    """
+    for bad_content in (None, "oops", [1, 2]):
+        bad = {"rule_id": "bad", "rule_type": "atomic_sql", "content": bad_content}
+        rules = _extract_nebulock(json.dumps({"data": [ATOMIC_SQL, bad]}))
+        assert {r.rule_uuid for r in rules} == {ATOMIC_SQL["rule_id"], "bad"}
+        good = next(r for r in rules if r.rule_uuid == ATOMIC_SQL["rule_id"])
+        bad_rule = next(r for r in rules if r.rule_uuid == "bad")
+        assert not good.needs_review  # the good rule survives fully extracted
+        assert bad_rule.needs_review  # the bad one is kept, flagged, not crashed
+
+
 # --------------------------------------------------------------------------- #
 # End-to-end through the walker — a JSON export in a repo yields all rules
 # --------------------------------------------------------------------------- #
