@@ -24,7 +24,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Sequence
+from typing import Callable, Iterable, Iterator, Optional, Sequence, Union
 
 import yaml
 
@@ -630,7 +630,8 @@ def _extract_nebulock(text: str) -> list[DiscoveredRule]:
     return [_extract_one_nebulock(r) for r in (_nebulock_rules(text) or [])]
 
 
-_EXTRACTORS = {
+# An extractor returns one rule or many (a JSON export can carry several).
+_EXTRACTORS: dict[str, Callable[[str], Union[DiscoveredRule, list[DiscoveredRule]]]] = {
     "sigma": lambda text: _extract_sigma(text),
     "spl": lambda text: _extract_spl_conf(text),
     "kql": lambda text: _extract_kql(text),
@@ -848,7 +849,7 @@ def walk_outcomes(
                 result = extractor(text)
                 # An extractor may yield one rule or many (a JSON export can
                 # carry several); normalise to a list either way.
-                extracted = list(result) if isinstance(result, list) else [result]
+                extracted = result if isinstance(result, list) else [result]
             except Exception:
                 # A malformed rule of a known format still gets catalogued as
                 # needs_review rather than vanishing.
