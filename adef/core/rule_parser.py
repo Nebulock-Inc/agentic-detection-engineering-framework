@@ -9,15 +9,24 @@ import yaml
 from sqlglot.expressions import Column
 
 
-def extract_sql_fields(query: str, dialect: str = "postgres") -> set[str]:
+def extract_sql_fields(query: str, dialect: str = "clickhouse") -> set[str]:
     """Extract all column references from SQL query using AST.
 
     Args:
         query: SQL query string
-        dialect: SQL dialect (postgres, mysql, clickhouse, etc.)
+        dialect: SQL dialect (clickhouse, postgres, mysql, etc.)
 
     Returns:
         Set of field names referenced in the query
+
+    The default is ``clickhouse``, not ``postgres``: ADEF's ``sql`` engine is
+    Nebulock's dialect (see ``rule_discovery`` — atomic/scheduled_sql), whose
+    queries are a bare WHERE predicate over backtick-dotted identifiers
+    (``\\`process.command_line\\```). Postgres's grammar rejects both and
+    ``parse_one`` throws, silently returning an empty set — so ``schema check``
+    would see *zero* fields and pass a rule with a typo'd column. ClickHouse is
+    a strict superset here: it recovers the Nebulock case and extracts the same
+    columns as Postgres on standard SELECT/JOIN/quoted-identifier queries.
     """
     try:
         parsed = sqlglot.parse_one(query, dialect=dialect)

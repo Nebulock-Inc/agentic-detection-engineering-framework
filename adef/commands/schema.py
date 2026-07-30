@@ -61,9 +61,13 @@ _FIELD_EXTRACTORS = {
 # describe events, so no declaration would (or should) list them. The second
 # row is SPL command parameters (`bin _time span=10m`, `head limit=5`) the
 # regex extractor captures as field=value; they configure commands, not events.
+# The third row is Nebulock/ClickHouse routing: `nebulock_im_source` is the IM
+# discriminator (it *is* the scope key rules filter on), and every Nebulock
+# query pins it — so without this it would false-positive on 100% of them.
 _CHECK_IGNORED_FIELDS = {
     "index", "sourcetype", "source", "host", "earliest", "latest", "_time",
     "span", "limit", "maxspan", "maxpause", "window", "keepevicted",
+    "nebulock_im_source", "nebulock_provider_name", "nebulock_organization_id",
 }
 
 
