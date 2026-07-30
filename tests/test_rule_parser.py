@@ -54,6 +54,24 @@ def test_extract_sql_fields_invalid_query():
     assert fields == set()
 
 
+def test_extract_sql_fields_nebulock_clickhouse():
+    """Nebulock's dialect: a bare WHERE predicate over backtick-dotted
+    identifiers. The default dialect must parse it — Postgres cannot, and would
+    silently return an empty set (making `schema check` blind to every field).
+    """
+    query = (
+        "nebulock_im_source = 'im-process_create' "
+        "AND `process.name` = 'rundll32.exe' "
+        "AND `process.command_line` LIKE '%javascript%'"
+    )
+
+    fields = extract_sql_fields(query)
+
+    assert fields == {"nebulock_im_source", "process.name", "process.command_line"}
+    # Guard the regression directly: Postgres drops it, so the default is what matters.
+    assert extract_sql_fields(query, dialect="postgres") == set()
+
+
 def test_extract_spl_fields():
     """Test SPL parser extracts fields."""
     query = """
