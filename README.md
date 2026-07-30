@@ -10,7 +10,7 @@ ADEF gives every detection a journal, every transition a timestamp, and every li
 
 **What you get:**
 
-- **A catalog of every detection you have** — walked read-only from a repo or a one-time SIEM export, in any mix of Sigma, Splunk, Panther, KQL/SQL/CQL, or your in-house format
+- **A catalog of every detection you have** — walked read-only from a repo or a one-time SIEM/Nebulock export, in any mix of Sigma, Splunk, Panther, Nebulock, KQL/SQL/CQL, or your in-house format
 - **An honest coverage report** — solid vs. fragile ATT&CK coverage, single points of failure, and fictional technique IDs, exportable as a scored MITRE Navigator layer
 - **Schema-grounded authoring** — new rules scaffolded against the fields and values that actually exist in your data, not guesses
 - **A journal per detection** — the reasoning, tuning history, and review cadence that normally lives in chat threads and leaves with the person who wrote it
@@ -128,8 +128,9 @@ adef sync /path/to/rules         # later: refresh changed rules, keep your enric
 adef sync /path/to/rules --check # CI mode: exit 1 if the catalog is behind
 ```
 
-Sigma, Splunk ESCU / `savedsearches.conf`, Panther, raw KQL/SQL/CQL work out
-of the box. In-house formats are taught with a small **extraction profile**
+Sigma, Splunk ESCU / `savedsearches.conf`, Panther, Nebulock JSON exports, raw
+KQL/SQL/CQL work out of the box. In-house formats are taught with a small
+**extraction profile**
 (YAML, no code) — draft one by hand or let the bundled agent draft it from
 samples: `adef profile lint` validates, you approve, every future run uses it.
 

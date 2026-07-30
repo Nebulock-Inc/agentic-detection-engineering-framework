@@ -1,7 +1,8 @@
 # Creating Extraction Profiles
 
 `adef catalog` recognizes Sigma, Splunk ESCU, Splunk `savedsearches.conf`,
-Panther, and raw `.sql`/`.kql`/`.cql` out of the box. Everything else — your
+Panther, Nebulock JSON exports, and raw `.sql`/`.kql`/`.cql` out of the box.
+Everything else — your
 in-house YAML wrapper, a vendor export we haven't met — shows up as
 **unclaimed**. An *extraction profile* teaches ADEF the format: a small YAML
 file describing how to recognize it and where its fields live. No code, and

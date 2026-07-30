@@ -20,6 +20,7 @@ Design commitments (see ISA.md 2026-07-15 catalog decision):
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,7 @@ from adef.core.profiles import Profile
 # Query languages we recognise. This is the *source-format* axis, NOT the
 # four-value engine taxonomy — keep the two separate on purpose.
 # User extraction profiles add their own format names (the profile ``name``).
-Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther"
+Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther", "nebulock"
 
 # Support outcome: how well ADEF can handle a recognized file.
 SUPPORTED = "supported"                            # recognized AND metadata/query extractable
@@ -72,6 +73,7 @@ _FORMAT_TO_ENGINE = {
     "cql": "sql",
     "splunk-escu": "sql",  # SPL query engine
     "panther": "sql",      # Python-defined detection; folds to sql internally
+    "nebulock": "sql",     # atomic_sql / scheduled_sql; sigma sub-type also folds to sql
 }
 
 # Map a source format to the query language its ``query_text`` is written in, for
@@ -111,6 +113,11 @@ def _sql_from_table(query: str) -> str:
             return candidate
     return ""
 _SPL_INDEX_RE = re.compile(r"\bindex\s*=\s*\"?([A-Za-z_][\w.-]*)\"?", re.IGNORECASE)
+# Nebulock's table-equivalent: the intermediate-model source its query reads
+# from, e.g. `nebulock_im_source = 'im-process_create'`.
+_NEBULOCK_IM_SOURCE_RE = re.compile(
+    r"""nebulock_im_source\s*=\s*['"]([^'"]+)['"]""", re.IGNORECASE
+)
 _KQL_LEAD_TABLE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)")
 
 # KQL table name → platform. Best-effort; unknowns leave platform unset.
@@ -245,6 +252,42 @@ def _recognize_panther(name: str, text: str, doc: Optional[dict]) -> Optional[Re
     return None
 
 
+def _nebulock_rules(text: str) -> Optional[list[dict]]:
+    """Parse a Nebulock JSON export into its list of rule objects, or None.
+
+    Accepts the API envelope (``{"data": [...]}``), a bare array, or a single
+    rule object. A Nebulock rule is identified by ``rule_id`` + ``rule_type`` +
+    ``content`` — the shape the ``/public/v1/rules`` export emits. Returns None
+    for anything that isn't Nebulock-shaped (so other recognizers get a turn).
+    """
+    text = text.lstrip()
+    if not text or text[0] not in "[{":  # cheap gate: JSON only
+        return None
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        rules = data["data"]  # API export envelope
+    elif isinstance(data, list):
+        rules = data
+    elif isinstance(data, dict):
+        rules = [data]  # single rule object
+    else:
+        return None
+    shaped = [
+        r
+        for r in rules
+        if isinstance(r, dict) and "rule_id" in r and "rule_type" in r and "content" in r
+    ]
+    return shaped or None
+
+
+def _recognize_nebulock(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
+    """Nebulock rule export (JSON): ``rule_id`` + ``rule_type`` + ``content``."""
+    return Recognition("nebulock", SUPPORTED) if _nebulock_rules(text) else None
+
+
 def _recognize_raw_query(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
     """Raw single-query files, gated by extension (they carry no metadata block)."""
     lower = name.lower()
@@ -273,6 +316,7 @@ def _recognize_spl_conf(name: str, text: str, doc: Optional[dict]) -> Optional[R
 
 
 _RECOGNIZERS = (
+    _recognize_nebulock,
     _recognize_sigma,
     _recognize_splunk_escu,
     _recognize_panther,
@@ -525,6 +569,67 @@ def _extract_panther(text: str) -> DiscoveredRule:
     )
 
 
+# Nebulock's rule_type → the content field that holds the query. atomic_sql and
+# scheduled_sql are the real workload; sigma exists but is rare. All fold to the
+# `sql` engine (the query is Nebulock's SQL dialect regardless of sub-type).
+_NEBULOCK_QUERY_FIELD = {
+    "atomic_sql": "sql_query",
+    "scheduled_sql": "query",
+    "sigma": "sql_query",  # Nebulock compiles sigma → sql_query; original_yaml is a draft
+}
+
+
+def _nebulock_platform(tags: list) -> Optional[str]:
+    """Platform from Nebulock's ``os.<name>`` tag (e.g. ``os.windows``)."""
+    for tag in tags:
+        low = str(tag).lower()
+        if low.startswith("os."):
+            os_name = low.split(".", 1)[1]
+            if os_name in {"windows", "linux"}:
+                return os_name
+            if os_name in {"macos", "osx"}:
+                return "macos"
+    return None
+
+
+def _extract_one_nebulock(rule: dict) -> DiscoveredRule:
+    """Build a DiscoveredRule from one Nebulock rule object (envelope-driven).
+
+    Metadata lives at the envelope level (title/tags/rule_id), consistently
+    across rule_types; ``content`` holds only the query. MITRE comes from the
+    ``attack.id.T1053.005`` tag form (handled by ``_normalise_mitre``); platform
+    from the ``os.<name>`` tag; data_source from the ``nebulock_im_source``
+    literal in the query.
+    """
+    content = rule.get("content") or {}
+    rule_type = str(rule.get("rule_type") or "")
+    query = str(content.get(_NEBULOCK_QUERY_FIELD.get(rule_type, "sql_query")) or "").strip()
+    tags = rule.get("tags") or []
+    mitre = _normalise_mitre(str(t) for t in tags) if isinstance(tags, list) else ()
+    platform = _nebulock_platform(tags if isinstance(tags, list) else [])
+    title = str(rule.get("title") or content.get("title") or "").strip()
+    im = _NEBULOCK_IM_SOURCE_RE.search(query)
+    data_source = im.group(1) if im else ""
+    return DiscoveredRule(
+        path=Path("."),  # filled by caller
+        format="nebulock",
+        query_text=query,
+        title=title,
+        platform=platform,
+        mitre=mitre,
+        kind="atomic",
+        rule_uuid=str(rule.get("rule_id") or "").strip(),  # Nebulock's stable key
+        data_source=data_source,
+        support=SUPPORTED,
+        needs_review=not (platform and mitre),
+    )
+
+
+def _extract_nebulock(text: str) -> list[DiscoveredRule]:
+    """Extract every rule from a Nebulock JSON export (envelope may hold many)."""
+    return [_extract_one_nebulock(r) for r in (_nebulock_rules(text) or [])]
+
+
 _EXTRACTORS = {
     "sigma": lambda text: _extract_sigma(text),
     "spl": lambda text: _extract_spl_conf(text),
@@ -533,6 +638,7 @@ _EXTRACTORS = {
     "cql": lambda text: _extract_generic(text, "cql"),
     "splunk-escu": lambda text: _extract_splunk_escu(text),
     "panther": lambda text: _extract_panther(text),
+    "nebulock": lambda text: _extract_nebulock(text),
 }
 
 
@@ -729,30 +835,41 @@ def walk_outcomes(
         extractor = _EXTRACTORS.get(rec.format)
         malformed = False
         if extractor is None:
-            rule = DiscoveredRule(
-                path=path,
-                format=rec.format,
-                query_text="",
-                support=rec.support,
-            )
+            extracted: list[DiscoveredRule] = [
+                DiscoveredRule(
+                    path=path,
+                    format=rec.format,
+                    query_text="",
+                    support=rec.support,
+                )
+            ]
         else:
             try:
-                rule = extractor(text)
+                result = extractor(text)
+                # An extractor may yield one rule or many (a JSON export can
+                # carry several); normalise to a list either way.
+                extracted = list(result) if isinstance(result, list) else [result]
             except Exception:
                 # A malformed rule of a known format still gets catalogued as
                 # needs_review rather than vanishing.
                 malformed = True
-                rule = DiscoveredRule(
-                    path=path,
-                    format=rec.format,
-                    query_text=text.strip(),
-                    support=rec.support,
-                )
+                extracted = [
+                    DiscoveredRule(
+                        path=path,
+                        format=rec.format,
+                        query_text=text.strip(),
+                        support=rec.support,
+                    )
+                ]
+        for rule in extracted:
             rule.path = path
-        rule.source_hash = source_hash
-        finalize_review(rule, malformed=malformed)
+            rule.source_hash = source_hash
+            finalize_review(rule, malformed=malformed)
+        # A supported multi-rule file with no rules (empty envelope) still
+        # reports as its format, not a silent drop.
+        outcome = extracted[0].support if extracted else rec.support
         yield FileOutcome(
-            path=path, outcome=rule.support, format=rec.format, rules=(rule,)
+            path=path, outcome=outcome, format=rec.format, rules=tuple(extracted)
         )
 
 

@@ -1,8 +1,10 @@
 """``adef catalog`` — turn an existing detection repo into ADEF's catalog.
 
 Point ADEF at a directory of detection rules (Sigma YAML, Splunk ESCU /
-``savedsearches.conf``, Panther, ``.kql``, ``.sql``, ``.cql``, plus any format
-taught via an extraction profile). ADEF walks the repo read-only, catalogs each
+``savedsearches.conf``, Panther, Nebulock JSON exports, ``.kql``, ``.sql``,
+``.cql``, plus any format taught via an extraction profile). ADEF walks the repo
+read-only (it never pulls from any API — export the rules, then point at them),
+catalogs each
 rule into ``catalog/<platform>/D-XXXX-<slug>.yml``, creates a paired skeleton
 journal, and regenerates ``catalog/INDEX.yml``.
 
