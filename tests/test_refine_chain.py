@@ -68,6 +68,51 @@ def test_workspace_option_wins_over_adef_workspace_env(tmp_path: Path, monkeypat
     assert not list((env_ws / "journals").glob("D-*.md"))
 
 
+def test_mcp_refine_chain_tool_honors_workspace_arg_over_env(tmp_path: Path, monkeypatch):
+    """The MCP `refine_chain` tool must forward `workspace` too — it has the
+
+    same env-vs-arg divergence as the CLI (fixed above), but in a second,
+    independent caller of `run_refine_chain` that the CLI fix doesn't cover.
+    """
+    from adef.mcp.tools.agent_tools import register
+
+    env_ws = tmp_path / "mcp-env-ws"
+    (env_ws / "journals").mkdir(parents=True)
+    (env_ws / "catalog").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(env_ws))
+
+    arg_ws = tmp_path / "mcp-arg-ws"
+    (arg_ws / "journals").mkdir(parents=True)
+    (arg_ws / "catalog").mkdir(parents=True)
+    cat = Catalog(arg_ws)
+    journal = Journal(arg_ws / "journals")
+    rec = _rec("D-0001", "mshta child process", "process.name='mshta.exe'")
+    cat.write_raw(arg_ws / "catalog" / "D-0001.yml", rec.to_yaml_dict())
+    journal.create(detection_id="D-0001", title=rec.title)
+    cat.rebuild_index()
+
+    class _FakeServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self):
+            def deco(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+
+            return deco
+
+    server = _FakeServer()
+    register(server)
+    result = server.tools["refine_chain"](detection_id="D-0001", workspace=str(arg_ws))
+
+    for step in ("similarity", "overlap", "verification"):
+        assert result[step]["error"] is None, f"{step}: {result[step]['error']}"
+    text = (arg_ws / "journals" / "D-0001.md").read_text()
+    assert "no catalog record" not in text.lower()
+    assert not list((env_ws / "journals").glob("D-*.md"))
+
+
 def test_format_payload_keeps_lines_readable_for_many_overlaps():
     """A list-of-dicts must not collapse into one multi-thousand-char line.
 
