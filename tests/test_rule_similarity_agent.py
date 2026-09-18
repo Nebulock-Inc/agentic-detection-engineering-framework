@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from adef.core.catalog import Catalog, CatalogRecord
+from adef.core.catalog import Catalog, CatalogRecord, NoCatalogRecordError
 from adef.core.journal import Journal
 from adef.agents.rule_similarity import RuleSimilarityAgent, _llm_available
 
@@ -51,7 +51,11 @@ class _FakeAnthropicClient:
 
         def create(self, **kwargs):
             self._outer.calls.append(kwargs)
-            block = type("Block", (), {"text": self._outer._response_text})()
+            # `type="text"` mirrors the real SDK's TextBlock — the agent selects
+            # the first text block rather than trusting content[0] to be one.
+            block = type(
+                "Block", (), {"type": "text", "text": self._outer._response_text}
+            )()
             return type("Response", (), {"content": [block]})()
 
     @property
@@ -109,6 +113,29 @@ def test_auto_mode_falls_back_to_bm25_without_llm(workspace: Path, monkeypatch):
     assert result["mode_used"] == "bm25"
 
 
+def test_bm25_mode_ignores_an_injected_llm_client(workspace: Path):
+    """`bm25` is a promise, not a preference: an available client must not be
+    consulted, or "fully deterministic, never bills" stops being true."""
+    fake = _FakeAnthropicClient('[{"detection_id": "D-0002", "confidence": 0.99}]')
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        similarity_mode="bm25", llm_client=fake)
+    assert result["mode_used"] == "bm25"
+    assert fake.calls == []  # no LLM call attempted
+
+
+def test_auto_mode_resolves_to_llm_when_a_client_is_injected(workspace: Path, monkeypatch):
+    """The branch that decides whether a billed network call happens: an
+    injected client counts as "LLM available" even with no API key in the env."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    fake = _FakeAnthropicClient(
+        '[{"detection_id": "D-0002", "confidence": 0.91, "reasoning": "same predicate"}]'
+    )
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                        similarity_mode="auto", llm_client=fake)
+    assert result["mode_used"] == "llm"
+    assert len(fake.calls) == 1
+
+
 # --- LLM rerank path (client injected, no network) ---
 
 def test_llm_mode_reranks_using_injected_client(workspace: Path):
@@ -153,3 +180,16 @@ def test_wrapper_raises_when_binding_set_but_unimportable(workspace: Path, monke
     with pytest.raises(WrapperUnavailable):
         RuleSimilarityWrapper().run(detection_id="D-0001", workspace=workspace,
                                      similarity_mode="bm25")
+
+
+def test_wrapper_propagates_no_catalog_record(workspace: Path, monkeypatch):
+    """A journal-only detection is NOT "wrapper unavailable" — the wrapper must
+    let the distinct type through so refine_chain can say what's actually true."""
+    monkeypatch.delenv("ADEF_WRAPPER_RULE_SIMILARITY", raising=False)
+    from adef.agents.wrappers import WrapperUnavailable
+    from adef.agents.wrappers.rule_similarity import RuleSimilarityWrapper
+
+    with pytest.raises(NoCatalogRecordError, match="D-9999"):
+        RuleSimilarityWrapper().run(detection_id="D-9999", workspace=workspace,
+                                     similarity_mode="bm25")
+    assert not issubclass(NoCatalogRecordError, WrapperUnavailable)

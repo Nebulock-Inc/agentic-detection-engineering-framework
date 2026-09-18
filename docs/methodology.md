@@ -51,7 +51,29 @@ Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage
 
 Each result is appended to the detection's journal under a `### Refine / <step>` heading. The chain does not abort on failure; partial results are valuable. Each step honors an optional `ADEF_WRAPPER_<KEY>` env var override to delegate to a configured upstream agent (exactly as before v2, if explicitly set).
 
-**Example.** Refine appends *"RuleOverlap: 78% with `windows_lolbin_mshta_public.yml`. Recommendation: merge with that rule's filter logic rather than ship a near-duplicate."*
+**Example.** The Overlap step appends this to the journal — one sub-bullet per
+cluster-mate, most confident first:
+
+```markdown
+### Refine / Overlap (2026-09-18T14:32:06-04:00)
+
+- **detection_id:** D-0001
+- **result:**
+  - **detection_id:** D-0001
+  - **techniques:** ['T1218.005']
+  - **overlaps:**
+    - other_id: D-0042, overlap_type: duplicate, confidence: 0.91, reasoning: Near-identical query logic (91% similar)
+    - other_id: D-0117, overlap_type: redundant, confidence: 0.78, reasoning: D-0117's query is a strict superset of D-0001's predicate — D-0117 fires on a subset of what D-0001 already covers
+    - other_id: D-0203, overlap_type: complementary, confidence: 0.34, reasoning: Same technique, distinct detection logic — different coverage angle
+```
+
+Note what the classifier does and doesn't give you: `other_id` is always a
+`D-XXXX` (the catalog ID, never a filename), the `overlap_type` is one of
+exactly three values, and there is no "recommendation" — deciding to merge,
+narrow, or keep both is the engineer's call, which is why the `reasoning`
+explains the relationship rather than prescribing an action. `duplicate`
+requires ≥0.85 similarity; the 0.78 pair above is classified on the substring
+relation, not the ratio.
 
 ### Govern — deploy with quality gates, ownership, review cadence
 

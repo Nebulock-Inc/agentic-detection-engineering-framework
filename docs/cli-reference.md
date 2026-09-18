@@ -139,6 +139,13 @@ journal (the chain does not abort on partial failure). Re-advancing to `refine`
 does *not* re-run it — use `--chain` to force a re-run. Similarity ranking defaults to BM25 and upgrades to an LLM-reranked shortlist automatically when
 `ANTHROPIC_API_KEY` is set and the `llm` extra is installed — override with `--similarity-mode`.
 
+> **What leaves your machine in `llm`/`auto` mode.** When the LLM path actually
+> runs, ADEF sends the Anthropic API the target detection's title, MITRE
+> technique IDs, and query (truncated to 500 characters), plus — for each of the
+> `top_k` (default 5) BM25 candidates — its detection ID, title, and a
+> journal-derived snippet. Nothing else from the workspace is transmitted, and
+> `--similarity-mode bm25` makes no network call at all.
+
 ```bash
 adef detection observe D-0001 --note "Checked 30d of process_create events"
 adef detection refine  D-0001

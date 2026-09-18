@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from adef.core.catalog import Catalog
+from adef.core.catalog import Catalog, NoCatalogRecordError
 from adef.core.journal import workspace_journals_dir
 
 _DUPLICATE_NEAR_THRESHOLD = 0.85  # matches detect-vault's RuleOverlapAgent reference
@@ -113,7 +113,7 @@ class RuleOverlapAgent:
             if det_id == detection_id:
                 target = data
         if target is None:
-            raise ValueError(f"No catalog record found for {detection_id}")
+            raise NoCatalogRecordError(f"No catalog record found for {detection_id}")
 
         index_path = ws / "catalog" / "INDEX.yml"
         by_technique: dict[str, list[str]] = {}
@@ -132,6 +132,10 @@ class RuleOverlapAgent:
             for other_id in sorted(cluster_ids)
             if other_id in records
         ]
+        # Most-relevant-first for the journal reader. Display ordering only —
+        # nothing is filtered or capped (that's a product call, not this
+        # agent's); `other_id` breaks ties so the output stays deterministic.
+        overlaps.sort(key=lambda o: (-o.confidence, o.other_id))
 
         return {
             "detection_id": detection_id,

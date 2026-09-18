@@ -247,7 +247,14 @@ adef/
 │   ├── tune_recommender.py           # ADEF-native: tuning suggestions
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   └── wrappers/                     # Thin wrappers around the upstream rule agents ADEF orchestrates (4: similarity, overlap, verification, performance-metrics)
+│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist + optional LLM rerank
+│   ├── rule_overlap.py               # ADEF-native: duplicate/complementary/redundant
+│   ├── verification.py               # ADEF-native: schema + four-engine constraint
+│   └── wrappers/                     # Dispatchers for the 4 rule agents the Refine chain and
+│                                     #   tune recommender orchestrate. Similarity/Overlap/
+│                                     #   Verification run the native agents above unless
+│                                     #   ADEF_WRAPPER_<KEY> is explicitly set; performance-
+│                                     #   metrics is the one remaining upstream-only wrapper.
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
@@ -260,8 +267,10 @@ adef/
 │   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
-│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation
-│   └── memory.py               # BM25 search over journals + catalog records
+│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
+│   ├── memory.py               # BM25 search over journals + catalog records
+│   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share
+│   └── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)
@@ -332,7 +341,11 @@ When `adef detection refine D-XXXX` runs:
      optionally reranked by an LLM judge (`adef detection refine D-XXXX
      --similarity-mode {auto,bm25,llm}`; `auto`, the default, uses the LLM
      when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
-     installed, otherwise stays BM25-only)
+     installed, otherwise stays BM25-only). **Data egress in `llm`/`auto`
+     mode:** the target's title, MITRE IDs, and query (truncated to 500
+     chars), plus each shortlisted candidate's ID, title, and
+     journal-derived snippet, are sent to the Anthropic API. `bm25` makes
+     no network call.
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)
@@ -344,7 +357,14 @@ When `adef detection refine D-XXXX` runs:
 6. Each step still honors its `ADEF_WRAPPER_<KEY>` env var as an opt-in override
    — if set, the step delegates to the configured upstream class exactly as
    before v2. Unset (the default) now runs the native implementation instead of
-   raising `WrapperUnavailable`.
+   raising `WrapperUnavailable`. Only `detection_id` is forwarded to an
+   override, never the chain's native-only kwargs (`workspace`,
+   `similarity_mode`), so a strict-signature upstream class keeps working.
+7. A detection with no catalog record yet (still journal-only) raises
+   `NoCatalogRecordError` from the native agent; the chain renders that as
+   *"Not run — no catalog record for D-XXXX yet (still journal-only)"*. That's
+   a distinct case from `WrapperUnavailable`'s *"isn't configured"*, which now
+   only fires for a genuinely broken explicit `ADEF_WRAPPER_*` override.
 
 ## Hard Rules (CI-Enforced Anti-Goals)
 

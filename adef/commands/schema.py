@@ -297,7 +297,11 @@ def run_schema_check(ws: Path, detection_ids: Sequence[str] = ()) -> SchemaCheck
         missing_from_schema=dict(missing),
         unused_by_rules=unused,
         engine_errors=engine_errors,
-        undeclared_type_fields=undeclared_type_fields,
+        # A field is appended once per matched schema source, so a union tie
+        # yields duplicates — dedupe like the sibling missing-fields report.
+        undeclared_type_fields={
+            det_id: sorted(set(fields)) for det_id, fields in undeclared_type_fields.items()
+        },
     )
 
 
@@ -365,6 +369,8 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
                         for group, fields in sorted(result.missing_from_schema.items())
                     },
                     "unused_by_rules": result.unused_by_rules,
+                    "engine_errors": result.engine_errors,
+                    "undeclared_type_fields": result.undeclared_type_fields,
                 },
                 indent=2,
             )
@@ -404,9 +410,18 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
             f"extractor or empty query): {', '.join(result.rules_skipped_unparseable)}"
         )
     console.print()
-    if not result.missing_from_schema and not result.unused_by_rules:
+    if not (
+        result.missing_from_schema
+        or result.unused_by_rules
+        or result.engine_errors
+        or result.undeclared_type_fields
+    ):
         console.print("[green]No findings.[/green]")
         return
+    if result.engine_errors:
+        console.print("[bold]Engine taxonomy[/bold] — rules outside the allowed engine set:")
+        for det_id, message in sorted(result.engine_errors.items()):
+            console.print(f"  [red]✗[/red] {det_id}: {message}")
     for group, fields in sorted(result.missing_from_schema.items()):
         label = ", ".join(group)
         suffix = (
@@ -417,6 +432,13 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
         console.print(f"[bold]{label}[/bold]{suffix}")
         for fname, ids in sorted(fields.items()):
             console.print(f"  [yellow]?[/yellow] {fname}  (used by {', '.join(sorted(ids))})")
+    if result.undeclared_type_fields:
+        console.print(
+            "[bold]Schema completeness[/bold] — fields a rule uses that the schema "
+            "declares without a type:"
+        )
+        for det_id, type_fields in sorted(result.undeclared_type_fields.items()):
+            console.print(f"  [yellow]?[/yellow] {det_id}: {', '.join(type_fields)}")
     for source, unused_fields in sorted(result.unused_by_rules.items()):
         console.print(f"[bold]{source}[/bold] — declared fields no rule uses:")
         for fname in unused_fields:

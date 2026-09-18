@@ -75,3 +75,14 @@ def test_wrapper_raises_when_binding_set_but_unimportable(workspace: Path, monke
 
     with pytest.raises(WrapperUnavailable):
         VerificationWrapper().run(detection_id="D-0001", workspace=workspace)
+
+
+def test_wrapper_propagates_no_catalog_record(workspace: Path, monkeypatch):
+    """A journal-only detection is NOT "wrapper unavailable" — the wrapper must
+    let the distinct type through so refine_chain can say what's actually true."""
+    monkeypatch.delenv("ADEF_WRAPPER_VERIFICATION", raising=False)
+    from adef.agents.wrappers.verification import VerificationWrapper
+    from adef.core.catalog import NoCatalogRecordError
+
+    with pytest.raises(NoCatalogRecordError, match="D-9999"):
+        VerificationWrapper().run(detection_id="D-9999", workspace=workspace)

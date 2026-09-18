@@ -1,11 +1,13 @@
+import json
 from pathlib import Path
 
 import pytest
 import yaml
+from click.testing import CliRunner
 
 from adef.core.catalog import Catalog, CatalogRecord
 from adef.core.engines import ALLOWED_ENGINES
-from adef.commands.schema import run_schema_check
+from adef.commands.schema import run_schema_check, schema as schema_cli
 
 
 def _schema_v2(source: str, fields: list[dict]) -> dict:
@@ -48,7 +50,15 @@ def workspace(tmp_path: Path) -> Path:
         # table-qualified column and sqlglot drops the `user.` qualifier.
         query="`user.name` = 'admin'", query_language="sql", data_source="wineventlog",
     )
-    for rec in (good, bad_engine, undeclared_type):
+    # Both findings on one rule, so a single `--detection` scope exercises the
+    # CLI's rendering of each without any other finding type in the way.
+    both = CatalogRecord(
+        id="D-0004", title="bad engine and undeclared type", rule_ref="r/d4.yml",
+        original_path="/tmp/d4.yml", platform="windows", kind="atomic",
+        engine="atomic_sql", format="sql",
+        query="`user.name` = 'admin'", query_language="sql", data_source="wineventlog",
+    )
+    for rec in (good, bad_engine, undeclared_type, both):
         cat.write_raw(ws / "catalog" / f"{rec.id}.yml", rec.to_yaml_dict())
     return ws
 
@@ -77,3 +87,29 @@ def test_existing_behavior_preserved_whole_catalog(workspace: Path):
     # No `detection_ids` filter — the pre-existing whole-catalog mode must still work.
     result = run_schema_check(workspace)
     assert result.rules_checked >= 1
+
+
+# --- `adef schema check` CLI: the core already found these; the command has to
+# --- actually *report* them, or the documented authoring-loop validator lies.
+# --- D-0004 has no missing/unused findings at all, so these also pin the
+# --- "No findings." early-return to all four result fields, not just two.
+
+def test_cli_check_reports_engine_and_type_findings_as_text(workspace: Path):
+    result = CliRunner().invoke(
+        schema_cli, ["check", "--workspace", str(workspace), "--detection", "D-0004"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "No findings." not in result.output
+    assert "atomic_sql" in result.output
+    assert "user.name" in result.output
+
+
+def test_cli_check_reports_engine_and_type_findings_as_json(workspace: Path):
+    result = CliRunner().invoke(
+        schema_cli,
+        ["check", "--workspace", str(workspace), "--detection", "D-0004", "--report", "json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert "atomic_sql" in payload["engine_errors"]["D-0004"]
+    assert payload["undeclared_type_fields"]["D-0004"] == ["user.name"]

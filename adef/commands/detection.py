@@ -20,6 +20,7 @@ import click
 from rich.console import Console
 
 from adef.core.corpus_text import record_search_text as _record_search_text
+from adef.core.engines import ALLOWED_ENGINES
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
@@ -31,8 +32,8 @@ console = Console()
 
 # Closed value-sets for validating `detection list` filters — a typo should
 # error, not read as zero coverage. (Open-ended --platform/--rule-format have no
-# fixed set to check against.)
-_ENGINES = frozenset({"sigma", "sql", "sch_sql", "composite"})
+# fixed set to check against.) Engines come from `adef.core.engines`, the single
+# canonical copy — never re-type the literal set.
 _STATUSES = frozenset({"draft", "ready", "tuning", "deprecated"})
 
 
@@ -196,8 +197,12 @@ def _make_stage_command(stage: str) -> click.Command:
             if chain or not result.was_idempotent:
                 from adef.orchestration.refine_chain import run_refine_chain
 
+                # `workspace` must be forwarded: every native Refine agent
+                # resolves `workspace_journals_dir(None)` when not given one,
+                # which would silently read a *different* catalog than the one
+                # `--workspace` named.
                 run_refine_chain(journal=journal, detection_id=detection_id,
-                                  similarity_mode=similarity_mode)
+                                  workspace=workspace, similarity_mode=similarity_mode)
                 console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
             else:
                 console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
@@ -343,9 +348,9 @@ def list_cmd(
     # Validate closed-set filters up front so a typo errors instead of looking
     # like genuine zero coverage. A valid value with no matches still falls
     # through to the normal "No detections match".
-    if engine and engine not in _ENGINES:
+    if engine and engine not in ALLOWED_ENGINES:
         raise click.ClickException(
-            f"unknown engine {engine!r}. Valid: {', '.join(sorted(_ENGINES))}."
+            f"unknown engine {engine!r}. Valid: {', '.join(sorted(ALLOWED_ENGINES))}."
         )
     if status and status not in _STATUSES:
         raise click.ClickException(

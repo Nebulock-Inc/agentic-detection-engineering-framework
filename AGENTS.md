@@ -9,10 +9,14 @@ adef/                    # importable Python package
   cli.py                 # Click root group, registers entry-point commands
   plugin_system.py       # entry-point discovery (defensive load, never kills CLI)
   __version__ via __init__.py
-  agents/                # ADEF-native agents (Hypothesis, Tune, Deprecation, HuntPromotion)
-    wrappers/            # Thin wrappers around the 4 upstream rule-engineering agents
+  agents/                # ADEF-native agents (7): Hypothesis, Tune, Deprecation,
+                         #   HuntPromotion, RuleSimilarity, RuleOverlap, Verification
+    wrappers/            # Dispatchers for the 4 orchestrated rule agents. Similarity/
+                         #   Overlap/Verification are native by default and only delegate
+                         #   upstream when ADEF_WRAPPER_<KEY> is explicitly set;
+                         #   PerformanceMetrics is the one true upstream-only wrapper.
   commands/              # Click subgroups: detection, init, hunt-promote, catalog, sync, schema
-  core/                  # Journal, MemoryIndex, Catalog
+  core/                  # Journal, MemoryIndex, Catalog, corpus_text, engines (ALLOWED_ENGINES)
   data/                  # Package data — templates/, prompts/
   mcp/                   # FastMCP server + tool modules
   orchestration/         # Refine chain (Similarity → Overlap → Verification)

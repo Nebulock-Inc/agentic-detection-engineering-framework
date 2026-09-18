@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from adef.agents.wrappers._base import WrapperBase, WrapperUnavailable
+from adef.agents.wrappers._base import WrapperBase
 
 
 class RuleSimilarityWrapper(WrapperBase):
@@ -18,18 +18,16 @@ class RuleSimilarityWrapper(WrapperBase):
 
     def run(self, detection_id: str, **ctx: Any) -> dict[str, Any]:
         if os.environ.get(self._env_var(), "").strip():
-            return super().run(detection_id=detection_id, **ctx)
+            # `**ctx` is deliberately NOT forwarded to an upstream override: the
+            # chain now injects native-only kwargs (workspace, similarity_mode)
+            # that a strict-signature upstream class never accepted before.
+            return super().run(detection_id=detection_id)
         from adef.agents.rule_similarity import RuleSimilarityAgent
 
-        try:
-            result = RuleSimilarityAgent().run(detection_id=detection_id, **ctx)
-        except ValueError as exc:
-            # No catalog record for this detection yet (e.g. still journal-only
-            # at Find/Observe — nothing to compare for similarity). A real, common
-            # lifecycle gap, not a code bug — report it the same clean way as an
-            # unconfigured wrapper instead of letting refine_chain log a raw
-            # traceback for it.
-            raise WrapperUnavailable(str(exc)) from exc
+        # `NoCatalogRecordError` (journal-only detection) propagates on purpose —
+        # `refine_chain` renders it as its own accurate message rather than the
+        # misleading "isn't configured" a `WrapperUnavailable` would produce.
+        result = RuleSimilarityAgent().run(detection_id=detection_id, **ctx)
         return {"detection_id": detection_id, "result": result}
 
 

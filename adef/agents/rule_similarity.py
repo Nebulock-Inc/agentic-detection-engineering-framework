@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from adef.core.catalog import Catalog
+from adef.core.catalog import Catalog, NoCatalogRecordError
 from adef.core.corpus_text import record_search_text
 from adef.core.journal import Journal, workspace_journals_dir
 from adef.core.memory import MemoryIndex
@@ -79,7 +79,7 @@ class RuleSimilarityAgent:
             record_text[det_id] = record_search_text(data)
         target_text = record_text.get(detection_id)
         if target_text is None:
-            raise ValueError(f"No catalog record found for {detection_id}")
+            raise NoCatalogRecordError(f"No catalog record found for {detection_id}")
 
         index = MemoryIndex(journals_dir=journals_dir)
         index.build(
@@ -142,7 +142,19 @@ class RuleSimilarityAgent:
         response = client.messages.create(
             model=model, max_tokens=1024, messages=[{"role": "user", "content": prompt}],
         )
-        scored = json.loads(response.content[0].text)
+        # Take the first *text* block, not blindly `content[0]`: only some
+        # content-block types carry `.text` (a thinking block doesn't), so
+        # indexing raised AttributeError — silently downgrading a working LLM
+        # call into the bm25_fallback path — and tripped 11 mypy union-attr
+        # errors whenever the `llm` extra is installed.
+        # `getattr` for the read too, not just the guard: `b.text` on the SDK's
+        # content-block union is what mypy rejected in the first place.
+        text = next(
+            (getattr(b, "text", "") for b in response.content
+             if getattr(b, "type", None) == "text"),
+            "",
+        )
+        scored = json.loads(text)
         by_id = {s["detection_id"]: s for s in scored}
         reranked = [
             {
