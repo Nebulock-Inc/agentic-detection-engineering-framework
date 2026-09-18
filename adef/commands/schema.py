@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
+from typing import Sequence
 
 import click
 import yaml
@@ -32,6 +34,7 @@ from adef.core.declaration import (
     load_declaration,
     read_schema_v2,
 )
+from adef.core.engines import ALLOWED_ENGINES
 from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 from adef.core.reshape import ReshapeError, reshape_export
 from adef.core.workspace import config_path, platform_from_config, resolve_workspace
@@ -158,6 +161,146 @@ def lint_cmd(declaration_file: Path):
     console.print(f"[green]OK[/green] {declaration_file}")
 
 
+@dataclass
+class SchemaCheckResult:
+    rules_checked: int
+    rules_checked_ids: list[str]
+    rules_skipped_unmatched: list[str]
+    rules_skipped_unparseable: list[str]
+    sources_with_schemas: list[str]
+    missing_from_schema: dict[tuple[str, ...], dict[str, list[str]]]
+    unused_by_rules: dict[str, list[str]]
+    engine_errors: dict[str, str] = dataclass_field(default_factory=dict)
+    undeclared_type_fields: dict[str, list[str]] = dataclass_field(default_factory=dict)
+
+
+def run_schema_check(ws: Path, detection_ids: Sequence[str] = ()) -> SchemaCheckResult:
+    """Cross-reference rule field usage against declared schemas.
+
+    For every catalogued rule whose literals match a schema_version-2 schema,
+    extract the fields the rule references and compare against the schema
+    (field names + aliases). Findings are advisory, never blocking:
+
+    - rule references a field the schema doesn't know (broken rule,
+      undeclared alias, or a macro worth documenting);
+    - schema fields no rule uses (unexploited detection surface).
+
+    Scope matching (ISA 2026-07-21): a rule matches every source whose name
+    OR scope values contain one of the rule's literals (``data_source`` plus
+    shape literals like SPL ``sourcetype=``). **Most-specific match wins**:
+    sources matching the most literals are kept; ties keep all (the union) —
+    correct, because a query filtered only by container could see any of
+    those event shapes. A field missing from a union is one finding reported
+    against the whole group, not one row per matched source.
+    """
+    from adef.core.catalog import Catalog
+
+    schema_dir = ws / "schema"
+    cat = Catalog(ws)
+
+    # source -> known names / declared names; literal -> sources it addresses
+    schemas: dict[str, set[str]] = {}
+    declared_fields: dict[str, set[str]] = {}
+    declared_types: dict[str, dict[str, str]] = {}
+    addressed_by: dict[str, set[str]] = {}
+    for path in sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []:
+        data = read_schema_v2(path)
+        if data:
+            name = data.get("source")
+            if not name:  # v2 but no source (hand-edited/partial) → skip, don't KeyError
+                continue
+            schemas[name] = known_field_names(data)
+            declared_fields[name] = {str(f.get("name", "")) for f in data.get("fields", [])}
+            declared_types[name] = {
+                str(f.get("name", "")): str(f.get("type", "")) for f in data.get("fields", [])
+            }
+            for literal in address_literals(data):
+                addressed_by.setdefault(literal, set()).add(name)
+
+    # matched-source group -> field -> [rule ids]. Group of 1 = a normal match;
+    # >1 = a union tie — one finding for the group, not one row per source.
+    missing: dict[tuple[str, ...], dict[str, list[str]]] = {}
+    used: dict[str, set[str]] = {s: set() for s in schemas}
+    rules_checked = 0
+    # Rules dropped before checking — tracked so the summary can't report a
+    # skipped rule as clean (issue #6). Two distinct reasons the user must tell
+    # apart: can't parse its fields vs. no schema addresses its data.
+    unparseable: list[str] = []  # no field extractor / empty query
+    unmatched: list[str] = []    # literals match no declared schema
+    engine_errors: dict[str, str] = {}
+    undeclared_type_fields: dict[str, list[str]] = {}
+    scope = set(detection_ids)
+    rules_checked_ids: list[str] = []
+    for det_id, _path, data in cat.iter_records():
+        if scope:
+            if det_id not in scope:
+                continue
+        rules_checked_ids.append(det_id)
+        engine = data.get("engine", "")
+        if engine not in ALLOWED_ENGINES:
+            engine_errors[det_id] = (
+                f"engine '{engine}' is not one of the allowed engines {sorted(ALLOWED_ENGINES)}"
+            )
+        query = data.get("query") or ""
+        # query_language (persisted 2026-07-21) covers ESCU + profile-claimed
+        # rules whose `format` isn't itself a query language.
+        language = data.get("query_language") or data.get("format", "")
+        extractor = _FIELD_EXTRACTORS.get(language)
+        if extractor is None or not query:
+            unparseable.append(det_id)
+            continue
+
+        literals = {(data.get("data_source") or "").strip()} - {""}
+        literals.update(shape_literals(query, language))
+        match_counts: dict[str, int] = {}
+        for literal in literals:
+            for source in addressed_by.get(literal, ()):
+                match_counts[source] = match_counts.get(source, 0) + 1
+        if not match_counts:
+            unmatched.append(det_id)
+            continue
+        best = max(match_counts.values())
+        matched = sorted(s for s, n in match_counts.items() if n == best)
+
+        rules_checked += 1
+        union_known: set[str] = set().union(*(schemas[s] for s in matched))
+        for f in extractor(query):
+            if f.lower() in _CHECK_IGNORED_FIELDS:
+                continue
+            if f in union_known:
+                for source in matched:
+                    if f in schemas[source]:
+                        used[source].add(f)
+                        if not declared_types.get(source, {}).get(f):
+                            undeclared_type_fields.setdefault(det_id, []).append(f)
+            else:
+                missing.setdefault(tuple(matched), {}).setdefault(f, []).append(det_id)
+
+    # Whole-catalog concept: scoped to one detection it would claim nearly
+    # every declared field "unused" — suppress it under --detection.
+    unused = (
+        {}
+        if scope
+        else {
+            source: sorted(declared_fields[source] - used[source])
+            for source in schemas
+            if declared_fields[source] - used[source]
+        }
+    )
+
+    return SchemaCheckResult(
+        rules_checked=rules_checked,
+        rules_checked_ids=rules_checked_ids,
+        rules_skipped_unmatched=sorted(unmatched),
+        rules_skipped_unparseable=sorted(unparseable),
+        sources_with_schemas=sorted(schemas),
+        missing_from_schema=dict(missing),
+        unused_by_rules=unused,
+        engine_errors=engine_errors,
+        undeclared_type_fields=undeclared_type_fields,
+    )
+
+
 @schema.command()
 @click.option(
     "--workspace",
@@ -199,89 +342,10 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
     those event shapes. A field missing from a union is one finding reported
     against the whole group, not one row per matched source.
     """
-    from adef.core.catalog import Catalog
-
     ws = resolve_workspace(workspace)
-    schema_dir = ws / "schema"
-    cat = Catalog(ws)
-
-    # source -> known names / declared names; literal -> sources it addresses
-    schemas: dict[str, set[str]] = {}
-    declared_fields: dict[str, set[str]] = {}
-    addressed_by: dict[str, set[str]] = {}
-    for path in sorted(schema_dir.glob("*.yml")) if schema_dir.is_dir() else []:
-        data = read_schema_v2(path)
-        if data:
-            name = data.get("source")
-            if not name:  # v2 but no source (hand-edited/partial) → skip, don't KeyError
-                continue
-            schemas[name] = known_field_names(data)
-            declared_fields[name] = {str(f.get("name", "")) for f in data.get("fields", [])}
-            for literal in address_literals(data):
-                addressed_by.setdefault(literal, set()).add(name)
-
-    # matched-source group -> field -> [rule ids]. Group of 1 = a normal match;
-    # >1 = a union tie — one finding for the group, not one row per source.
-    missing: dict[tuple[str, ...], dict[str, list[str]]] = {}
-    used: dict[str, set[str]] = {s: set() for s in schemas}
-    rules_checked = 0
-    # Rules dropped before checking — tracked so the summary can't report a
-    # skipped rule as clean (issue #6). Two distinct reasons the user must tell
-    # apart: can't parse its fields vs. no schema addresses its data.
-    unparseable: list[str] = []  # no field extractor / empty query
-    unmatched: list[str] = []    # literals match no declared schema
     scope = set(detection_ids)
-    seen_scoped: set[str] = set()
-    for det_id, _path, data in cat.iter_records():
-        if scope:
-            if det_id not in scope:
-                continue
-            seen_scoped.add(det_id)
-        query = data.get("query") or ""
-        # query_language (persisted 2026-07-21) covers ESCU + profile-claimed
-        # rules whose `format` isn't itself a query language.
-        language = data.get("query_language") or data.get("format", "")
-        extractor = _FIELD_EXTRACTORS.get(language)
-        if extractor is None or not query:
-            unparseable.append(det_id)
-            continue
-
-        literals = {(data.get("data_source") or "").strip()} - {""}
-        literals.update(shape_literals(query, language))
-        match_counts: dict[str, int] = {}
-        for literal in literals:
-            for source in addressed_by.get(literal, ()):
-                match_counts[source] = match_counts.get(source, 0) + 1
-        if not match_counts:
-            unmatched.append(det_id)
-            continue
-        best = max(match_counts.values())
-        matched = sorted(s for s, n in match_counts.items() if n == best)
-
-        rules_checked += 1
-        union_known: set[str] = set().union(*(schemas[s] for s in matched))
-        for f in extractor(query):
-            if f.lower() in _CHECK_IGNORED_FIELDS:
-                continue
-            if f in union_known:
-                for source in matched:
-                    if f in schemas[source]:
-                        used[source].add(f)
-            else:
-                missing.setdefault(tuple(matched), {}).setdefault(f, []).append(det_id)
-
-    # Whole-catalog concept: scoped to one detection it would claim nearly
-    # every declared field "unused" — suppress it under --detection.
-    unused = (
-        {}
-        if scope
-        else {
-            source: sorted(declared_fields[source] - used[source])
-            for source in schemas
-            if declared_fields[source] - used[source]
-        }
-    )
-    if scope and (not_found := sorted(scope - seen_scoped)):
+    result = run_schema_check(ws, detection_ids=detection_ids)
+    if scope and (not_found := sorted(scope - set(result.rules_checked_ids))):
         raise click.ClickException(
             f"detection id(s) not in the catalog: {', '.join(not_found)}"
         )
@@ -290,52 +354,60 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
         click.echo(
             json.dumps(
                 {
-                    "rules_checked": rules_checked,
+                    "rules_checked": result.rules_checked,
                     "rules_skipped": {
-                        "unmatched": sorted(unmatched),
-                        "unparseable": sorted(unparseable),
+                        "unmatched": result.rules_skipped_unmatched,
+                        "unparseable": result.rules_skipped_unparseable,
                     },
-                    "sources_with_schemas": sorted(schemas),
+                    "sources_with_schemas": result.sources_with_schemas,
                     "missing_from_schema": {
                         ", ".join(group): {f: ids for f, ids in sorted(fields.items())}
-                        for group, fields in sorted(missing.items())
+                        for group, fields in sorted(result.missing_from_schema.items())
                     },
-                    "unused_by_rules": unused,
+                    "unused_by_rules": result.unused_by_rules,
                 },
                 indent=2,
             )
         )
         return
 
-    if not schemas:
+    if not result.sources_with_schemas:
         console.print(
             "[yellow]No schema_version-2 schemas found[/yellow] — run "
             "`adef schema ingest <declaration.yml>` first."
         )
         return
-    total = rules_checked + len(unmatched) + len(unparseable)
-    of_total = f" of {total}" if (unmatched or unparseable) else ""
+    total = (
+        result.rules_checked
+        + len(result.rules_skipped_unmatched)
+        + len(result.rules_skipped_unparseable)
+    )
+    of_total = (
+        f" of {total}"
+        if (result.rules_skipped_unmatched or result.rules_skipped_unparseable)
+        else ""
+    )
     console.print(
-        f"Checked [bold]{rules_checked}[/bold]{of_total} rules against "
-        f"{len(schemas)} schema(s)."
+        f"Checked [bold]{result.rules_checked}[/bold]{of_total} rules against "
+        f"{len(result.sources_with_schemas)} schema(s)."
     )
     # A skipped rule is validated against nothing — the most interesting result,
     # and the one that used to produce silence (issue #6). Name them.
-    if unmatched:
+    if result.rules_skipped_unmatched:
         console.print(
-            f"  [yellow]{len(unmatched)} unmatched[/yellow] (no declared schema "
-            f"addresses its data source): {', '.join(sorted(unmatched))}"
+            f"  [yellow]{len(result.rules_skipped_unmatched)} unmatched[/yellow] (no declared "
+            f"schema addresses its data source): {', '.join(result.rules_skipped_unmatched)}"
         )
-    if unparseable:
+    if result.rules_skipped_unparseable:
         console.print(
-            f"  [yellow]{len(unparseable)} unparseable[/yellow] (no field extractor "
-            f"or empty query): {', '.join(sorted(unparseable))}"
+            f"  [yellow]{len(result.rules_skipped_unparseable)} unparseable[/yellow] (no field "
+            f"extractor or empty query): {', '.join(result.rules_skipped_unparseable)}"
         )
     console.print()
-    if not missing and not unused:
+    if not result.missing_from_schema and not result.unused_by_rules:
         console.print("[green]No findings.[/green]")
         return
-    for group, fields in sorted(missing.items()):
+    for group, fields in sorted(result.missing_from_schema.items()):
         label = ", ".join(group)
         suffix = (
             f" — rule fields missing from all {len(group)} union-matched schemas:"
@@ -345,7 +417,7 @@ def check(workspace: Path | None, report_format: str | None, detection_ids: tupl
         console.print(f"[bold]{label}[/bold]{suffix}")
         for fname, ids in sorted(fields.items()):
             console.print(f"  [yellow]?[/yellow] {fname}  (used by {', '.join(sorted(ids))})")
-    for source, unused_fields in sorted(unused.items()):
+    for source, unused_fields in sorted(result.unused_by_rules.items()):
         console.print(f"[bold]{source}[/bold] — declared fields no rule uses:")
         for fname in unused_fields:
             console.print(f"  [cyan]·[/cyan] {fname}")
