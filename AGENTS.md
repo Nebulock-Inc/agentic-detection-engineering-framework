@@ -43,7 +43,7 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 - `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName` — bind `adef hunt-promote` to a hunt-rule generator that exposes `run(hunt_id=...)`.
 - `ADEF_HUNT_ROOT=/path/to/hunts` (or `--hunt-root`) — directory of upstream hunt artifacts.
 
-If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
+For Similarity/Overlap/Verification, a missing binding runs the native agent instead of raising `WrapperUnavailable`. PerformanceMetrics (which has no native implementation) and any explicitly set binding whose import fails still raise `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
 
 ## Cataloging
 
