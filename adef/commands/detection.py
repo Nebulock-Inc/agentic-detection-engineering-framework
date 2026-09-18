@@ -147,6 +147,7 @@ def _make_stage_command(stage: str) -> click.Command:
         workspace: Path | None,
         notes: tuple[str, ...],
         chain: bool = False,
+        similarity_mode: str = "auto",
     ) -> None:
         # One note → plain line; several → a markdown bullet list.
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
@@ -195,7 +196,8 @@ def _make_stage_command(stage: str) -> click.Command:
             if chain or not result.was_idempotent:
                 from adef.orchestration.refine_chain import run_refine_chain
 
-                run_refine_chain(journal=journal, detection_id=detection_id)
+                run_refine_chain(journal=journal, detection_id=detection_id,
+                                  similarity_mode=similarity_mode)
                 console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
             else:
                 console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
@@ -207,6 +209,17 @@ def _make_stage_command(stage: str) -> click.Command:
                 is_flag=True,
                 help="Re-run the Similarity → Overlap → Verification chain even if "
                 "already at refine (e.g. after configuring the wrapper agents).",
+            )
+        )
+        cmd.params.append(
+            click.Option(
+                ["--similarity-mode"],
+                type=click.Choice(["auto", "bm25", "llm"]),
+                default="auto",
+                help="How the Similarity refine-step ranks candidates: 'llm' reranks the "
+                "BM25 shortlist with an LLM judge (requires ANTHROPIC_API_KEY + the 'llm' "
+                "extra), 'bm25' stays fully deterministic, 'auto' (default) uses llm when "
+                "available.",
             )
         )
     return cmd
