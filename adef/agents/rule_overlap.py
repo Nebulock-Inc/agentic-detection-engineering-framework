@@ -74,7 +74,7 @@ def classify_pair(record_a: dict, record_b: dict, id_a: str, id_b: str) -> Overl
             return Overlap(
                 id_b, "redundant", len(norm_b) / len(norm_a),
                 f"{id_a}'s query is a strict superset of {id_b}'s predicate — "
-                f"{id_b} may be the narrower, unnecessary rule",
+                f"{id_a} fires on a subset of what {id_b} already covers",
             )
 
     ratio = _similarity(query_a, query_b)

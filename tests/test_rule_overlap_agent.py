@@ -54,6 +54,22 @@ def test_classify_pair_redundant_substring():
     assert overlap.overlap_type == "redundant"
 
 
+def test_classify_pair_redundant_substring_reversed():
+    # record_a's query is the longer/superset text, record_b's is the substring —
+    # exercises the `norm_b in norm_a` branch (mirror of the substring test above,
+    # which exercises `norm_a in norm_b`). Per classify_pair's own semantics, the
+    # superset-query rule (A here) is the narrower one, since it fires on a subset
+    # of what the shorter query (B) already covers.
+    a = _rec("A", "t", "process.name='mshta.exe' and parent='winword.exe' and user='admin'", []).to_yaml_dict()
+    b = _rec("B", "t", "process.name='mshta.exe' and parent='winword.exe'", []).to_yaml_dict()
+    overlap = classify_pair(a, b, "A", "B")
+    assert overlap.overlap_type == "redundant"
+    assert overlap.reasoning == (
+        "A's query is a strict superset of B's predicate — "
+        "A fires on a subset of what B already covers"
+    )
+
+
 def test_classify_pair_complementary_different_logic():
     a = _rec("A", "t", "process.name='mshta.exe' and parent='winword.exe'", []).to_yaml_dict()
     b = _rec("B", "t", "network.dest_port=4444 and process.name='mshta.exe'", []).to_yaml_dict()
