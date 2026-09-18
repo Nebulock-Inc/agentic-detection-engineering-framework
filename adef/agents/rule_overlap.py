@@ -64,15 +64,19 @@ def classify_pair(record_a: dict, record_b: dict, id_a: str, id_b: str) -> Overl
     # the more specific signal and must win.
     same_source = bool(record_a.get("data_source")) and record_a.get("data_source") == record_b.get("data_source")
     if same_source and norm_a and norm_b and norm_a != norm_b:
-        if norm_a in norm_b:
+        # Strip outer parentheses for substring check, as queries may be wrapped
+        # (e.g., detect-vault patterns with outer `(...)` around WHERE clauses)
+        norm_a_stripped = norm_a.lstrip("(").rstrip(")")
+        norm_b_stripped = norm_b.lstrip("(").rstrip(")")
+        if norm_a_stripped in norm_b_stripped:
             return Overlap(
-                id_b, "redundant", len(norm_a) / len(norm_b),
+                id_b, "redundant", len(norm_a_stripped) / len(norm_b_stripped),
                 f"{id_b}'s query is a strict superset of {id_a}'s predicate — "
                 f"{id_b} fires on a subset of what {id_a} already covers",
             )
-        if norm_b in norm_a:
+        if norm_b_stripped in norm_a_stripped:
             return Overlap(
-                id_b, "redundant", len(norm_b) / len(norm_a),
+                id_b, "redundant", len(norm_b_stripped) / len(norm_a_stripped),
                 f"{id_a}'s query is a strict superset of {id_b}'s predicate — "
                 f"{id_a} fires on a subset of what {id_b} already covers",
             )
