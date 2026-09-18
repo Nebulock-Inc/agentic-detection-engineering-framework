@@ -19,6 +19,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from adef.core.corpus_text import record_search_text as _record_search_text
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
@@ -578,21 +579,6 @@ def tag_mitre_cmd(
         )
     if not result.added and not result.already_present:
         console.print("Nothing to add.")
-
-
-def _record_search_text(data: dict) -> str:
-    """The catalog fields worth searching on — so a detection is findable by
-    *what it detects* (title, MITRE, platform, source, query), not only by what
-    its journal says."""
-    parts = [
-        str(data.get("title", "")),
-        " ".join(data.get("mitre") or []),
-        str(data.get("platform", "")),
-        str(data.get("data_source", "")),
-        str(data.get("format", "")),
-        str(data.get("query", "")),
-    ]
-    return " ".join(p for p in parts if p)
 
 
 @detection.command("search")
