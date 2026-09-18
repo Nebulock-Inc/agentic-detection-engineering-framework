@@ -328,7 +328,11 @@ When `adef detection refine D-XXXX` runs:
 2. Invokes `orchestration/refine_chain.py`
 3. Runs **three steps in sequence, native and vendor-free by default** (v2, 2026-09):
    - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
-     search over the catalog — does a rule like this already exist?
+     search over the catalog — does a rule like this already exist? —
+     optionally reranked by an LLM judge (`adef detection refine D-XXXX
+     --similarity-mode {auto,bm25,llm}`; `auto`, the default, uses the LLM
+     when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
+     installed, otherwise stays BM25-only)
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)
