@@ -64,8 +64,15 @@ def classify_pair(record_a: dict, record_b: dict, id_a: str, id_b: str) -> Overl
     # the more specific signal and must win.
     same_source = bool(record_a.get("data_source")) and record_a.get("data_source") == record_b.get("data_source")
     if same_source and norm_a and norm_b and norm_a != norm_b:
-        # Strip outer parentheses for substring check, as queries may be wrapped
-        # (e.g., detect-vault patterns with outer `(...)` around WHERE clauses)
+        # Strip one layer of outer wrapping parens before the substring check —
+        # detect-vault's WHERE-only predicate convention wraps the whole
+        # condition in `(...)`, which otherwise defeats substring matching
+        # (found live during Task 6, against detect-vault-shaped fixtures).
+        # ponytail: lstrip/rstrip strip a *character set*, not one matched
+        # pair — correct for the single-outer-paren case real detect-vault
+        # queries use, but would corrupt a query with nested parens
+        # immediately at its outer edge (e.g. `((a) and (b))`). Upgrade to a
+        # real matched-pair strip if a fixture ever needs that shape.
         norm_a_stripped = norm_a.lstrip("(").rstrip(")")
         norm_b_stripped = norm_b.lstrip("(").rstrip(")")
         if norm_a_stripped in norm_b_stripped:

@@ -70,6 +70,34 @@ def test_classify_pair_redundant_substring_reversed():
     )
 
 
+def test_classify_pair_redundant_substring_parenthesized():
+    # detect-vault's WHERE-only predicate convention wraps the whole condition
+    # in outer parens — the paren-stripping fix in classify_pair must still
+    # recognize the substring relation once both sides are unwrapped.
+    a = _rec("A", "t", "(process.name='mshta.exe' and parent='winword.exe')", []).to_yaml_dict()
+    b = _rec("B", "t", "(process.name='mshta.exe' and parent='winword.exe' and user='admin')", []).to_yaml_dict()
+    overlap = classify_pair(a, b, "A", "B")
+    assert overlap.overlap_type == "redundant"
+    assert overlap.reasoning == (
+        "B's query is a strict superset of A's predicate — "
+        "B fires on a subset of what A already covers"
+    )
+
+
+def test_classify_pair_redundant_substring_parenthesized_reversed():
+    # Mirror of the above: record_a's wrapped query is the superset, record_b's
+    # wrapped query is the substring — exercises the `norm_b_stripped in
+    # norm_a_stripped` branch with parenthesized detect-vault-shaped queries.
+    a = _rec("A", "t", "(process.name='mshta.exe' and parent='winword.exe' and user='admin')", []).to_yaml_dict()
+    b = _rec("B", "t", "(process.name='mshta.exe' and parent='winword.exe')", []).to_yaml_dict()
+    overlap = classify_pair(a, b, "A", "B")
+    assert overlap.overlap_type == "redundant"
+    assert overlap.reasoning == (
+        "A's query is a strict superset of B's predicate — "
+        "A fires on a subset of what B already covers"
+    )
+
+
 def test_classify_pair_complementary_different_logic():
     a = _rec("A", "t", "process.name='mshta.exe' and parent='winword.exe'", []).to_yaml_dict()
     b = _rec("B", "t", "network.dest_port=4444 and process.name='mshta.exe'", []).to_yaml_dict()
