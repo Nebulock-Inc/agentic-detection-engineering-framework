@@ -43,13 +43,13 @@ What goes here:
 
 ### Refine — iterate the rule with structured feedback
 
-Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three upstream rule-engineering agents:
+Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three steps, native and vendor-free by default (v2, 2026-09):
 
-1. **RuleSimilarity** — does a rule like this already exist?
-2. **RuleOverlap** — do its triggers heavily overlap with another rule's findings?
-3. **Verification** — would the rule survive the four-engine constraint and pass schema validation?
+1. **RuleSimilarity** — BM25 nearest-neighbor search over the catalog — does a rule like this already exist?
+2. **RuleOverlap** — deterministic duplicate/complementary/redundant classification within the target's MITRE technique cluster — do its triggers heavily overlap with another rule's findings?
+3. **Verification** — schema field-usage + four-engine-constraint check — would the rule survive those constraints and pass validation?
 
-Each result is appended to the detection's journal under a `### Refine / <step>` heading. The chain does not abort on failure; partial results are valuable.
+Each result is appended to the detection's journal under a `### Refine / <step>` heading. The chain does not abort on failure; partial results are valuable. Each step honors an optional `ADEF_WRAPPER_<KEY>` env var override to delegate to a configured upstream agent (exactly as before v2, if explicitly set).
 
 **Example.** Refine appends *"RuleOverlap: 78% with `windows_lolbin_mshta_public.yml`. Recommendation: merge with that rule's filter logic rather than ship a near-duplicate."*
 

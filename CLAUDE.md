@@ -301,7 +301,7 @@ ADEF uses Python entry points for extensibility (same as ATHF):
 ADEF never hardcodes upstream package names. Integration uses env vars:
 
 ```bash
-# Wrapper bindings (the upstream rule-engineering agents ADEF orchestrates)
+# Wrapper bindings (optional upstream overrides — native by default since v2)
 ADEF_WRAPPER_RULE_SIMILARITY=package.module:RuleSimilarityClass
 ADEF_WRAPPER_RULE_OVERLAP=package.module:RuleOverlapClass
 ADEF_WRAPPER_VERIFICATION=package.module:VerificationClass
@@ -316,19 +316,31 @@ ADEF_HUNT_ROOT=/path/to/upstream/hunts      # Read-only hunt artifacts directory
 ADEF_WORKSPACE=/path/to/adef-workspace      # Override default workspace location
 ```
 
-If a binding is missing or import fails, the wrapper raises `WrapperUnavailable` → orchestration logs error to journal and continues.
+For Similarity/Overlap/Verification, a missing binding now runs the native
+agent instead of raising `WrapperUnavailable` (PerformanceMetrics has no
+native implementation yet and is unaffected by this change). An explicitly
+set binding whose import fails still raises `WrapperUnavailable` as before.
 
 ### The Refine Chain
 
 When `adef detection refine D-XXXX` runs:
 1. Advances stage to `refine`
 2. Invokes `orchestration/refine_chain.py`
-3. Runs **three upstream agents in sequence**:
-   - **RuleSimilarity**: Does a rule like this already exist?
-   - **RuleOverlap**: Do triggers heavily overlap with another rule?
-   - **Verification**: Would the rule pass schema validation + four-engine constraint?
+3. Runs **three steps in sequence, native and vendor-free by default** (v2, 2026-09):
+   - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
+     search over the catalog — does a rule like this already exist?
+   - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
+     duplicate/complementary/redundant classification within the target's MITRE
+     technique cluster (`catalog/INDEX.yml`'s `by_technique` map)
+   - **Verification** (`adef/agents/verification.py`): schema field-usage +
+     four-engine-constraint check, via `adef.commands.schema.run_schema_check`
+     scoped to one detection
 4. Each result is appended to the detection's journal under `### Refine / <step>` heading
 5. Chain does NOT abort on failure; partial results are valuable
+6. Each step still honors its `ADEF_WRAPPER_<KEY>` env var as an opt-in override
+   — if set, the step delegates to the configured upstream class exactly as
+   before v2. Unset (the default) now runs the native implementation instead of
+   raising `WrapperUnavailable`.
 
 ## Hard Rules (CI-Enforced Anti-Goals)
 
