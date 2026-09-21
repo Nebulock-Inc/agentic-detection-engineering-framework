@@ -13,7 +13,15 @@ hands-on walkthrough, `docs/quickstart.md`.
 Release pipeline shipped and **validated on Test PyPI** 2026-07-23 (build +
 upload + index-install verified); real PyPI push on hold until v1 is further
 along. See `docs/publishing.md`.
-**Last updated:** 2026-07-24.
+**Last updated:** 2026-09-21.
+
+**ADEFv2 in progress (Shortcut epic 9324):** the Refine chain's three steps
+(Similarity/Overlap/Verification, stories 9331/9332/9333) are implemented,
+tested, and CodeRabbit-reviewed on `Nebulock-Inc/adef-dev` PR #1
+(`feat/adef-refine-native-9331-9333`) — **not yet merged to `main`**. CI is
+green and the PR is mergeable; it's awaiting human review. Everything below
+this note describes `main` as it stands today, before that merge; see ISA.md's
+2026-09-18/2026-09-21 Decisions/Verification entries for the PR's full detail.
 
 ---
 
@@ -153,6 +161,24 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
   Splunk `tstats` rules query data-model fields (`Processes.process_name`)
   that never appear in a `fieldsummary` export, so `schema check` union-misses
   them (~39% of ESCU). Future seam: declare a data model as a source.
+
+### ADEFv2 (Shortcut epic 9324, target end of September 2026)
+
+- **Refine chain goes native by default** (9331/9332/9333) — implemented,
+  in PR #1, not yet merged (see the note at the top of this doc).
+- **Organization/tenant scoping** for native Similarity/Overlap catalog reads
+  in a multi-org workspace — deliberately deferred (ADEF is a standalone
+  open-source framework; only relevant once/if scoped into detect-vault
+  integration).
+- **Composite rule builder** — not started.
+- **Vendor testing-platform support** (CrowdStrike, Splunk, maybe Defender)
+  — not started.
+- **MCP-driven tuning** against a user's own live environment — not started.
+- **Vendor-connected metrics, performance, and drift capture** — blocked on
+  a capture-mechanism spike (ADEF core can't hold vendor API connectors, so
+  the spike picks the mechanism: manual export/import, MCP, adapter package,
+  or something else); spike not started.
+- **User-facing v2 docs** (why-adopt, use cases, MCP guidelines) — not started.
 
 ## Anti-goals (CI-enforced — will never ship)
 

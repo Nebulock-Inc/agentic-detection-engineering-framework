@@ -4,10 +4,10 @@ task: Build ADEF v0.1.0 — Agentic Detection Engineering Framework
 slug: adef-v0.1.0
 effort: E5
 phase: execute
-progress: 0/80
+progress: 74/81
 mode: build
 started: 2026-06-16T16:30:00-07:00
-updated: 2026-06-16T16:30:00-07:00
+updated: 2026-09-21T00:00:00-07:00
 algorithm_config:
   effort_source: context-override
   invoked_from: /goal goals/adef/goal.md
@@ -62,98 +62,98 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 ### Phase A — package skeleton
 
-- [ ] ISC-1: `~/work/agentic-detection-engineering-framework/pyproject.toml` exists with `name = "agentic-detection-engineering-framework"`.
-- [ ] ISC-2: `pyproject.toml` declares `[project.scripts]` entries `adef = "adef.cli:main"` and `adef-mcp = "adef.mcp.server:cli"`.
-- [ ] ISC-3: `pyproject.toml` declares entry-point groups `adef.commands`, `adef.agents`, `adef.mcp_tools` (consumed by plugin_system).
-- [ ] ISC-4: `adef/__init__.py` defines `__version__ = "0.1.0"`.
-- [ ] ISC-5: `adef/cli.py` exposes `main()` Click group; `pip install -e . && adef --help` exits 0 and lists the root group.
-- [ ] ISC-6: `adef/plugin_system.py` enumerates entry points for `adef.commands`, `adef.agents`, `adef.mcp_tools` and registers them with the root Click group.
-- [ ] ISC-7: Repo has `README.md`, `LICENSE` (MIT), `AGENTS.md`, `pytest.ini`, `.gitignore` at root.
-- [ ] ISC-8: `git init` + initial commit on `main` succeeds; `git log --oneline` shows the initial commit.
+- [x] ISC-1: `~/work/agentic-detection-engineering-framework/pyproject.toml` exists with `name = "agentic-detection-engineering-framework"`.
+- [x] ISC-2: `pyproject.toml` declares `[project.scripts]` entries `adef = "adef.cli:main"` and `adef-mcp = "adef.mcp.server:cli"`.
+- [x] ISC-3: `pyproject.toml` declares entry-point groups `adef.commands`, `adef.agents`, `adef.mcp_tools` (consumed by plugin_system).
+- [x] ISC-4: `adef/__init__.py` defines `__version__ = "0.1.0"`.
+- [x] ISC-5: `adef/cli.py` exposes `main()` Click group; `pip install -e . && adef --help` exits 0 and lists the root group.
+- [x] ISC-6: `adef/plugin_system.py` enumerates entry points for `adef.commands`, `adef.agents`, `adef.mcp_tools` and registers them with the root Click group.
+- [x] ISC-7: Repo has `README.md`, `LICENSE` (MIT), `AGENTS.md`, `pytest.ini`, `.gitignore` at root.
+- [x] ISC-8: `git init` + initial commit on `main` succeeds; `git log --oneline` shows the initial commit.
 
 ### Phase B — methodology + maturity + why-adef docs
 
-- [ ] ISC-9: `docs/methodology.md` contains heading `# FORGE Methodology` and one `##` heading per stage (`Find`, `Observe`, `Refine`, `Govern`, `Evolve`) with a worked example each.
-- [ ] ISC-10: `docs/maturity-model.md` contains five level headings (`L0 Ad-hoc`, `L1 Documented`, `L2 Searchable`, `L3 Generative`, `L4 Agentic`), each with a "what you get" bullet and a "time-to-value" line.
-- [ ] ISC-11: `docs/why-adef.md` (adoption guide) exists, frames ADEF and ATHF as paired siblings (literal phrase "paired siblings"), is linked from `README.md` and from `AGENTS.md`.
+- [x] ISC-9: `docs/methodology.md` contains heading `# FORGE Methodology` and one `##` heading per stage (`Find`, `Observe`, `Refine`, `Govern`, `Evolve`) with a worked example each.
+- [x] ISC-10: `docs/maturity-model.md` contains five level headings (`L0 Ad-hoc`, `L1 Documented`, `L2 Searchable`, `L3 Generative`, `L4 Agentic`), each with a "what you get" bullet and a "time-to-value" line.
+- [x] ISC-11: `docs/why-adef.md` (adoption guide) exists, frames ADEF and ATHF as paired siblings (literal phrase "paired siblings"), is linked from `README.md` and from `AGENTS.md`.
 
 ### Phase C — template + workspace init
 
-- [ ] ISC-12: `adef/data/templates/DETECTION_FORGE.md` has YAML frontmatter (id, status, current_stage, owner, created, updated, rule_uuid) plus five `##` headings (Find, Observe, Refine, Govern, Evolve).
-- [ ] ISC-13: `adef init` creates `journals/`, `config/.adefconfig.yaml`, `AGENTS.md`, `templates/DETECTION_FORGE.md` in the target dir; AGENTS.md links to methodology.md and maturity-model.md.
-- [ ] ISC-14: `adef init` defaults to `~/work/adef-workspace/` when invoked with no path argument and creates it if missing.
+- [x] ISC-12: `adef/data/templates/DETECTION_FORGE.md` has YAML frontmatter (id, status, current_stage, owner, created, updated, rule_uuid) plus five `##` headings (Find, Observe, Refine, Govern, Evolve).
+- [x] ISC-13: `adef init` creates `journals/`, `config/.adefconfig.yaml`, `AGENTS.md`, `templates/DETECTION_FORGE.md` in the target dir; AGENTS.md links to methodology.md and maturity-model.md.
+- [x] ISC-14: `adef init` defaults to `~/work/adef-workspace/` when invoked with no path argument and creates it if missing.
 
 ### Phase D — journal core + lifecycle CLI
 
-- [ ] ISC-15: `adef/core/journal.py` defines `Journal.create(detection_id)`.
-- [ ] ISC-15.1: `adef/core/journal.py` defines `Journal.advance_stage(detection_id, stage, payload)`.
-- [ ] ISC-15.2: `adef/core/journal.py` defines `Journal.read(detection_id)`.
-- [ ] ISC-15.3: `Journal.create` writes file at `journals/D-XXXX.md` from package template.
-- [ ] ISC-15.4: `Journal.create` populates frontmatter (`id`, `status`, `current_stage`, `owner`, `created`, `updated`, `rule_uuid`).
-- [ ] ISC-16: Stage transition appends `## [<ISO-8601>] Stage: <stage>` block.
-- [ ] ISC-16.1: Stage transition updates frontmatter `current_stage` atomically (write-temp + rename).
-- [ ] ISC-16.2: Stage transition updates frontmatter `updated` timestamp.
-- [ ] ISC-17: Re-advancing the same stage is idempotent (no duplicate block).
-- [ ] ISC-17.1: Re-advancing the same stage emits a warning to stderr.
-- [ ] ISC-18: Anti: no `adef.*` import opens or writes any path under a rule `detections/` directory (parity test using Path-monkey-patch fixture).
-- [ ] ISC-18.1: Anti: `Journal` class never receives a path under any rule `detections/` directory (unit test asserts).
-- [ ] ISC-19: `adef detection new` creates `D-XXXX.md` journal at Find stage.
-- [ ] ISC-19.1: D-XXXX numbering scans `journals/`, finds max, increments by 1.
-- [ ] ISC-19.2: D-XXXX numbering handles empty `journals/` directory (returns D-0001).
-- [ ] ISC-20: `adef detection observe <id>` advances state to Observe.
-- [ ] ISC-20.1: `adef detection observe <id>` appends Observe block to journal.
-- [ ] ISC-20.2: `adef detection observe <id>` renders `data/prompts/observe.md` into block.
-- [ ] ISC-21: `adef detection refine <id>` advances state to Refine.
-- [ ] ISC-21.1: `adef detection refine <id>` appends Refine block to journal.
-- [ ] ISC-21.2: `adef detection refine <id>` renders `data/prompts/refine.md` into block.
-- [ ] ISC-21.3: `adef detection refine <id>` invokes orchestration chain (cross-ref ISC-31..33).
-- [ ] ISC-22: `adef detection govern <id>` advances state to Govern.
-- [ ] ISC-22.1: `adef detection govern <id>` appends Govern block with deployment-gate / ownership / cadence prompts.
-- [ ] ISC-23: `adef detection evolve <id>` advances state to Evolve.
-- [ ] ISC-23.1: `adef detection evolve <id>` appends Evolve block with tuning / deprecation / replacement prompts.
+- [x] ISC-15: `adef/core/journal.py` defines `Journal.create(detection_id)`.
+- [x] ISC-15.1: `adef/core/journal.py` defines `Journal.advance_stage(detection_id, stage, payload)`.
+- [x] ISC-15.2: `adef/core/journal.py` defines `Journal.read(detection_id)`.
+- [x] ISC-15.3: `Journal.create` writes file at `journals/D-XXXX.md` from package template.
+- [x] ISC-15.4: `Journal.create` populates frontmatter (`id`, `status`, `current_stage`, `owner`, `created`, `updated`, `rule_uuid`).
+- [x] ISC-16: Stage transition appends `## [<ISO-8601>] Stage: <stage>` block.
+- [x] ISC-16.1: Stage transition updates frontmatter `current_stage` atomically (write-temp + rename).
+- [x] ISC-16.2: Stage transition updates frontmatter `updated` timestamp.
+- [x] ISC-17: Re-advancing the same stage is idempotent (no duplicate block).
+- [x] ISC-17.1: Re-advancing the same stage emits a warning to stderr.
+- [x] ISC-18: Anti: no `adef.*` import opens or writes any path under a rule `detections/` directory (parity test using Path-monkey-patch fixture).
+- [x] ISC-18.1: Anti: `Journal` class never receives a path under any rule `detections/` directory (unit test asserts).
+- [x] ISC-19: `adef detection new` creates `D-XXXX.md` journal at Find stage.
+- [x] ISC-19.1: D-XXXX numbering scans `journals/`, finds max, increments by 1.
+- [x] ISC-19.2: D-XXXX numbering handles empty `journals/` directory (returns D-0001).
+- [x] ISC-20: `adef detection observe <id>` advances state to Observe.
+- [x] ISC-20.1: `adef detection observe <id>` appends Observe block to journal.
+- [x] ISC-20.2: `adef detection observe <id>` renders `data/prompts/observe.md` into block.
+- [x] ISC-21: `adef detection refine <id>` advances state to Refine.
+- [x] ISC-21.1: `adef detection refine <id>` appends Refine block to journal.
+- [x] ISC-21.2: `adef detection refine <id>` renders `data/prompts/refine.md` into block.
+- [x] ISC-21.3: `adef detection refine <id>` invokes orchestration chain (cross-ref ISC-31..33).
+- [x] ISC-22: `adef detection govern <id>` advances state to Govern.
+- [x] ISC-22.1: `adef detection govern <id>` appends Govern block with deployment-gate / ownership / cadence prompts.
+- [x] ISC-23: `adef detection evolve <id>` advances state to Evolve.
+- [x] ISC-23.1: `adef detection evolve <id>` appends Evolve block with tuning / deprecation / replacement prompts.
 
 ### Phase E — upstream rule-agent wrappers
 
-- [ ] ISC-24: `adef/agents/wrappers/` contains 12 wrapper files, one per upstream rule-engineering agent (RuleSimilarity, RuleOverlap, Coverage, Performance, DetectionDecision, DetectionReview, DroppedFindings, FindingsAnalysis, FpPattern, ReviewQueue, ThreatReview, Verification).
-- [ ] ISC-25: Each wrapper resolves its underlying upstream class via the `ADEF_WRAPPER_<KEY>=module.path:ClassName` env var (where `<KEY>` matches the wrapper's `binding_key`).
-- [ ] ISC-26: Anti: ADEF wrappers never modify upstream rule-agent source — wrappers are pure adapters; the upstream package owns its own state.
+- [x] ISC-24: `adef/agents/wrappers/` contains 12 wrapper files, one per upstream rule-engineering agent (RuleSimilarity, RuleOverlap, Coverage, Performance, DetectionDecision, DetectionReview, DroppedFindings, FindingsAnalysis, FpPattern, ReviewQueue, ThreatReview, Verification).
+- [x] ISC-25: Each wrapper resolves its underlying upstream class via the `ADEF_WRAPPER_<KEY>=module.path:ClassName` env var (where `<KEY>` matches the wrapper's `binding_key`).
+- [x] ISC-26: Anti: ADEF wrappers never modify upstream rule-agent source — wrappers are pure adapters; the upstream package owns its own state.
 
 ### Phase F — new ADEF agents
 
-- [ ] ISC-27: `adef/agents/hypothesis_from_intel.py` defines `HypothesisFromIntelAgent` with a `run(intel_url_or_text)` method returning a draft Find/Observe block.
-- [ ] ISC-28: `adef/agents/tune_recommender.py` defines `TuneRecommenderAgent` returning tuning suggestions given a `detection_id`.
-- [ ] ISC-29: `adef/agents/deprecation_recommender.py` defines `DeprecationRecommenderAgent` returning keep/tune/deprecate.
-- [ ] ISC-30: `adef/agents/hunt_promotion.py` defines `HuntPromotionAgent` invoking the configured hunt-rule generator (resolved via `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName`) and writing a populated journal.
+- [x] ISC-27: `adef/agents/hypothesis_from_intel.py` defines `HypothesisFromIntelAgent` with a `run(intel_url_or_text)` method returning a draft Find/Observe block.
+- [x] ISC-28: `adef/agents/tune_recommender.py` defines `TuneRecommenderAgent` returning tuning suggestions given a `detection_id`.
+- [x] ISC-29: `adef/agents/deprecation_recommender.py` defines `DeprecationRecommenderAgent` returning keep/tune/deprecate.
+- [x] ISC-30: `adef/agents/hunt_promotion.py` defines `HuntPromotionAgent` invoking the configured hunt-rule generator (resolved via `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName`) and writing a populated journal.
 
 ### Phase G — Refine orchestration chain
 
-- [ ] ISC-31: `adef/orchestration/refine_chain.py` defines a function/class that runs Similarity → Overlap → Verification in sequence.
-- [ ] ISC-32: Each agent's result is appended to the detection's journal under the Refine block.
-- [ ] ISC-33: Integration test using fixtures (no live ClickHouse) asserts all three wrappers fire and outputs land in the journal.
+- [x] ISC-31: `adef/orchestration/refine_chain.py` defines a function/class that runs Similarity → Overlap → Verification in sequence.
+- [x] ISC-32: Each agent's result is appended to the detection's journal under the Refine block.
+- [x] ISC-33: Integration test using fixtures (no live ClickHouse) asserts all three wrappers fire and outputs land in the journal.
 
 ### Phase H — Memory search
 
-- [ ] ISC-34: `adef/core/memory.py` defines `MemoryIndex.search(query)` returning ranked merged results (journal markdown + YAML metadata).
-- [ ] ISC-35: BM25 over markdown is implemented (no embeddings — deferred to v0.2).
-- [ ] ISC-36: Lazy-loads upstream YAML rule metadata via `adef.core.rule_bridge` (configured by `ADEF_RULE_ROOT`); no eager import, gracefully degrades if not configured.
+- [x] ISC-34: `adef/core/memory.py` defines `MemoryIndex.search(query)` returning ranked merged results (journal markdown + YAML metadata).
+- [x] ISC-35: BM25 over markdown is implemented (no embeddings — deferred to v0.2).
+- [x] ISC-36: Lazy-loads upstream YAML rule metadata via `adef.core.rule_bridge` (configured by `ADEF_RULE_ROOT`); no eager import, gracefully degrades if not configured.
 
 ### Phase I — MCP server
 
-- [ ] ISC-37: `adef/mcp/server.py` instantiates a FastMCP named `"adef"` and exposes `cli` callable.
-- [ ] ISC-38: `adef/mcp/tools/lifecycle_tools.py` exposes FORGE stage-advance tools.
-- [ ] ISC-39: `adef/mcp/tools/memory_tools.py` exposes `memory_search` tool.
-- [ ] ISC-40: `adef/mcp/tools/agent_tools.py` exposes orchestration triggers + individual agent invocation tools.
-- [ ] ISC-41: `adef/mcp/tools/init_tools.py` exposes workspace ops (init, status).
-- [ ] ISC-42: Server discovers plugin tools via `entry_points(group="adef.mcp_tools")`.
-- [ ] ISC-43: In-process integration test boots server, lists tools, asserts each expected tool is registered.
+- [x] ISC-37: `adef/mcp/server.py` instantiates a FastMCP named `"adef"` and exposes `cli` callable.
+- [x] ISC-38: `adef/mcp/tools/lifecycle_tools.py` exposes FORGE stage-advance tools.
+- [x] ISC-39: `adef/mcp/tools/memory_tools.py` exposes `memory_search` tool.
+- [x] ISC-40: `adef/mcp/tools/agent_tools.py` exposes orchestration triggers + individual agent invocation tools.
+- [x] ISC-41: `adef/mcp/tools/init_tools.py` exposes workspace ops (init, status).
+- [x] ISC-42: Server discovers plugin tools via `entry_points(group="adef.mcp_tools")`.
+- [x] ISC-43: In-process integration test boots server, lists tools, asserts each expected tool is registered.
 
 ### Phase J — hunt-to-detection promotion
 
-- [ ] ISC-44: `adef/commands/hunt_promote.py` defines `adef hunt-promote H-XXXX`.
-- [ ] ISC-45: Resolves H-XXXX through the configured hunt source, invokes `HuntPromotionAgent` (ISC-30).
-- [ ] ISC-46: Writes draft staging YAML to the configured rule-staging directory (`--rule-staging-root` / `ADEF_RULE_STAGING_ROOT`) — never inside any rule `detections/` directory.
-- [ ] ISC-47: Creates ADEF journal at Find stage with intel sources populated.
-- [ ] ISC-48: Anti: hunt-promote with no generator configured exits with a clear error (no ImportError surface).
+- [x] ISC-44: `adef/commands/hunt_promote.py` defines `adef hunt-promote H-XXXX`.
+- [x] ISC-45: Resolves H-XXXX through the configured hunt source, invokes `HuntPromotionAgent` (ISC-30).
+- [x] ISC-46: Writes draft staging YAML to the configured rule-staging directory (`--rule-staging-root` / `ADEF_RULE_STAGING_ROOT`) — never inside any rule `detections/` directory.
+- [x] ISC-47: Creates ADEF journal at Find stage with intel sources populated.
+- [x] ISC-48: Anti: hunt-promote with no generator configured exits with a clear error (no ImportError surface).
 
 ### Phase K — [DROPPED — see Decisions 2026-06-16 vendor neutralization scope cut]
 
@@ -167,21 +167,21 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 ### Phase L — roadmap + north-star + backfill
 
-- [ ] ISC-56: `docs/roadmap.md` lists daemons, agent-to-agent handoff, autonomous deprecation as v0.2+ items.
-- [ ] ISC-57: `docs/north-star.md` contains the literal phrase `--from-intel` and describes the v1 demo flow.
-- [ ] ISC-58: `adef backfill journals` command creates skeleton journals for existing upstream rule YAML (decided per goal Q2 — ships in v0.1.0).
+- [x] ISC-56: `docs/roadmap.md` lists daemons, agent-to-agent handoff, autonomous deprecation as v0.2+ items.
+- [x] ISC-57: `docs/north-star.md` contains the literal phrase `--from-intel` and describes the v1 demo flow.
+- [x] ISC-58: `adef backfill journals` command creates skeleton journals for existing upstream rule YAML (decided per goal Q2 — ships in v0.1.0).
 
 ### Phase M — anti-goal CI guards
 
-- [ ] ISC-59: Anti: `tests/test_schema_parity.py` greps every `adef.*` source file for write-paths inside any `detections/` directory — passes (no offenders).
-- [ ] ISC-60: Anti: `tests/test_engine_guard.py` greps adef source — no engine name beyond `sigma|sql|sch_sql|composite` appears.
-- [ ] ISC-61: Anti: `tests/test_connector_guard.py` greps adef source — no `crowdstrike|splunk|sentinelone` import appears.
-- [ ] ISC-62: Anti: `tests/test_no_web_ui.py` parses `pyproject.toml` dependencies — none of `flask|fastapi|starlette|django|next|react` present.
+- [x] ISC-59: Anti: `tests/test_schema_parity.py` greps every `adef.*` source file for write-paths inside any `detections/` directory — passes (no offenders).
+- [x] ISC-60: Anti: `tests/test_engine_guard.py` greps adef source — no engine name beyond `sigma|sql|sch_sql|composite` appears.
+- [x] ISC-61: Anti: `tests/test_connector_guard.py` greps adef source — no `crowdstrike|splunk|sentinelone` import appears.
+- [x] ISC-62: Anti: `tests/test_no_web_ui.py` parses `pyproject.toml` dependencies — none of `flask|fastapi|starlette|django|next|react` present.
 
 ### Cross-cutting
 
-- [ ] ISC-63: All 31 facts in `docs/verification.md` are evidence-mapped (probe-by-probe).
-- [ ] ISC-64: Antecedent: when hunt-promotion or wrapper functionality is exercised, an upstream rule + hunt package is installed and resolvable via `ADEF_HUNT_RULE_GENERATOR` and `ADEF_WRAPPER_*` env vars. Verified by configuring those env vars and running an end-to-end smoke test in the operating environment.
+- [x] ISC-63: All 31 facts in `docs/verification.md` are evidence-mapped (probe-by-probe).
+- [x] ISC-64: Antecedent: when hunt-promotion or wrapper functionality is exercised, an upstream rule + hunt package is installed and resolvable via `ADEF_HUNT_RULE_GENERATOR` and `ADEF_WRAPPER_*` env vars. Verified by configuring those env vars and running an end-to-end smoke test in the operating environment.
 
 ## Test Strategy
 
@@ -484,6 +484,16 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
 
 - 2026-07-24 — **README reshaped (Phase 4 — the `docs/plans/2026-07-23-readme-reshape-proposal.md` proposal, implemented).** Reorganized `README.md` into three tiers with a numbered **Quick start** spine (0 → first coverage report); the three on-ramps folded into quick-start step 3; the FORGE philosophy demoted to a one-line teaser up top with the full 5-stage walkthrough moved beside its commands in Tier 2 ("Work the FORGE lifecycle"); the 24-line schema merge deep-dive compressed to ~10 lines + a `schema-declaration` skill link. **~85% of the body reused verbatim** (+85/−90 net). A *reshape only* — no feature or claim changes (feature freeze). The four open questions were resolved on the recommended defaults (no colleague feedback had landed in-repo — nobody had touched README or the proposal since it was written): (1) **Sentinel** as the second example platform, (2) merge deep-dive compressed inline + skill link (**no new schema doc** — scope creep under freeze), (3) FORGE **teaser + Tier-2 walkthrough**, (4) quick-start **schema→catalog** order (with a repo-only-can-catalog-first note). Plugin section now lists all **8 skills** (incl. `forge-stage`) + links `docs/skills-reference.md`. Prior README pass was 2026-07-22 (on-ramps rework); this is the linear-journey reshape on top.
 
+- 2026-09-18 — **ADEFv2 kickoff: Refine chain goes native by default (Shortcut epic 9324, stories 9331/9332/9333).** Since v0.1.0, `adef detection refine` only ever ran the Refine chain's three steps (RuleSimilarity, RuleOverlap, Verification) as thin `ADEF_WRAPPER_<KEY>` dispatchers to an upstream package — unconfigured (every real install), the step raised `WrapperUnavailable` and the chain logged "not configured." ADEFv2's first slice replaces that with real, vendor-decoupled implementations that just work out of the box, while keeping the wrapper env var as a fully-supported opt-in override (byte-for-byte the old behavior when set). Decisions:
+  - **RuleSimilarity is agentic-by-nature, not vendor-free-by-default.** Epic owner direction (2026-09-18): the deterministic path is the guaranteed fallback, not the ceiling — `adef/agents/rule_similarity.py` always ranks the catalog with the existing BM25 engine (`adef.core.memory.MemoryIndex`, the same index `detection search` already builds), then optionally reranks just that shortlist with an LLM judge. `--similarity-mode {auto,bm25,llm}`; `auto` (the default) uses the LLM when `ANTHROPIC_API_KEY` is set and the new optional `llm` extra (`anthropic` SDK) is installed, else stays BM25-only — no LLM SDK is ever a required dependency. Retrieve-then-rerank keeps cost/latency bounded by `top_k`, never catalog size. **Native and vendor-free are not the same guarantee**: only `bm25` mode makes no network call; `auto`/`llm` can send the target's title/MITRE/query (truncated 500 chars) plus each shortlisted candidate's id/title/snippet to the Anthropic API — the snippet is built from both the journal body and the catalog search text (`record_search_text`: title/MITRE/platform/data_source/format/query), so catalog and query content can be disclosed too, not just journal prose.
+  - **LLM judge response is fully schema-validated, not trust-and-coerce.** `json.loads` accepts literal `NaN`/`Infinity`, and a judge could omit a candidate, duplicate an ID, or return an unknown ID. Any of these — plus a non-finite/out-of-range confidence or non-string reasoning — now routes through the same `bm25_fallback` path already used for unparseable JSON, rather than silently mixing an LLM confidence score with a raw, unbounded BM25 score in one sorted list (found live via CodeRabbit review on the implementation PR, fixed before merge).
+  - **RuleOverlap** (`adef/agents/rule_overlap.py`) is a deterministic, stdlib-only (`difflib`/`hashlib`) port of duplicate/complementary/redundant classification within one MITRE technique cluster — no LLM, ever, ported from detect-vault's `RuleOverlapAgent._analyze_cluster_deterministic` reference behavior. A substring-containment check (for the "one rule adds a clause" redundant case) is boundary-aware (`event.code=1` is a raw-string substring of `event.code=10` but not a real superset relation — found live via CodeRabbit review, fixed before merge) and strips one layer of detect-vault's outer-paren WHERE-only convention (a known, documented ceiling: a real matched-pair strip is the upgrade path if a fixture ever needs nested parens at the outer edge).
+  - **Verification** (`adef/agents/verification.py`) delegates to a newly-extracted core (`run_schema_check()` in `adef/commands/schema.py`, the same logic `adef schema check` already used) scoped to one `detection_id`. **Scope ruling:** "type validation" here means schema-completeness — every field a rule references must resolve to a declared schema field with a non-empty `type` (aliases now correctly inherit their parent field's type, another CodeRabbit-review fix) — not query-literal type-checking (verifying a compared *value's* type against the field's declared type). Building real value/type inference per query language is materially larger than this slice; flagged to the epic owner, with a future live-verification MCP tool as the recommended follow-up (not built).
+  - **`NoCatalogRecordError(ValueError)`** (`adef.core.catalog`) is new and deliberately distinct from `WrapperUnavailable`: a journal-only detection (still at Find/Observe, no catalog record yet) is an expected, common lifecycle state, not a misconfiguration. `refine_chain.py` renders it as its own outcome ("Not run — no catalog record for … yet (still journal-only)"), separate from "isn't configured." `WrapperUnavailable` is now reserved solely for an explicitly-set `ADEF_WRAPPER_<KEY>` binding that fails to import.
+  - **Wrapper context-forwarding preserved, not just native-only kwargs dropped.** An earlier fix-wave pass had the configured-upstream branch drop *all* caller `**ctx` (to avoid forwarding the chain's new native-only kwargs — `workspace`, `similarity_mode` — to a strict-signature upstream class), which silently broke any other caller context a configured override might need (found via CodeRabbit review). Fixed by filtering out only `{workspace, similarity_mode}` (`adef.agents.wrappers._base.NATIVE_ONLY_CTX_KEYS`) and forwarding everything else, in all three wrappers.
+  - **Explicitly deferred, not forgotten:** organization/tenant scoping for native Similarity/Overlap catalog reads. `Catalog.iter_records()` has no `organization_id`, so a workspace holding records from more than one organization could leak cross-org data into Similarity's Anthropic calls and Overlap's cluster classification. Per standing project policy — ADEF is a standalone open-source framework and must carry zero Platform/Detect-Vault dependency by itself — this is out of scope for ADEF unless/until this work is explicitly scoped into detect-vault integration; revisit then, not before.
+  - **Status at this writing:** implemented, tested (464 tests passing, ruff/mypy clean), and CodeRabbit-reviewed on `Nebulock-Inc/adef-dev` PR #1 (`feat/adef-refine-native-9331-9333`) — **not yet merged to `main`**; CI green and mergeable, awaiting human review. Stories 9331/9332/9333 moved to Shortcut "In Review" to match.
+
 ## Changelog
 
 (populated at LEARN — conjecture / refuted_by / learned / criterion_now)
@@ -659,3 +669,9 @@ Build ADEF v0.1.0 such that: (a) `pip install -e .` succeeds and `adef --help` s
   - **Why:** the command predated the catalog architecture and was dead code against every corpus `adef catalog` handles — its `rule_bridge.iter_rules()` discovery reads only the legacy YAML-with-uuid shape, so on a fresh workspace vs. `examples/demo-rules` it found zero rules and misreported "every rule already has a journal". Zero test coverage; ID allocation was journals-only (the same shared-ID-space clobber fixed in `detection new` on 2026-07-22, never applied here). Its stated purpose (memory search useful over an existing corpus) is doubly subsumed: `catalog`/`sync` pair every record with a skeleton journal, and BM25 search indexes catalog records directly.
   - **What:** deleted `adef/commands/backfill.py` and `adef/core/rule_bridge.py` (backfill was its only consumer); removed the entry point. `adef sync` now re-creates a skeleton journal for any matched record whose journal file is missing — runs even with zero source drift, skipped on `--dry-run`/`--check`. Tests: `test_sync_recreates_missing_journal`, `test_sync_dry_run_does_not_recreate_journal`.
   - **Docs:** STATUS, cli-reference, why-adef (week 2 → "measure the gap"), roadmap, skills-reference (`journal-backfill` wave-2 item dropped), HANDOFF, AGENTS, CLAUDE. Tracked as Shortcut 7840.
+
+- 2026-09-21 — **Native Refine chain (stories 9331/9332/9333) — full gate green.** Evidence:
+  - `pytest` **464 passed / 2 skipped**; `ruff check adef/ tests/` clean; `mypy adef/` clean (60 source files), all on `feat/adef-refine-native-9331-9333`.
+  - Regression coverage added per shipped behavior: BM25 shortlist + self-exclusion, `similarity_mode` validation (`auto`/`bm25`/`llm` closed set), LLM-unavailable/explicit-mode error paths, LLM rerank via an injected fake client (no network in tests), malformed-JSON fallback, exact judge-response coverage enforcement (missing/duplicate/unknown `detection_id` all route to `bm25_fallback`), non-finite-confidence/non-string-reasoning clamping, exact-duplicate/redundant-substring/near-duplicate-ratio/complementary classification (including the boundary-aware substring fix and the paren-stripped detect-vault-shaped fixture cases), MITRE-technique cluster scoping, `NoCatalogRecordError` propagating through all three native agents and wrappers (distinct from `WrapperUnavailable`), wrapper context-forwarding (configured-upstream branch keeps non-native caller kwargs, drops only `workspace`/`similarity_mode`), and `--workspace` actually reaching every Refine-chain agent (the CLI command and the MCP `refine_chain` tool both had this bug independently; both fixed with a regression test each).
+  - **CodeRabbit review (`Nebulock-Inc/adef-dev` PR #1) triaged in full, two passes.** First pass: 9 findings — 7 applied (substring-boundary fix, LLM response confidence/reasoning coercion, `similarity_mode` validation, wrapper ctx-forwarding fix across all three wrappers, schema alias→type mapping, two doc-accuracy corrections), 1 deferred (the organization-boundary finding — see the Decisions entry above), 1 the doc-consistency follow-up the ctx-forwarding fix itself required. Second pass (after push): re-fetched threads found two were the *same* still-open threads re-surfacing (org-boundary, LLM-validation — re-deferred and completed respectively, not new issues), plus one genuinely new finding (exact judge-response coverage enforcement) and one doc claim needing the same vendor-free qualification applied elsewhere. All resolved; both rounds pushed with a single consolidated commit each and a PR summary comment (no per-issue replies, per the `coderabbit:autofix` skill's convention).
+  - **Not yet true:** merged to `main`. `gh pr view 1` at time of writing: `state: OPEN`, `mergeable: MERGEABLE`, `reviewDecision: REVIEW_REQUIRED`, all 7 status checks `SUCCESS`. This entry documents what shipped on the branch; treat as released only once merged — STATUS.md is updated to say so explicitly rather than implying a merge that hasn't happened.
