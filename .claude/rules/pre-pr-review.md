@@ -8,6 +8,7 @@ passes and fix or explicitly triage what they find:
    prior PR comments on the same files, and in-code comment guidance. This needs a
    PR to already exist, so it only applies once one is open (see ordering below).
 2. **The CodeRabbit CLI** — works on staged/committed changes with no PR required:
+
    ```bash
    coderabbit review --agent --committed --base <base-branch>
    ```
