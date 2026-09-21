@@ -46,3 +46,4 @@ node_modules/
 
 # Local AI-assistant state (not part of the package)
 .claude/
+.worktrees/
