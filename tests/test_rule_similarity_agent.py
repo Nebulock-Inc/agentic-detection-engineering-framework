@@ -172,6 +172,38 @@ def test_llm_mode_falls_back_on_malformed_response(workspace: Path):
     assert result["candidates"]  # BM25 shortlist still returned, not empty
 
 
+def test_llm_mode_falls_back_when_response_omits_a_candidate(workspace: Path):
+    # CodeRabbit PR #1: an omitted candidate would otherwise silently keep its
+    # raw BM25 score while judged siblings carry an LLM confidence — the two
+    # scales aren't comparable (BM25 scores aren't bounded to [0,1]), so the
+    # response must cover every shortlisted candidate exactly once or fall
+    # back entirely, same as malformed JSON.
+    fake = _FakeAnthropicClient("[]")
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                        similarity_mode="llm", llm_client=fake)
+    assert result["mode_used"] == "bm25_fallback"
+    assert "llm_error" in result
+
+
+def test_llm_mode_falls_back_on_duplicate_detection_id(workspace: Path):
+    fake = _FakeAnthropicClient(
+        '[{"detection_id": "D-0002", "confidence": 0.9},'
+        ' {"detection_id": "D-0002", "confidence": 0.5}]'
+    )
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                        similarity_mode="llm", llm_client=fake)
+    assert result["mode_used"] == "bm25_fallback"
+    assert "llm_error" in result
+
+
+def test_llm_mode_falls_back_on_unknown_detection_id(workspace: Path):
+    fake = _FakeAnthropicClient('[{"detection_id": "D-9999", "confidence": 0.9}]')
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                        similarity_mode="llm", llm_client=fake)
+    assert result["mode_used"] == "bm25_fallback"
+    assert "llm_error" in result
+
+
 def test_llm_mode_clamps_non_finite_confidence_and_stringifies_reasoning(workspace: Path):
     # CodeRabbit PR #1: json.loads accepts literal NaN/Infinity, so a
     # malformed-but-parseable LLM response could reach list.sort() with a

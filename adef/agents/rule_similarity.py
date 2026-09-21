@@ -84,6 +84,33 @@ def _safe_reasoning(raw: Any) -> str:
     return raw if isinstance(raw, str) else str(raw)
 
 
+def _validate_judge_coverage(scored: Any, expected_ids: set[str]) -> dict[str, dict]:
+    """Require exactly one judge result per shortlisted candidate.
+
+    A missing candidate would otherwise silently keep its raw BM25 score
+    while its siblings carry an LLM confidence — the two are not the same
+    scale (BM25 scores aren't bounded to [0, 1]), so sorting the mix
+    produces a meaningless ranking. A duplicate or unknown ``detection_id``
+    is equally a sign the response doesn't match the shortlist it was
+    asked to judge. Any violation raises so the caller's existing
+    ``bm25_fallback`` path handles it — the same path malformed JSON
+    already takes (found via CodeRabbit review, PR #1).
+    """
+    if not isinstance(scored, list):
+        raise ValueError(f"expected a JSON array of judge results, got {type(scored).__name__}")
+    by_id: dict[str, dict] = {}
+    for entry in scored:
+        det_id = entry.get("detection_id") if isinstance(entry, dict) else None
+        if not isinstance(det_id, str) or det_id in by_id or det_id not in expected_ids:
+            raise ValueError(f"judge response entry has an invalid or duplicate detection_id: {entry!r}")
+        by_id[det_id] = entry
+    if set(by_id) != expected_ids:
+        raise ValueError(
+            f"judge response covers {sorted(by_id)}, expected exactly {sorted(expected_ids)}"
+        )
+    return by_id
+
+
 class RuleSimilarityAgent:
     """Native replacement for the upstream RuleSimilarity wrapper agent."""
 
@@ -189,7 +216,7 @@ class RuleSimilarityAgent:
             "",
         )
         scored = json.loads(text)
-        by_id = {s["detection_id"]: s for s in scored}
+        by_id = _validate_judge_coverage(scored, {h.detection_id for h in hits})
         reranked = [
             {
                 "detection_id": h.detection_id,
