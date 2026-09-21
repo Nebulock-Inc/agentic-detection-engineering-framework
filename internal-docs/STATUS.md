@@ -174,10 +174,19 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
 - **Vendor testing-platform support** (CrowdStrike, Splunk, maybe Defender)
   — not started.
 - **MCP-driven tuning** against a user's own live environment — not started.
-- **Vendor-connected metrics, performance, and drift capture** — blocked on
-  a capture-mechanism spike (ADEF core can't hold vendor API connectors, so
-  the spike picks the mechanism: manual export/import, MCP, adapter package,
-  or something else); spike not started.
+- **Capture-mechanism spike** (9342) — **decided 2026-09-21, unblocks 9335.**
+  Three measurables defined (metrics = signal efficacy, performance = query
+  cost, drift = catalog-vs-deployed divergence); mechanism is results-in
+  ingestion mirroring `adef schema ingest`, with the existing
+  `ADEF_WRAPPER_<KEY>` adapter pattern as the automation escape hatch and MCP
+  exposure falling out of the normal entry-point registration. Full detail in
+  ISA.md's 2026-09-21 Decisions entry. Nothing built yet.
+- **Vendor-connected metrics, performance, and drift capture** (9335) — not
+  started, but no longer blocked (see the spike above). Implementation owns
+  the ingest commands/tools, the two new wrapper bindings, the versioned
+  results-document schemas, and reconciling the pre-existing
+  `PerformanceMetricsWrapper` naming mismatch (it returns *metrics*, not
+  query performance).
 - **User-facing v2 docs** (why-adopt, use cases, MCP guidelines) — not started.
 
 ## Anti-goals (CI-enforced — will never ship)
