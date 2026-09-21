@@ -98,6 +98,17 @@ def test_classify_pair_redundant_substring_parenthesized_reversed():
     )
 
 
+def test_classify_pair_rejects_adjacent_numeric_literal_false_positive():
+    # CodeRabbit PR #1: "event.code=1" is a raw Python substring of
+    # "event.code=10", but the two are unrelated comparisons, not a superset
+    # relation. Must classify as complementary (or duplicate/near-duplicate on
+    # ratio), never "redundant" via the substring path.
+    a = _rec("A", "t", "event.code=1", []).to_yaml_dict()
+    b = _rec("B", "t", "event.code=10", []).to_yaml_dict()
+    overlap = classify_pair(a, b, "A", "B")
+    assert overlap.overlap_type != "redundant"
+
+
 def test_classify_pair_complementary_different_logic():
     a = _rec("A", "t", "process.name='mshta.exe' and parent='winword.exe'", []).to_yaml_dict()
     b = _rec("B", "t", "network.dest_port=4444 and process.name='mshta.exe'", []).to_yaml_dict()

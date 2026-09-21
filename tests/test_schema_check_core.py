@@ -83,6 +83,33 @@ def test_flags_field_with_no_declared_type(workspace: Path):
     assert "user.name" in result.undeclared_type_fields.get("D-0003", [])
 
 
+def test_alias_reference_does_not_flag_undeclared_type(tmp_path: Path):
+    # CodeRabbit PR #1: known_field_names() accepts a field's aliases as
+    # legitimate references, but declared_types previously only mapped
+    # canonical names — so a rule using an alias was wrongly reported as
+    # referencing a field with no declared type.
+    ws = tmp_path / "ws"
+    (ws / "catalog").mkdir(parents=True)
+    (ws / "schema").mkdir(parents=True)
+    (ws / "schema" / "wineventlog.yml").write_text(
+        yaml.safe_dump(_schema_v2("wineventlog", [
+            {"name": "process.name", "type": "string", "aliases": ["proc_name"]},
+        ])),
+        encoding="utf-8",
+    )
+    cat = Catalog(ws)
+    rec = CatalogRecord(
+        id="D-0005", title="alias reference", rule_ref="r/d5.yml",
+        original_path="/tmp/d5.yml", platform="windows", kind="atomic",
+        engine="sql", format="sql",
+        query="proc_name = 'mshta.exe'", query_language="sql", data_source="wineventlog",
+    )
+    cat.write_raw(ws / "catalog" / f"{rec.id}.yml", rec.to_yaml_dict())
+
+    result = run_schema_check(ws, detection_ids=("D-0005",))
+    assert "proc_name" not in result.undeclared_type_fields.get("D-0005", [])
+
+
 def test_existing_behavior_preserved_whole_catalog(workspace: Path):
     # No `detection_ids` filter — the pre-existing whole-catalog mode must still work.
     result = run_schema_check(workspace)

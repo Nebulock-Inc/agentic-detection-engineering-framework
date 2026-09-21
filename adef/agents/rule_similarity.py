@@ -15,6 +15,7 @@ The LLM step never scans the whole corpus — cost and latency stay bounded by
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,8 @@ from adef.core.journal import Journal, workspace_journals_dir
 from adef.core.memory import MemoryIndex
 
 DEFAULT_LLM_MODEL = "claude-haiku-4-5-20251001"
+
+_VALID_SIMILARITY_MODES = frozenset({"auto", "bm25", "llm"})
 
 _JUDGE_PROMPT = """You are a detection engineering expert. Given a target detection rule and a \
 shortlist of candidates retrieved by keyword search, judge which candidates are a true semantic \
@@ -56,6 +59,31 @@ def _llm_available() -> bool:
     return _anthropic_importable()
 
 
+def _safe_confidence(raw: Any, fallback: float) -> float:
+    """Coerce an LLM-reported confidence to a finite float in [0, 1].
+
+    `json.loads` accepts literal `NaN`/`Infinity` tokens (found via
+    CodeRabbit review, PR #1) — a non-finite or out-of-range value would
+    otherwise reach `list.sort()` and corrupt the ranking without ever
+    entering the `bm25_fallback` path, since it parses and converts cleanly.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(value):
+        return fallback
+    return max(0.0, min(1.0, value))
+
+
+def _safe_reasoning(raw: Any) -> str:
+    """Coerce an LLM-reported reasoning value to a string (found via
+    CodeRabbit review, PR #1 — a non-string value passed through unchanged)."""
+    if raw is None:
+        return ""
+    return raw if isinstance(raw, str) else str(raw)
+
+
 class RuleSimilarityAgent:
     """Native replacement for the upstream RuleSimilarity wrapper agent."""
 
@@ -68,6 +96,12 @@ class RuleSimilarityAgent:
         llm_client: Any | None = None,
         **ctx: Any,
     ) -> dict[str, Any]:
+        if similarity_mode not in _VALID_SIMILARITY_MODES:
+            raise ValueError(
+                f"similarity_mode must be one of {sorted(_VALID_SIMILARITY_MODES)}, "
+                f"got {similarity_mode!r}"
+            )
+
         journals_dir = workspace_journals_dir(workspace, create=False)
         ws = journals_dir.parent
         catalog = Catalog(ws)
@@ -160,9 +194,9 @@ class RuleSimilarityAgent:
             {
                 "detection_id": h.detection_id,
                 "title": h.title,
-                "score": float(by_id.get(h.detection_id, {}).get("confidence", h.score)),
+                "score": _safe_confidence(by_id.get(h.detection_id, {}).get("confidence"), h.score),
                 "snippet": h.snippet,
-                "reasoning": by_id.get(h.detection_id, {}).get("reasoning", ""),
+                "reasoning": _safe_reasoning(by_id.get(h.detection_id, {}).get("reasoning")),
             }
             for h in hits
         ]

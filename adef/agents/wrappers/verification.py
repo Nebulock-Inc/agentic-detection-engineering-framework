@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from adef.agents.wrappers._base import WrapperBase
+from adef.agents.wrappers._base import NATIVE_ONLY_CTX_KEYS, WrapperBase
 
 
 class VerificationWrapper(WrapperBase):
@@ -18,10 +18,11 @@ class VerificationWrapper(WrapperBase):
 
     def run(self, detection_id: str, **ctx: Any) -> dict[str, Any]:
         if os.environ.get(self._env_var(), "").strip():
-            # `**ctx` is deliberately NOT forwarded to an upstream override: the
-            # chain now injects native-only kwargs (workspace, similarity_mode)
-            # that a strict-signature upstream class never accepted before.
-            return super().run(detection_id=detection_id)
+            # Forward everything the caller passed EXCEPT the native-only
+            # kwargs the chain injects — a configured upstream class may
+            # still need other caller context (see NATIVE_ONLY_CTX_KEYS).
+            forwarded = {k: v for k, v in ctx.items() if k not in NATIVE_ONLY_CTX_KEYS}
+            return super().run(detection_id=detection_id, **forwarded)
         from adef.agents.verification import VerificationAgent
 
         # `NoCatalogRecordError` (journal-only detection) propagates on purpose —

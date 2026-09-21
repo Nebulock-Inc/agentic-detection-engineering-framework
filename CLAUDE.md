@@ -335,7 +335,9 @@ set binding whose import fails still raises `WrapperUnavailable` as before.
 When `adef detection refine D-XXXX` runs:
 1. Advances stage to `refine`
 2. Invokes `orchestration/refine_chain.py`
-3. Runs **three steps in sequence, native and vendor-free by default** (v2, 2026-09):
+3. Runs **three steps in sequence, native by default** (v2, 2026-09) — native
+   execution and vendor-free execution are not the same guarantee: only
+   RuleSimilarity's `bm25` mode is vendor-free, and it is not the default:
    - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
      search over the catalog — does a rule like this already exist? —
      optionally reranked by an LLM judge (`adef detection refine D-XXXX
@@ -343,9 +345,12 @@ When `adef detection refine D-XXXX` runs:
      when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
      installed, otherwise stays BM25-only). **Data egress in `llm`/`auto`
      mode:** the target's title, MITRE IDs, and query (truncated to 500
-     chars), plus each shortlisted candidate's ID, title, and
-     journal-derived snippet, are sent to the Anthropic API. `bm25` makes
-     no network call.
+     chars), plus each shortlisted candidate's ID, title, and snippet, are
+     sent to the Anthropic API — the snippet is built from both the
+     journal body AND the catalog search text (title, MITRE IDs, platform,
+     data source, format, query — see `record_search_text`), so catalog and
+     query content can be disclosed too, not just journal prose. `bm25` is
+     the only mode that makes no network call.
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)
@@ -357,9 +362,10 @@ When `adef detection refine D-XXXX` runs:
 6. Each step still honors its `ADEF_WRAPPER_<KEY>` env var as an opt-in override
    — if set, the step delegates to the configured upstream class exactly as
    before v2. Unset (the default) now runs the native implementation instead of
-   raising `WrapperUnavailable`. Only `detection_id` is forwarded to an
-   override, never the chain's native-only kwargs (`workspace`,
-   `similarity_mode`), so a strict-signature upstream class keeps working.
+   raising `WrapperUnavailable`. `detection_id` plus any other caller context is
+   forwarded to an override — except the chain's native-only kwargs
+   (`workspace`, `similarity_mode`), which are filtered out so a
+   strict-signature upstream class keeps working.
 7. A detection with no catalog record yet (still journal-only) raises
    `NoCatalogRecordError` from the native agent; the chain renders that as
    *"Not run — no catalog record for D-XXXX yet (still journal-only)"*. That's

@@ -45,6 +45,28 @@ def _similarity(query_a: str, query_b: str) -> float:
     return SequenceMatcher(None, _normalize_query(query_a), _normalize_query(query_b)).ratio()
 
 
+_BOUNDARY_CONTINUATION_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz0123456789._"
+)
+
+
+def _is_clean_substring(needle: str, haystack: str) -> bool:
+    """True if ``needle`` occurs in ``haystack`` at a clause boundary, not as
+    a partial token — e.g. "event.code=1" is a raw Python substring of
+    "event.code=10", but the two are unrelated comparisons, not a superset
+    relation. Reject a match whose neighboring character continues an
+    identifier or number (found live via CodeRabbit review, PR #1)."""
+    idx = haystack.find(needle)
+    if idx == -1:
+        return False
+    before = haystack[idx - 1] if idx > 0 else ""
+    after = haystack[idx + len(needle)] if idx + len(needle) < len(haystack) else ""
+    return (
+        before not in _BOUNDARY_CONTINUATION_CHARS
+        and after not in _BOUNDARY_CONTINUATION_CHARS
+    )
+
+
 def classify_pair(record_a: dict, record_b: dict, id_a: str, id_b: str) -> Overlap:
     """Classify the relationship of ``record_b`` relative to ``record_a``.
 
@@ -75,13 +97,13 @@ def classify_pair(record_a: dict, record_b: dict, id_a: str, id_b: str) -> Overl
         # real matched-pair strip if a fixture ever needs that shape.
         norm_a_stripped = norm_a.lstrip("(").rstrip(")")
         norm_b_stripped = norm_b.lstrip("(").rstrip(")")
-        if norm_a_stripped in norm_b_stripped:
+        if _is_clean_substring(norm_a_stripped, norm_b_stripped):
             return Overlap(
                 id_b, "redundant", len(norm_a_stripped) / len(norm_b_stripped),
                 f"{id_b}'s query is a strict superset of {id_a}'s predicate — "
                 f"{id_b} fires on a subset of what {id_a} already covers",
             )
-        if norm_b_stripped in norm_a_stripped:
+        if _is_clean_substring(norm_b_stripped, norm_a_stripped):
             return Overlap(
                 id_b, "redundant", len(norm_b_stripped) / len(norm_a_stripped),
                 f"{id_a}'s query is a strict superset of {id_b}'s predicate — "

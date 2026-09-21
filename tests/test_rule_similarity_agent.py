@@ -1,4 +1,5 @@
 # tests/test_rule_similarity_agent.py
+import math
 from pathlib import Path
 
 import pytest
@@ -87,6 +88,17 @@ def test_unknown_detection_id_raises(workspace: Path):
         RuleSimilarityAgent().run(detection_id="D-9999", workspace=workspace, similarity_mode="bm25")
 
 
+def test_unsupported_similarity_mode_raises(workspace: Path):
+    # CodeRabbit PR #1: a direct caller (MCP tool, wrapper, programmatic use)
+    # bypasses the CLI's click.Choice(["auto", "bm25", "llm"]) validation —
+    # the agent itself must reject an unsupported mode rather than silently
+    # falling through to BM25 candidates while reporting the bad value as
+    # mode_used.
+    with pytest.raises(ValueError, match="not_a_real_mode"):
+        RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                   similarity_mode="not_a_real_mode")
+
+
 # --- Mode selection ---
 
 def test_llm_available_false_without_api_key(monkeypatch):
@@ -160,6 +172,28 @@ def test_llm_mode_falls_back_on_malformed_response(workspace: Path):
     assert result["candidates"]  # BM25 shortlist still returned, not empty
 
 
+def test_llm_mode_clamps_non_finite_confidence_and_stringifies_reasoning(workspace: Path):
+    # CodeRabbit PR #1: json.loads accepts literal NaN/Infinity, so a
+    # malformed-but-parseable LLM response could reach list.sort() with a
+    # non-finite score (corrupting ranking) or a non-string reasoning value.
+    # A NaN confidence falls back to the BM25 score (not itself clamped to
+    # [0,1] — that's how the underlying retrieval score is scaled).
+    bm25_result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                             similarity_mode="bm25")
+    bm25_score = bm25_result["candidates"][0]["score"]
+
+    fake = _FakeAnthropicClient(
+        '[{"detection_id": "D-0002", "confidence": NaN, "reasoning": 42}]'
+    )
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace, top_k=1,
+                                        similarity_mode="llm", llm_client=fake)
+    assert result["mode_used"] == "llm"
+    score = result["candidates"][0]["score"]
+    assert math.isfinite(score)
+    assert score == bm25_score  # NaN rejected -> fell back to the BM25 score
+    assert result["candidates"][0]["reasoning"] == "42"
+
+
 # --- Wrapper dispatch (native by default; ADEF_WRAPPER_RULE_SIMILARITY overrides) ---
 
 def test_wrapper_runs_native_agent_when_binding_unset(workspace: Path, monkeypatch):
@@ -193,3 +227,30 @@ def test_wrapper_propagates_no_catalog_record(workspace: Path, monkeypatch):
         RuleSimilarityWrapper().run(detection_id="D-9999", workspace=workspace,
                                      similarity_mode="bm25")
     assert not issubclass(NoCatalogRecordError, WrapperUnavailable)
+
+
+def test_wrapper_forwards_non_native_ctx_to_configured_upstream(workspace: Path, monkeypatch):
+    # CodeRabbit PR #1: the configured-upstream branch must strip only the
+    # native-only kwargs (workspace, similarity_mode) the chain injects, not
+    # ALL caller context — a configured class may rely on other kwargs.
+    import sys
+    import types
+
+    captured: dict = {}
+
+    class _FakeUpstream:
+        def run(self, **kwargs):
+            captured.update(kwargs)
+            return {"ok": True}
+
+    fake_module = types.ModuleType("fake_upstream_rule_similarity")
+    fake_module.FakeUpstream = _FakeUpstream
+    monkeypatch.setitem(sys.modules, "fake_upstream_rule_similarity", fake_module)
+    monkeypatch.setenv("ADEF_WRAPPER_RULE_SIMILARITY", "fake_upstream_rule_similarity:FakeUpstream")
+
+    from adef.agents.wrappers.rule_similarity import RuleSimilarityWrapper
+
+    RuleSimilarityWrapper().run(detection_id="D-0001", workspace=workspace,
+                                 similarity_mode="bm25", extra_context="keep-me")
+
+    assert captured == {"detection_id": "D-0001", "extra_context": "keep-me"}

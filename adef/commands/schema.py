@@ -211,9 +211,16 @@ def run_schema_check(ws: Path, detection_ids: Sequence[str] = ()) -> SchemaCheck
                 continue
             schemas[name] = known_field_names(data)
             declared_fields[name] = {str(f.get("name", "")) for f in data.get("fields", [])}
-            declared_types[name] = {
-                str(f.get("name", "")): str(f.get("type", "")) for f in data.get("fields", [])
-            }
+            # Alias names map to their parent field's type too — otherwise a
+            # rule referencing a typed field by its alias is accepted as
+            # "known" by known_field_names() but then wrongly reported as
+            # having no declared type (found via CodeRabbit review, PR #1).
+            declared_types[name] = {}
+            for f in data.get("fields", []):
+                field_type = str(f.get("type", ""))
+                declared_types[name][str(f.get("name", ""))] = field_type
+                for alias in f.get("aliases", []):
+                    declared_types[name][str(alias)] = field_type
             for literal in address_literals(data):
                 addressed_by.setdefault(literal, set()).add(name)
 
