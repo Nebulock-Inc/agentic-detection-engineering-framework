@@ -44,6 +44,10 @@ node_modules/
 /package.json
 /package-lock.json
 
-# Local AI-assistant state (not part of the package)
-.claude/
+# Local AI-assistant state (not part of the package) — `.claude/*` (not
+# `.claude/`) ignores the dir CONTENTS while leaving the dir itself
+# trackable, so a `!.claude/rules/` negation below can be honored (git won't
+# descend into an ignored directory to find the negation otherwise).
+.claude/*
+!.claude/rules/
 .worktrees/
