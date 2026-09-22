@@ -153,6 +153,18 @@ Users provide a declaration document (sources + fields, produced from
 preserves human corrections and reports drift. Rules are a schema *consumer*
 (via `check`), never a schema *source*.
 
+### Detection Health Capture
+```bash
+adef ingest health-metrics.yml           # ingest a capture document (routes on its own `kind`)
+adef ingest health-metrics.yml --dry-run # validate and report, write nothing
+```
+Five self-describing document kinds — `metrics`, `performance`,
+`deployment_drift`, `field_observations`, `source_health` — bulk, keyed by
+`D-XXXX`. Stored under `<workspace>/health/` as a latest snapshot per kind plus
+an append-only `.jsonl` history. ADEF never queries the environment the numbers
+came from; the producer hands over a file. Design:
+`internal-docs/plans/2026-09-21-vendor-capture-design.md`.
+
 ### ATT&CK Reference Layer
 ```bash
 adef attack info                    # Active snapshot's ATT&CK version + counts
@@ -286,13 +298,16 @@ adef/
 │   ├── schema.py               # Declaration-driven schemas (ingest/lint/check/recipe/reshape)
 │   ├── attack.py               # ATT&CK reference layer (info/show/refresh)
 │   ├── coverage.py             # Coverage-quality report + Navigator export
+│   ├── ingest.py               # `adef ingest` — detection-health capture documents
 │   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
 │   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
 │   ├── memory.py               # BM25 search over journals + catalog records
 │   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share
-│   └── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
+│   ├── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
+│   ├── health_docs.py          # capture document model, lint, load
+│   └── health_store.py         # latest snapshot + append-only history
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)

@@ -63,6 +63,7 @@ cwd contents.
 | `adef attack show` | Display an ATT&CK technique |
 | `adef attack refresh` | Pull a fresh ATT&CK snapshot into the workspace |
 | `adef coverage` | Coverage-quality report + optional Navigator layer |
+| `adef ingest` | Ingest a detection-health capture document |
 | `adef-mcp` | Start the FastMCP server (separate console script) |
 | `adef install-skills` | Copy bundled skills into an agent's directory |
 
@@ -563,6 +564,31 @@ adef coverage
 adef coverage --gaps
 adef coverage --navigator layer.json --name "Q3 coverage"
 ```
+
+---
+
+## `adef ingest`
+
+Ingest a detection-health capture document produced from a live environment.
+
+```bash
+adef ingest health-metrics.yml              # validate, store, report
+adef ingest health-metrics.yml --dry-run    # validate and report only
+```
+
+The document declares its own `kind` (`metrics`, `performance`,
+`deployment_drift`, `field_observations`, `source_health`) and
+`schema_version`, so one command handles all five and there is no flag to
+mismatch against the file. Detection rows are keyed by `D-XXXX`; rows naming a
+detection the catalog does not have are reported and skipped.
+
+Stored under `<workspace>/health/`: `latest/D-XXXX.yml` (newest snapshot per
+kind), `history/D-XXXX.jsonl` (append-only trend substrate), and
+`sources/<source>.yml`.
+
+ADEF never queries the environment these numbers describe — producing the
+document is the user's side of the contract. See
+`internal-docs/plans/2026-09-21-vendor-capture-design.md`.
 
 ---
 
