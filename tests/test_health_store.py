@@ -1,0 +1,130 @@
+"""Tests for detection-health storage (adef/core/health_store.py)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import yaml
+
+from adef.core.health_docs import HealthDoc
+from adef.core.health_store import health_dir, store_health_doc
+
+
+def _metrics(captured_at: str = "2026-09-21T14:00:00Z", signal_count: int = 143) -> HealthDoc:
+    return HealthDoc(
+        kind="metrics",
+        schema_version=1,
+        captured_at=captured_at,
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        detections=[{"detection_id": "D-0042", "signal_count": signal_count}],
+    )
+
+
+def test_health_dir_is_under_the_workspace(tmp_path: Path):
+    assert health_dir(tmp_path) == tmp_path / "health"
+
+
+def test_writes_latest_snapshot_keyed_by_kind(tmp_path: Path):
+    root = tmp_path / "health"
+    result = store_health_doc(_metrics(), root, known_ids={"D-0042"})
+    stored = yaml.safe_load((root / "latest" / "D-0042.yml").read_text(encoding="utf-8"))
+    assert stored["metrics"]["signal_count"] == 143
+    assert stored["metrics"]["captured_at"] == "2026-09-21T14:00:00Z"
+    assert stored["metrics"]["environment"] == "prod-siem"
+    assert result.matched == ["D-0042"]
+    assert result.unmatched == []
+
+
+def test_second_ingest_replaces_latest_but_appends_history(tmp_path: Path):
+    root = tmp_path / "health"
+    store_health_doc(_metrics(signal_count=143), root, known_ids={"D-0042"})
+    store_health_doc(
+        _metrics(captured_at="2026-09-28T14:00:00Z", signal_count=7),
+        root,
+        known_ids={"D-0042"},
+    )
+
+    stored = yaml.safe_load((root / "latest" / "D-0042.yml").read_text(encoding="utf-8"))
+    assert stored["metrics"]["signal_count"] == 7      # latest wins
+
+    lines = (root / "history" / "D-0042.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 2                              # history keeps both
+    assert [json.loads(line)["signal_count"] for line in lines] == [143, 7]
+    assert json.loads(lines[0])["kind"] == "metrics"
+
+
+def test_a_second_kind_merges_into_the_same_latest_file(tmp_path: Path):
+    root = tmp_path / "health"
+    store_health_doc(_metrics(), root, known_ids={"D-0042"})
+    perf = HealthDoc(
+        kind="performance",
+        schema_version=1,
+        captured_at="2026-09-21T14:00:00Z",
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        detections=[{"detection_id": "D-0042", "avg_runtime_seconds": 12.4}],
+    )
+    store_health_doc(perf, root, known_ids={"D-0042"})
+
+    stored = yaml.safe_load((root / "latest" / "D-0042.yml").read_text(encoding="utf-8"))
+    assert stored["metrics"]["signal_count"] == 143     # not clobbered
+    assert stored["performance"]["avg_runtime_seconds"] == 12.4
+
+
+def test_unmatched_detection_ids_are_reported_not_dropped(tmp_path: Path):
+    root = tmp_path / "health"
+    doc = _metrics()
+    doc.detections.append({"detection_id": "D-9999", "signal_count": 1})
+    result = store_health_doc(doc, root, known_ids={"D-0042"})
+
+    assert result.matched == ["D-0042"]
+    assert result.unmatched == ["D-9999"]
+    assert not (root / "latest" / "D-9999.yml").exists()
+
+
+def test_dry_run_writes_nothing_but_still_reports(tmp_path: Path):
+    root = tmp_path / "health"
+    result = store_health_doc(_metrics(), root, known_ids={"D-0042"}, dry_run=True)
+    assert result.matched == ["D-0042"]
+    assert result.paths_written == []
+    assert not root.exists()
+
+
+def test_source_health_is_stored_by_source_name(tmp_path: Path):
+    root = tmp_path / "health"
+    doc = HealthDoc(
+        kind="source_health",
+        schema_version=1,
+        captured_at="2026-09-21T14:00:00Z",
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        sources=[{"name": "wineventlog", "event_count": 240000000}],
+    )
+    result = store_health_doc(doc, root, known_ids=set())
+
+    stored = yaml.safe_load(
+        (root / "sources" / "wineventlog.yml").read_text(encoding="utf-8")
+    )
+    assert stored["event_count"] == 240000000
+    assert result.matched == ["wineventlog"]
+    assert result.unmatched == []       # source names are not checked against the catalog
+
+
+def test_field_observations_are_stored_by_source_name(tmp_path: Path):
+    root = tmp_path / "health"
+    doc = HealthDoc(
+        kind="field_observations",
+        schema_version=1,
+        captured_at="2026-09-21T14:00:00Z",
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        source="wineventlog",
+        fields=[{"name": "process.name", "null_rate": 0.02}],
+    )
+    store_health_doc(doc, root, known_ids=set())
+    stored = yaml.safe_load(
+        (root / "sources" / "wineventlog.yml").read_text(encoding="utf-8")
+    )
+    assert stored["fields"][0]["name"] == "process.name"
