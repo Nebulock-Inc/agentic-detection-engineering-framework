@@ -446,6 +446,15 @@ git commit -m "feat(health): capture document model, lint, and load"
 
 ## Task 2: Storage — latest snapshot and append-only history
 
+> **Correction (applied during execution, commit `8d9cb47`).** The source-keyed
+> write shown below is wrong as written: `source_health` and `field_observations`
+> both resolve to `sources/<name>.yml`, and the raw `write_text` means the second
+> ingest for a given source silently destroys the first. Shipped behavior routes
+> source-keyed writes through `_merge_latest` too, so `sources/<name>.yml` is
+> `{kind: payload}` — merged per kind, exactly like `latest/D-XXXX.yml` — with a
+> regression test `test_two_source_kinds_do_not_clobber_each_other`. Read the
+> committed `adef/core/health_store.py` as authoritative over the block below.
+
 **Files:**
 - Create: `adef/core/health_store.py`
 - Test: `tests/test_health_store.py`

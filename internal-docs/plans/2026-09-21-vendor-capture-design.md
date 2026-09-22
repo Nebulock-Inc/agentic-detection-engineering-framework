@@ -220,8 +220,15 @@ event data, and the directory name should not imply otherwise.
 ```
 health/latest/D-0042.yml      # newest snapshot of each kind, merged per detection
 health/history/D-0042.jsonl   # append-only, one compact row per ingest
-health/sources/<source>.yml   # newest source_health per source
+health/sources/<source>.yml   # newest snapshot of each source-keyed kind, merged
 ```
+
+Both source-keyed kinds — `source_health` and `field_observations` — land in the
+same `sources/<source>.yml`, keyed by kind, and merge the same way `latest/` does.
+A source receiving a throughput report and a field-null-rate report is the expected
+path, not an edge case, so the merge is load-bearing: without it the second ingest
+silently destroys the first. (Found during implementation — the first draft of this
+design named `sources/` for `source_health` alone and carried no merge.)
 
 Hybrid by design. `latest/` answers "what is true now" in one read. `history/` is the
 trend substrate — JSON Lines because append is the only write it ever takes. Rows are
