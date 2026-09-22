@@ -12,13 +12,21 @@ from typing import Any
 
 def register_mcp_tools(server: Any) -> None:
     """Register every built-in tool module against ``server``."""
-    from adef.mcp.tools import agent_tools, init_tools, lifecycle_tools, memory_tools, schema_tools
+    from adef.mcp.tools import (
+        agent_tools,
+        health_tools,
+        init_tools,
+        lifecycle_tools,
+        memory_tools,
+        schema_tools,
+    )
 
     lifecycle_tools.register(server)
     memory_tools.register(server)
     agent_tools.register(server)
     init_tools.register(server)
     schema_tools.register(server)
+    health_tools.register(server)
 
 
 __all__ = ["register_mcp_tools"]

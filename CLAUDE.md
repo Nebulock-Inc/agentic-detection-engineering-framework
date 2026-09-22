@@ -222,6 +222,10 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
+Tools include `health_ingest` — the MCP twin of `adef ingest`, over the same
+core. An assistant session with its own environment tooling connected can fetch
+the numbers, shape a capture document, and ingest it without a file round-trip
+through the CLI.
 
 ### Skills
 ```bash
