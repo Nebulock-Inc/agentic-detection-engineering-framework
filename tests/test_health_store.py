@@ -107,7 +107,7 @@ def test_source_health_is_stored_by_source_name(tmp_path: Path):
     stored = yaml.safe_load(
         (root / "sources" / "wineventlog.yml").read_text(encoding="utf-8")
     )
-    assert stored["event_count"] == 240000000
+    assert stored["source_health"]["event_count"] == 240000000
     assert result.matched == ["wineventlog"]
     assert result.unmatched == []       # source names are not checked against the catalog
 
@@ -127,4 +127,34 @@ def test_field_observations_are_stored_by_source_name(tmp_path: Path):
     stored = yaml.safe_load(
         (root / "sources" / "wineventlog.yml").read_text(encoding="utf-8")
     )
-    assert stored["fields"][0]["name"] == "process.name"
+    assert stored["field_observations"]["fields"][0]["name"] == "process.name"
+
+
+def test_two_source_kinds_do_not_clobber_each_other(tmp_path: Path):
+    root = tmp_path / "health"
+    source_health_doc = HealthDoc(
+        kind="source_health",
+        schema_version=1,
+        captured_at="2026-09-21T14:00:00Z",
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        sources=[{"name": "wineventlog", "event_count": 240000000}],
+    )
+    store_health_doc(source_health_doc, root, known_ids=set())
+
+    field_obs_doc = HealthDoc(
+        kind="field_observations",
+        schema_version=1,
+        captured_at="2026-09-21T14:00:00Z",
+        environment="prod-siem",
+        window={"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        source="wineventlog",
+        fields=[{"name": "process.name", "null_rate": 0.02}],
+    )
+    store_health_doc(field_obs_doc, root, known_ids=set())
+
+    stored = yaml.safe_load(
+        (root / "sources" / "wineventlog.yml").read_text(encoding="utf-8")
+    )
+    assert stored["source_health"]["event_count"] == 240000000
+    assert stored["field_observations"]["fields"][0]["name"] == "process.name"

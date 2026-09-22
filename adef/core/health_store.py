@@ -104,10 +104,7 @@ def store_health_doc(
         if dry_run:
             continue
         path = health_root / "sources" / f"{name}.yml"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            yaml.safe_dump({**payload, **envelope}, sort_keys=True), encoding="utf-8"
-        )
+        _merge_latest(path, doc.kind, {**payload, **envelope})
         result.paths_written.append(path)
 
     return result
