@@ -12,7 +12,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from adef.core.catalog import known_detection_ids
+from adef.core.catalog import catalog_dir, known_detection_ids
 from adef.core.health_docs import HealthDocError, load_health_doc
 from adef.core.health_store import health_dir, store_health_doc
 from adef.core.workspace import resolve_workspace
@@ -51,9 +51,12 @@ def ingest(document: Path, dry_run: bool, workspace: Path | None) -> None:
     ws = resolve_workspace(workspace)
     known_ids = known_detection_ids(ws)
 
-    result = store_health_doc(
-        doc, health_dir(workspace), known_ids=known_ids, dry_run=dry_run
-    )
+    try:
+        result = store_health_doc(
+            doc, health_dir(workspace), known_ids=known_ids, dry_run=dry_run
+        )
+    except HealthDocError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     prefix = "[cyan]Would ingest[/cyan]" if dry_run else "[green]Ingested[/green]"
     console.print(
@@ -61,9 +64,14 @@ def ingest(document: Path, dry_run: bool, workspace: Path | None) -> None:
         f"{len(result.matched)} matched"
     )
     if result.unmatched:
+        cat_dir = catalog_dir(ws)
+        if cat_dir.is_dir():
+            where = "the catalog does not have"
+        else:
+            where = f"no catalog at {cat_dir}"
         console.print(
             f"  [yellow]unmatched:[/yellow] {len(result.unmatched)} row(s) name a "
-            f"detection the catalog does not have: {', '.join(result.unmatched)}"
+            f"detection {where}: {', '.join(result.unmatched)}"
         )
 
 

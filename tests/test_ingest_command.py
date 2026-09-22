@@ -126,3 +126,33 @@ def test_missing_file_is_a_clean_error(workspace: Path, tmp_path: Path):
     )
     assert result.exit_code != 0
     assert "Traceback" not in result.output
+
+
+def test_bare_workspace_reports_no_catalog_instead_of_the_catalog_does_not_have(
+    tmp_path: Path,
+):
+    # A workspace with no catalog/ at all (e.g. --dry-run from the wrong cwd)
+    # should say so plainly rather than the misleading "the catalog does not
+    # have" phrasing, which implies a catalog was consulted.
+    bare_ws = tmp_path / "bare-ws"
+    doc = _write_doc(tmp_path / "m.yml", _metrics_doc())
+    result = CliRunner().invoke(
+        ingest_cli, [str(doc), "--workspace", str(bare_ws), "--dry-run"]
+    )
+
+    assert result.exit_code == 0, result.output
+    output_flat = result.output.replace("\n", "")
+    assert "no catalog at" in output_flat
+    assert str(bare_ws / "catalog") in output_flat
+    assert "the catalog does not have" not in output_flat
+
+
+def test_populated_workspace_keeps_the_catalog_does_not_have_phrasing(
+    workspace: Path, tmp_path: Path
+):
+    doc = _write_doc(tmp_path / "m.yml", _metrics_doc(detection_id="D-9999"))
+    result = CliRunner().invoke(ingest_cli, [str(doc), "--workspace", str(workspace)])
+
+    assert result.exit_code == 0, result.output
+    assert "the catalog does not have" in result.output
+    assert "no catalog at" not in result.output

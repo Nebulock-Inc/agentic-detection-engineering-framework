@@ -469,8 +469,7 @@ def known_detection_ids(workspace: Path) -> set[str]:
     the catalog only when its directory already exists keeps that true while
     still reusing `iter_records`' parsing.
     """
-    catalog_dir_path = Path(workspace).expanduser().resolve() / "catalog"
-    if not catalog_dir_path.is_dir():
+    if not catalog_dir(workspace).is_dir():
         return set()
     return {det_id for det_id, _path, _data in Catalog(workspace).iter_records()}
 

@@ -37,9 +37,12 @@ def register(server: Any) -> None:
 
         ws = resolve_workspace(ws_arg)
         known_ids = known_detection_ids(ws)
-        result = store_health_doc(
-            doc, health_dir(ws_arg), known_ids=known_ids, dry_run=dry_run
-        )
+        try:
+            result = store_health_doc(
+                doc, health_dir(ws_arg), known_ids=known_ids, dry_run=dry_run
+            )
+        except HealthDocError as exc:
+            return {"error": str(exc)}
         return {
             "kind": result.kind,
             "matched": result.matched,

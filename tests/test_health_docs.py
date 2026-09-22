@@ -173,3 +173,106 @@ def test_load_raises_on_unparseable_yaml(tmp_path: Path):
     path.write_text("kind: [unclosed\n", encoding="utf-8")
     with pytest.raises(HealthDocError):
         load_health_doc(path)
+
+
+# --------------------------------------------------------------------------- #
+# Finding 1: source names / detection ids must not become hostile paths
+# --------------------------------------------------------------------------- #
+def _source_health_doc(name: str) -> dict:
+    return {
+        "schema_version": 1,
+        "kind": "source_health",
+        "captured_at": "2026-09-21T14:00:00Z",
+        "window": {"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        "environment": "prod-siem",
+        "sources": [{"name": name, "event_count": 1}],
+    }
+
+
+def _field_observations_doc(source: str) -> dict:
+    return {
+        "schema_version": 1,
+        "kind": "field_observations",
+        "captured_at": "2026-09-21T14:00:00Z",
+        "window": {"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+        "environment": "prod-siem",
+        "source": source,
+        "fields": [{"name": "process.name"}],
+    }
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "/tmp/x/ESCAPED",           # absolute path
+        "../../../x/TRAVERSED",     # traversal
+        "aws/cloudtrail",           # nested path — breaks the flat sources/<source>.yml contract
+        "..",
+        ".",
+    ],
+)
+def test_source_health_name_rejects_hostile_names(hostile):
+    errors = lint_health_doc(_source_health_doc(hostile))
+    assert any("sources[0].name" in e for e in errors)
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    ["/tmp/x/ESCAPED", "../../../x/TRAVERSED", "aws/cloudtrail", "..", "."],
+)
+def test_field_observations_source_rejects_hostile_names(hostile):
+    errors = lint_health_doc(_field_observations_doc(hostile))
+    assert any(e.startswith("source:") for e in errors)
+
+
+def test_source_health_bare_name_still_lints_clean():
+    assert lint_health_doc(_source_health_doc("wineventlog")) == []
+
+
+@pytest.mark.parametrize("hostile", ["../../../etc/detections/foo", "D-42", "not-an-id", "D-abcd"])
+def test_detection_id_shape_is_checked(hostile):
+    doc = _metrics_doc()
+    doc["detections"][0]["detection_id"] = hostile
+    errors = lint_health_doc(doc)
+    assert any("detection_id" in e for e in errors)
+
+
+# --------------------------------------------------------------------------- #
+# Finding 2: deployment_drift normalization
+# --------------------------------------------------------------------------- #
+def _drift_doc_with_normalization(apply: list) -> dict:
+    doc = _drift_doc()
+    doc["normalization"] = {"apply": apply}
+    return doc
+
+
+def test_deployment_drift_with_valid_normalization_lints_clean():
+    assert lint_health_doc(
+        _drift_doc_with_normalization(["collapse_whitespace", "strip_sql_comments"])
+    ) == []
+
+
+def test_deployment_drift_unknown_transform_is_an_error():
+    errors = lint_health_doc(_drift_doc_with_normalization(["collapse_whitespace", "made_up"]))
+    assert any("normalization.apply" in e and "made_up" in e for e in errors)
+
+
+def test_spec_verbatim_deployment_drift_example_lints_clean():
+    # internal-docs/plans/2026-09-21-vendor-capture-design.md, `deployment_drift`.
+    doc = {
+        "schema_version": 1,
+        "kind": "deployment_drift",
+        "captured_at": "2026-09-21T14:00:00Z",
+        "environment": "prod-siem",
+        "detections": [
+            {
+                "detection_id": "D-0042",
+                "deployed_status": "enabled",
+                "deployed_version": "7",
+                "last_deployed_change_at": "2026-09-02T08:11:00Z",
+                "deployed_query": "SELECT 1\n",
+            }
+        ],
+        "normalization": {"apply": ["collapse_whitespace", "strip_sql_comments"]},
+    }
+    assert lint_health_doc(doc) == []
