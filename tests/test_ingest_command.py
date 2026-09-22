@@ -84,6 +84,22 @@ def test_dry_run_writes_nothing(workspace: Path, tmp_path: Path):
     assert not (workspace / "health").exists()
 
 
+def test_dry_run_creates_no_directories_in_a_bare_workspace(tmp_path: Path):
+    # A workspace that does not even exist yet, and so has no catalog/ —
+    # regression for known_ids-gathering constructing Catalog(ws), whose
+    # __init__ mkdirs catalog/ regardless of --dry-run.
+    bare_ws = tmp_path / "bare-ws"
+    doc = _write_doc(tmp_path / "m.yml", _metrics_doc())
+    result = CliRunner().invoke(
+        ingest_cli, [str(doc), "--workspace", str(bare_ws), "--dry-run"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "D-0042" in result.output
+    assert "unmatched" in result.output.lower()
+    assert not bare_ws.exists()
+
+
 def test_unmatched_ids_are_reported_in_output(workspace: Path, tmp_path: Path):
     doc = _write_doc(tmp_path / "m.yml", _metrics_doc(detection_id="D-9999"))
     result = CliRunner().invoke(ingest_cli, [str(doc), "--workspace", str(workspace)])

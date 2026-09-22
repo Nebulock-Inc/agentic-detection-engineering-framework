@@ -12,7 +12,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from adef.core.catalog import Catalog
+from adef.core.catalog import known_detection_ids
 from adef.core.health_docs import HealthDocError, load_health_doc
 from adef.core.health_store import health_dir, store_health_doc
 from adef.core.workspace import resolve_workspace
@@ -49,7 +49,7 @@ def ingest(document: Path, dry_run: bool, workspace: Path | None) -> None:
         raise click.ClickException(str(exc)) from exc
 
     ws = resolve_workspace(workspace)
-    known_ids = {det_id for det_id, _path, _data in Catalog(ws).iter_records()}
+    known_ids = known_detection_ids(ws)
 
     result = store_health_doc(
         doc, health_dir(workspace), known_ids=known_ids, dry_run=dry_run

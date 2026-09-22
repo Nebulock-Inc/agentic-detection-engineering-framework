@@ -71,6 +71,41 @@ def test_health_ingest_tool_stores_and_reports(workspace: Path, tmp_path: Path):
     assert stored["metrics"]["signal_count"] == 143
 
 
+def test_health_ingest_dry_run_creates_no_directories(tmp_path: Path):
+    # A workspace that does not exist yet, so no catalog/ either — regression
+    # for known_ids-gathering constructing Catalog(ws), whose __init__ mkdirs
+    # catalog/ regardless of dry_run.
+    from adef.mcp.tools import health_tools
+
+    bare_ws = tmp_path / "bare-ws"
+    doc_path = tmp_path / "m.yml"
+    doc_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "kind": "metrics",
+                "captured_at": "2026-09-21T14:00:00Z",
+                "window": {"start": "2026-09-14T00:00:00Z", "end": "2026-09-21T00:00:00Z"},
+                "environment": "prod-siem",
+                "detections": [{"detection_id": "D-0042", "signal_count": 143}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    server = _FakeServer()
+    health_tools.register(server)
+    out = server.tools["health_ingest"](
+        document_path=str(doc_path), dry_run=True, workspace=str(bare_ws)
+    )
+
+    assert out["kind"] == "metrics"
+    assert out["matched"] == []
+    assert out["unmatched"] == ["D-0042"]
+    assert out["paths_written"] == []
+    assert not bare_ws.exists()
+
+
 def test_health_ingest_tool_returns_error_instead_of_raising(workspace: Path, tmp_path: Path):
     from adef.mcp.tools import health_tools
 
