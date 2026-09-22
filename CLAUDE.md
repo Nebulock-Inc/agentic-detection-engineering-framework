@@ -10,6 +10,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ADEF wraps existing detection rules (YAML) with sibling markdown journals (`journals/D-XXXX.md`) that capture *why*, *how*, and *when next* for every detection. Rules stay in their upstream repositories; ADEF never modifies upstream YAML.
 
+## Direction of Integration (read before designing anything)
+
+**ADEF is built standalone and open-source first. Adopters integrate ADEF into their
+own stacks later — never the reverse.**
+
+Any private or in-house codebase — including the maintainers' own — is a *future
+adopter* of ADEF, not an input to it. When designing or implementing any feature:
+
+- A private codebase is **not a reference corpus**. Do not measure against it, sample
+  from it, or query its production data to settle an ADEF design question.
+- A private codebase is **not a justification**. "Our pipeline does X" is not a reason
+  for ADEF to support X. Justify from language semantics, published practitioner
+  standards, or a demonstrated ADEF user need.
+- A private dialect is **not an interface shape**. Never fit a public format to one
+  in-house implementation's quirks.
+
+If a proposed capability is only explicable by pointing at in-house tooling, it does
+not belong in ADEF yet.
+
+This is broader than the "no vendor connectors" CI guard, which only catches SDK
+imports. This one governs **design inputs**, which no test can enforce — it is on you.
+
 **Key concepts:**
 - **Journals**: Per-detection markdown files (`D-XXXX.md`) with YAML frontmatter + timestamped stage-transition blocks
 - **Workspace**: `~/work/adef-workspace/` with `journals/`, `templates/`, `config/`

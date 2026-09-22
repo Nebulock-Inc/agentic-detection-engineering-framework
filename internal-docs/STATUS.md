@@ -175,18 +175,20 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
   — not started.
 - **MCP-driven tuning** against a user's own live environment — not started.
 - **Capture-mechanism spike** (9342) — **decided 2026-09-21, unblocks 9335.**
-  Three measurables defined (metrics = signal efficacy, performance = query
-  cost, drift = catalog-vs-deployed divergence); mechanism is results-in
-  ingestion mirroring `adef schema ingest`, with the existing
-  `ADEF_WRAPPER_<KEY>` adapter pattern as the automation escape hatch and MCP
-  exposure falling out of the normal entry-point registration. Full detail in
-  ISA.md's 2026-09-21 Decisions entry. Nothing built yet.
-- **Vendor-connected metrics, performance, and drift capture** (9335) — not
-  started, but no longer blocked (see the spike above). Implementation owns
-  the ingest commands/tools, the two new wrapper bindings, the versioned
-  results-document schemas, and reconciling the pre-existing
-  `PerformanceMetricsWrapper` naming mismatch (it returns *metrics*, not
-  query performance).
+  Design: `internal-docs/plans/2026-09-21-vendor-capture-design.md`; summary in
+  ISA.md's 2026-09-21 Decisions entry. Five versioned document kinds ingested
+  through one self-describing `adef ingest`, stored latest-plus-history under
+  `health/`, with `adef health` as the fleet report. Drift split into
+  deployment (ingested, version-ref first) and efficacy (derived from history +
+  schema state + source health); adversary/TTP drift explicitly out of scope.
+  Nothing built yet.
+- **Detection health capture** (9335) — not started, no longer blocked.
+  Implementation owns: the five document schemas + validation, `adef ingest`,
+  `adef health`, `adef/core/health.py` (EWMA trend + the source-health
+  correlation that keeps a dead log feed from being misreported as rule decay),
+  the Evolve chain that finally wires up the two already-built recommender
+  agents, and the `ADEF_WRAPPER_PERFORMANCE_METRICS` → `ADEF_WRAPPER_METRICS`
+  rename. No new wrapper bindings.
 - **User-facing v2 docs** (why-adopt, use cases, MCP guidelines) — not started.
 
 ## Anti-goals (CI-enforced — will never ship)

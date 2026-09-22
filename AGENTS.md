@@ -33,6 +33,21 @@ These are CI-enforced. Do not work around them:
 3. **Never add vendor-specific API connectors** (CrowdStrike, Splunk, SentinelOne, etc.). ADEF is a framework; connectors live in adapter packages. Parity test: `tests/test_no_vendor_connectors.py`.
 4. **Never add web-UI dependencies** (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). v0.1.0 is CLI + MCP only. Parity test: `tests/test_no_web_ui_deps.py`.
 
+## Hard Rule — Not CI-Enforceable
+
+5. **ADEF is built standalone first; adopters integrate it later, never the reverse.**
+   Any private or in-house codebase — including the maintainers' own — is a *future
+   adopter*, not a design input. Concretely: a private codebase is never a reference
+   corpus (don't measure against it or query its production data to settle an ADEF
+   design question), never a justification ("our pipeline does X" is not a reason for
+   ADEF to support X), and never an interface shape (don't fit a public format to one
+   in-house implementation's quirks). Justify from language semantics, published
+   practitioner standards, or a demonstrated user need instead. If a capability is only
+   explicable by pointing at in-house tooling, it doesn't belong in ADEF yet.
+
+   No test catches this one. Rule 3 blocks vendor SDK *imports*; this governs **design
+   inputs**, which is upstream of any import and invisible to CI. It is on you.
+
 ## Methodology and Maturity
 
 - [FORGE methodology](docs/methodology.md) — the lifecycle the framework gates around
