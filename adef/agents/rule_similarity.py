@@ -127,7 +127,7 @@ class RuleSimilarityAgent:
         detection_id: str,
         workspace: Path | None = None,
         top_k: int = 5,
-        similarity_mode: str = "auto",
+        similarity_mode: str = "bm25",
         llm_client: Any | None = None,
         **ctx: Any,
     ) -> dict[str, Any]:
@@ -180,10 +180,10 @@ class RuleSimilarityAgent:
                 enriched.append(
                     {
                         **candidate,
-                        "query": str(rec.get("query", "")),
+                        "query": rec.get("query") or "",
                         "mitre": list(rec.get("mitre") or []),
-                        "platform": str(rec.get("platform", "")),
-                        "data_source": str(rec.get("data_source", "")),
+                        "platform": rec.get("platform") or "",
+                        "data_source": rec.get("data_source") or "",
                     }
                 )
             return {

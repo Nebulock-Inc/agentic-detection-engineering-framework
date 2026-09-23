@@ -131,7 +131,7 @@ entry point of `detection new`.
 | `DETECTION_ID` (arg, required) | e.g. `D-0001`. |
 | `--note TEXT` | Note appended to the stage block. Repeatable — several `--note`s render as a bullet list. |
 | `--chain` (refine only) | Re-run the Similarity → Overlap → Verification chain even when already at refine (e.g. after wiring the wrapper agents). |
-| `--similarity-mode` (refine only) | How the Similarity step ranks: `bm25` (default) is deterministic and makes no network call; `agent` returns the shortlist enriched with each candidate's query, MITRE IDs, platform, and data source for the caller to rank, also with no network call; `llm` reranks with an LLM judge and **sends detection content to the Anthropic API** (requires `ANTHROPIC_API_KEY` + the `llm` extra); `auto` picks `llm` when available, else `bm25`. |
+| `--similarity-mode` (refine only) | How the Similarity step ranks: `bm25` (default) is deterministic and makes no network call; `agent` returns the shortlist enriched with each candidate's query, MITRE IDs, platform, and data source for the caller to rank, also with no network call — unless an `ADEF_WRAPPER_*` override is configured, in which case the configured upstream class runs instead; `llm` reranks with an LLM judge and **sends detection content to the Anthropic API** (requires `ANTHROPIC_API_KEY` + the `llm` extra); `auto` picks `llm` when available, else `bm25`. |
 | `--workspace` | Workspace path (see resolution). |
 
 `refine` additionally runs the orchestration chain (Similarity → Overlap →
@@ -152,7 +152,8 @@ with `--similarity-mode agent`.
 > `record_search_text`), so catalog and query content can be disclosed too, not
 > just journal prose. Nothing else from the workspace is transmitted.
 > `--similarity-mode bm25` and `--similarity-mode agent` make no network call at
-> all.
+> all, unless an `ADEF_WRAPPER_*` override is configured — the configured
+> upstream class runs instead, and this guarantee no longer applies.
 
 ```bash
 adef detection observe D-0001 --note "Checked 30d of process_create events"

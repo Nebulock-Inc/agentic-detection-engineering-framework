@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Literal, Optional, cast
 
 from adef.agents.deprecation_recommender import DeprecationRecommenderAgent
 from adef.agents.hypothesis_from_intel import HypothesisFromIntelAgent
@@ -40,7 +40,7 @@ def register(server: Any) -> None:
     @server.tool()
     def refine_chain(
         detection_id: str,
-        similarity_mode: str = "agent",
+        similarity_mode: Literal["bm25", "agent", "llm", "auto"] = "agent",
         workspace: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the Refine chain (Similarity → Overlap → Verification) for a detection.
@@ -50,8 +50,9 @@ def register(server: Any) -> None:
         you do the ranking. You have context ADEF does not, and your reasoning
         stays visible. Pass ``bm25`` for a deterministic ranking, or ``llm`` to
         have ADEF call the Anthropic API itself (requires ANTHROPIC_API_KEY and
-        the ``llm`` extra). This default differs from the CLI's ``bm25`` because
-        an MCP caller is an agent by definition.
+        the ``llm`` extra). ``auto`` picks ``llm`` when available, else ``bm25``.
+        The ``agent`` default differs from the CLI's ``bm25`` because an MCP
+        caller is an agent by definition.
         """
         ws = Path(workspace) if workspace else None
         journals_dir = workspace_journals_dir(ws)

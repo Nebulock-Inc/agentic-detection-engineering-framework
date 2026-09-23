@@ -20,7 +20,8 @@ Clears deferred v0.1.0 debt and moves the framework from "journal + catalog"
 toward vendor-connected.
 
 - **Refine chain goes native by default** — RuleSimilarity (BM25 by default,
-  optional LLM rerank via `--similarity-mode {auto,bm25,llm}`), RuleOverlap,
+  optional LLM rerank or an agent-ranked shortlist via
+  `--similarity-mode {bm25,agent,llm,auto}`), RuleOverlap,
   and Verification no longer require an `ADEF_WRAPPER_<KEY>` binding to an
   upstream package; the `ADEF_WRAPPER_*` env var remains a supported opt-in
   override. **Shipped, in PR, not yet merged** — see `STATUS.md`.

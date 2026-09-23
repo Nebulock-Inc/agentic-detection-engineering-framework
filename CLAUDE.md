@@ -402,7 +402,9 @@ When `adef detection refine D-XXXX` runs:
      the journal body AND the catalog search text (title, MITRE IDs, platform,
      data source, format, query — see `record_search_text`), so catalog and
      query content can be disclosed too, not just journal prose. `bm25` and `agent`
-     make no network call.
+     make no network call, unless an `ADEF_WRAPPER_*` override is configured, in
+     which case the configured upstream class runs instead and this guarantee
+     no longer applies.
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)

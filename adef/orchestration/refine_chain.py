@@ -38,6 +38,18 @@ REFINE_STEPS: tuple[ChainStep, ...] = (
 )
 
 
+def _inline(value: Any) -> str:
+    """Collapse whitespace so one rendered value stays on one journal line.
+
+    The journal is markdown: a value containing newlines severs its bullet and
+    can turn indented text into a code block. Candidate queries are stored
+    verbatim and are routinely multi-line, so this is the common case, not an
+    edge one. Only the *rendered* form is collapsed — callers still receive
+    the value unchanged.
+    """
+    return " ".join(str(value).split())
+
+
 def _format_payload(payload: Any, indent: str = "") -> str:
     """Render an agent's return value into a journal-friendly markdown body.
 
@@ -59,11 +71,11 @@ def _format_payload(payload: Any, indent: str = "") -> str:
             elif isinstance(value, list) and value and all(isinstance(i, dict) for i in value):
                 lines.append(f"{indent}- **{key}:**")
                 lines.extend(
-                    f"{indent}  - " + ", ".join(f"{k}: {v}" for k, v in entry.items())
+                    f"{indent}  - " + ", ".join(f"{k}: {_inline(v)}" for k, v in entry.items())
                     for entry in value
                 )
             else:
-                lines.append(f"{indent}- **{key}:** {value}")
+                lines.append(f"{indent}- **{key}:** {_inline(value)}")
         return "\n".join(lines)
     if isinstance(payload, (list, tuple)):
         return "\n".join(f"{indent}- {item}" for item in payload) or "_(empty)_"
