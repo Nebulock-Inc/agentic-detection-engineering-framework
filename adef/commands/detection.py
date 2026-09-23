@@ -148,7 +148,7 @@ def _make_stage_command(stage: str) -> click.Command:
         workspace: Path | None,
         notes: tuple[str, ...],
         chain: bool = False,
-        similarity_mode: str = "auto",
+        similarity_mode: str = "bm25",
     ) -> None:
         # One note → plain line; several → a markdown bullet list.
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
@@ -223,10 +223,11 @@ def _make_stage_command(stage: str) -> click.Command:
                 default="bm25",
                 help="How the Similarity refine-step ranks candidates. 'bm25' (default) is "
                 "fully deterministic and makes no network call. 'agent' returns the "
-                "shortlist enriched with each candidate's query and MITRE IDs for YOU to "
-                "rank — also no network call, and the mode to use from an assistant "
-                "session. 'llm' reranks with an LLM judge (requires ANTHROPIC_API_KEY + "
-                "the 'llm' extra) and sends detection content to the Anthropic API. "
+                "shortlist enriched with each candidate's query, MITRE IDs, platform, "
+                "and data source for YOU to rank — also no network call, and the mode "
+                "to use from an assistant session. 'llm' reranks with an LLM judge "
+                "(requires ANTHROPIC_API_KEY + the 'llm' extra) and sends detection "
+                "content to the Anthropic API. "
                 "'auto' picks llm when available, else bm25.",
             )
         )

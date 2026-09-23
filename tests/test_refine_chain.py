@@ -113,6 +113,75 @@ def test_mcp_refine_chain_tool_honors_workspace_arg_over_env(tmp_path: Path, mon
     assert not list((env_ws / "journals").glob("D-*.md"))
 
 
+def test_mcp_refine_chain_defaults_to_agent_mode(tmp_path: Path, monkeypatch):
+    # An MCP caller IS an agent by definition. Ranking internally there is
+    # strictly wasteful — it pays a second model to do work the caller is
+    # better positioned to do with more context. This default differs from the
+    # CLI's `bm25` ON PURPOSE: the split is by entry point, which is knowable,
+    # never by sniffing the environment.
+    from adef.mcp.tools.agent_tools import register
+
+    ws = _one_rule_workspace(tmp_path, "mcp-default-ws")
+    captured: dict = {}
+
+    def _spy(journal, detection_id, **context):
+        captured.update(context)
+        return {}
+
+    monkeypatch.setattr("adef.mcp.tools.agent_tools.run_refine_chain", _spy)
+
+    class _FakeServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self):
+            def deco(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+
+            return deco
+
+    server = _FakeServer()
+    register(server)
+    server.tools["refine_chain"](detection_id="D-0001", workspace=str(ws))
+
+    assert captured, "spy never called; check the patch target"
+    assert captured["similarity_mode"] == "agent"
+
+
+def test_mcp_refine_chain_honors_an_explicit_mode(tmp_path: Path, monkeypatch):
+    from adef.mcp.tools.agent_tools import register
+
+    ws = _one_rule_workspace(tmp_path, "mcp-explicit-ws")
+    captured: dict = {}
+
+    def _spy(journal, detection_id, **context):
+        captured.update(context)
+        return {}
+
+    monkeypatch.setattr("adef.mcp.tools.agent_tools.run_refine_chain", _spy)
+
+    class _FakeServer:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self):
+            def deco(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+
+            return deco
+
+    server = _FakeServer()
+    register(server)
+    server.tools["refine_chain"](
+        detection_id="D-0001", similarity_mode="bm25", workspace=str(ws)
+    )
+
+    assert captured, "spy never called; check the patch target"
+    assert captured["similarity_mode"] == "bm25"
+
+
 def test_format_payload_keeps_lines_readable_for_many_overlaps():
     """A list-of-dicts must not collapse into one multi-thousand-char line.
 

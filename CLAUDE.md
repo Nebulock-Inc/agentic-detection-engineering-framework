@@ -222,6 +222,11 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
+`refine_chain` defaults to `similarity_mode="agent"` — it returns the shortlist
+enriched for *you* to rank rather than ranking internally, since an MCP caller is
+an agent by definition. This deliberately differs from the CLI default (`bm25`):
+the split is by entry point, not by detecting which environment you are in.
+
 Tools include `health_ingest` — the MCP twin of `adef ingest`, over the same
 core. An assistant session with its own environment tooling connected can fetch
 the numbers, shape a capture document, and ingest it without a file round-trip
@@ -285,7 +290,8 @@ adef/
 │   ├── tune_recommender.py           # ADEF-native: tuning suggestions
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist + optional LLM rerank
+│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist; agent returns it for the
+│   │                                 #   caller to rank, llm reranks itself
 │   ├── rule_overlap.py               # ADEF-native: duplicate/complementary/redundant
 │   ├── verification.py               # ADEF-native: schema + four-engine constraint
 │   └── wrappers/                     # Dispatchers for the 4 rule agents the Refine chain and
