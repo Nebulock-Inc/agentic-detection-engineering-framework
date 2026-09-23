@@ -15,7 +15,7 @@ from click.testing import CliRunner
 from adef.commands.detection import detection as detection_cli
 from adef.core.catalog import Catalog, CatalogRecord
 from adef.core.journal import Journal
-from adef.orchestration.refine_chain import _format_payload
+from adef.orchestration.refine_chain import _format_payload, _prune_for_journal
 
 
 def _rec(rid: str, title: str, query: str) -> CatalogRecord:
@@ -236,28 +236,59 @@ def test_format_payload_keeps_lines_readable_for_many_overlaps():
     assert "condition: selection" in query_line
 
 
-def test_rule_logic_never_reaches_the_journal():
-    # Journals are the BM25 corpus. A neighbour's query rendered into the
-    # target's journal scores that same pair higher on the next similarity run
-    # for no new evidence — and the text is redundant anyway: it lives in that
-    # neighbour's own catalog record, reachable from the ID the journal does
-    # keep. Applies at every nesting depth the renderer handles.
-    payload = {
-        "detection_id": "D-0001",
-        "query": "TARGET_LOGIC_MARKER",
-        "target": {"title": "Suspicious mshta", "query": "TARGET_LOGIC_MARKER",
-                   "platform": "windows"},
-        "candidates": [
-            {"detection_id": "D-0002", "score": 9.1, "query": "CANDIDATE_LOGIC_MARKER"},
-        ],
-    }
-    body = _format_payload(payload)
+def test_rule_logic_never_reaches_the_journal(tmp_path):
+    # END TO END, deliberately. The unit-level version of this test passed while
+    # the real chain wrote the neighbour's verbatim query into the journal: it
+    # fed `_format_payload` a synthetic payload with no `snippet` key, and
+    # `snippet` is exactly where the logic travels — `MemoryIndex._snippet`
+    # builds it from the journal body PLUS `record_search_text(record)`, which
+    # ends in the record's query. Only a real run can catch that.
+    from adef.core.catalog import Catalog, CatalogRecord
+    from adef.orchestration.refine_chain import run_refine_chain
 
-    assert "LOGIC_MARKER" not in body
-    # Everything that makes the block useful survives.
+    ws = tmp_path / "ws"
+    (ws / "catalog").mkdir(parents=True)
+    (ws / "journals").mkdir(parents=True)
+    cat, journal = Catalog(ws), Journal(ws / "journals")
+
+    def _rec(rid, title, query):
+        return CatalogRecord(
+            id=rid, title=title, rule_ref=f"r/{rid}.yml", original_path=f"/tmp/{rid}.yml",
+            platform="windows", kind="atomic", engine="sigma", format="sigma",
+            query=query, mitre=["T1218.005"],
+        )
+
+    for rec in (
+        _rec("D-0001", "mshta child process", "process.name = 'mshta.exe'"),
+        _rec("D-0002", "mshta spawning child",
+             "NEIGHBOUR_LOGIC_MARKER process.name = 'mshta.exe' and parent = 'excel.exe'"),
+    ):
+        cat.write_raw(ws / "catalog" / f"{rec.id}.yml", rec.to_yaml_dict())
+        journal.create(detection_id=rec.id, title=rec.title)
+    cat.rebuild_index()
+
+    run_refine_chain(journal=journal, detection_id="D-0001", workspace=ws,
+                     similarity_mode="agent")
+    body = (ws / "journals" / "D-0001.md").read_text()
+
+    assert "NEIGHBOUR_LOGIC_MARKER" not in body
+    # The block is still worth having: the shortlist and the verdict survive.
     assert "D-0002" in body
-    assert "windows" in body
-    assert "Suspicious mshta" in body
+
+
+def test_omitted_keys_are_pruned_at_every_depth():
+    # Filtering at each render site left holes — a dict nested inside a list
+    # entry reached `_inline` whole and stringified the omitted key back in.
+    payload = {
+        "candidates": [
+            {"detection_id": "D-0002", "nested": {"query": "LOGIC_MARKER"}},
+        ],
+        "target": {"inner": {"snippet": "LOGIC_MARKER"}},
+        "bare_list": [{"query": "LOGIC_MARKER"}],
+    }
+    body = _format_payload(_prune_for_journal(payload))
+    assert "LOGIC_MARKER" not in body
+    assert "D-0002" in body
 
 
 def test_long_values_are_capped_in_the_rendered_journal():
@@ -370,6 +401,57 @@ def test_run_refine_chain_defaults_to_bm25_when_similarity_mode_omitted(
     text = (ws / "journals" / "D-0001.md").read_text()
     similarity_block = text[text.index("### Refine / Similarity"):text.index("### Refine / Overlap")]
     assert "bm25" in similarity_block
+
+
+def test_mcp_literal_matches_valid_modes():
+    """The CLI Choice has a tripwire; the MCP Literal had none, so a fifth mode
+    would reach the CLI and silently stay unreachable over MCP."""
+    from typing import get_args, get_type_hints
+
+    from adef.agents.rule_similarity import _VALID_SIMILARITY_MODES
+    from adef.mcp.tools import agent_tools
+
+    captured = {}
+
+    class _Server:
+        def tool(self):
+            def deco(fn):
+                captured[fn.__name__] = fn
+                return fn
+            return deco
+
+    agent_tools.register(_Server())
+    hints = get_type_hints(captured["refine_chain"])
+    assert set(get_args(hints["similarity_mode"])) == _VALID_SIMILARITY_MODES
+
+
+def test_mcp_refine_chain_keeps_workspace_as_second_positional():
+    """`workspace` was the published second positional. Inserting a parameter
+    ahead of it binds an existing caller's path to the new one."""
+    import inspect
+
+    from adef.mcp.tools import agent_tools
+
+    captured = {}
+
+    class _Server:
+        def tool(self):
+            def deco(fn):
+                captured[fn.__name__] = fn
+                return fn
+            return deco
+
+    agent_tools.register(_Server())
+    params = list(inspect.signature(captured["refine_chain"]).parameters)
+    assert params[:2] == ["detection_id", "workspace"]
+
+
+def test_scalar_mitre_is_not_exploded_into_characters():
+    from adef.agents.rule_similarity import _logic_fields
+
+    assert _logic_fields({"mitre": "T1218.005"})["mitre"] == ["T1218.005"]
+    assert _logic_fields({"mitre": ["T1055"]})["mitre"] == ["T1055"]
+    assert _logic_fields({})["mitre"] == []
 
 
 def test_similarity_mode_choice_matches_valid_modes():

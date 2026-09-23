@@ -52,10 +52,11 @@ def _inline(value: Any) -> str:
     verbatim and are routinely multi-line, so this is the common case, not an
     edge one.
 
-    The cap matters beyond readability: journals are the BM25 corpus, so a
-    neighbor's whole query rendered into the target's journal comes back as
-    score for that same pair on the next run. Only the *rendered* form is
-    collapsed and capped — callers still receive the value unchanged.
+    The cap is for the free-text that legitimately belongs here — an LLM
+    judge's `reasoning`, a third-party step's prose — which reaches the renderer
+    verbatim and can run long. (Rule logic does not reach it at all; see
+    `_JOURNAL_OMIT_KEYS`.) Only the *rendered* form is collapsed and capped —
+    callers still receive the value unchanged.
     """
     text = " ".join(str(value).split())
     return text if len(text) <= _MAX_RENDERED else text[:_MAX_RENDERED] + "\u2026"
@@ -66,8 +67,16 @@ def _inline(value: Any) -> str:
 # ID the journal does record; and journals are the BM25 corpus, so echoing it
 # here scores the same pair higher on the next similarity run for no new
 # evidence. The journal keeps the shortlist and the verdict; `adef detection
-# show <id>` keeps the logic. Callers still receive `query` in the payload.
-_JOURNAL_OMIT_KEYS = frozenset({"query"})
+# show <id>` keeps the logic. Callers still receive both fields in the payload.
+#
+# `snippet` belongs here as much as `query` does: `MemoryIndex._snippet` builds
+# it from the journal body PLUS `record_search_text(record)`, which ends in the
+# record's query — so omitting `query` alone left the neighbour's verbatim logic
+# in the journal under a different key. Verified end-to-end, not by inspection.
+# This shrinks the feedback surface to low-entropy metadata (title, technique
+# ID, platform); closing it entirely means not indexing the machine-generated
+# `### Refine /` blocks at all, which is a MemoryIndex change — see 10188.
+_JOURNAL_OMIT_KEYS = frozenset({"query", "snippet"})
 
 
 def _format_payload(payload: Any, indent: str = "") -> str:
@@ -85,8 +94,6 @@ def _format_payload(payload: Any, indent: str = "") -> str:
     if isinstance(payload, dict):
         lines: list[str] = []
         for key, value in payload.items():
-            if key in _JOURNAL_OMIT_KEYS:
-                continue
             if isinstance(value, dict) and value:
                 rendered = _format_payload(value, indent + "  ")
                 if rendered:
@@ -95,19 +102,31 @@ def _format_payload(payload: Any, indent: str = "") -> str:
             elif isinstance(value, list) and value and all(isinstance(i, dict) for i in value):
                 lines.append(f"{indent}- **{key}:**")
                 lines.extend(
-                    f"{indent}  - " + ", ".join(
-                        f"{k}: {_inline(v)}"
-                        for k, v in entry.items()
-                        if k not in _JOURNAL_OMIT_KEYS
-                    )
+                    f"{indent}  - " + ", ".join(f"{k}: {_inline(v)}" for k, v in entry.items())
                     for entry in value
                 )
             else:
                 lines.append(f"{indent}- **{key}:** {_inline(value)}")
         return "\n".join(lines)
     if isinstance(payload, (list, tuple)):
-        return "\n".join(f"{indent}- {item}" for item in payload) or "_(empty)_"
-    return str(payload)
+        return "\n".join(f"{indent}- {_inline(item)}" for item in payload) or "_(empty)_"
+    return _inline(payload)
+
+
+def _prune_for_journal(value: Any) -> Any:
+    """Strip `_JOURNAL_OMIT_KEYS` at every depth, before anything is rendered.
+
+    Filtering at each render site instead left holes: a dict nested inside a
+    list entry, or a bare list payload, reached `_inline` whole and stringified
+    its omitted keys straight back in. Pruning the structure once is both
+    smaller and total — the renderer needs no knowledge of what is omitted.
+    """
+    if isinstance(value, dict):
+        return {k: _prune_for_journal(v) for k, v in value.items()
+                if k not in _JOURNAL_OMIT_KEYS}
+    if isinstance(value, (list, tuple)):
+        return [_prune_for_journal(v) for v in value]
+    return value
 
 
 def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dict[str, Any]:
@@ -127,7 +146,9 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
             continue
         try:
             result = cls().run(detection_id=detection_id, **context)
-            journal.append_block(detection_id, step.heading, _format_payload(result))
+            journal.append_block(
+                detection_id, step.heading, _format_payload(_prune_for_journal(result))
+            )
             summary[step.name] = {"ok": True, "result": result, "error": None}
         except NoCatalogRecordError as exc:
             # The common, expected lifecycle gap: the detection is still

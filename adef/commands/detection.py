@@ -205,7 +205,17 @@ def _make_stage_command(stage: str) -> click.Command:
                                   workspace=workspace, similarity_mode=similarity_mode)
                 console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
             else:
-                console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
+                # Say so when a mode was asked for and dropped — otherwise
+                # `refine D-X --similarity-mode agent` on an already-refined
+                # detection is a silent no-op that still looks like it ran.
+                dropped = (
+                    f" [yellow]--similarity-mode {similarity_mode} not applied[/yellow]"
+                    if similarity_mode != "bm25" else ""
+                )
+                console.print(
+                    f"  chain skipped (already at refine){dropped} — "
+                    "re-run it with [bold]--chain[/bold]"
+                )
 
     if stage == "refine":
         cmd.params.append(

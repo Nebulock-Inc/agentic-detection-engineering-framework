@@ -40,8 +40,11 @@ def register(server: Any) -> None:
     @server.tool()
     def refine_chain(
         detection_id: str,
-        similarity_mode: Literal["bm25", "agent", "llm", "auto"] = "agent",
         workspace: Optional[str] = None,
+        # Appended, never inserted: `workspace` was already the second
+        # positional of a published tool, so slotting a new parameter ahead of
+        # it would bind an existing caller's workspace path to this one.
+        similarity_mode: Literal["bm25", "agent", "llm", "auto"] = "agent",
     ) -> dict[str, Any]:
         """Run the Refine chain (Similarity → Overlap → Verification) for a detection.
 

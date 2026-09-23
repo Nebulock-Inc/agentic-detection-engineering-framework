@@ -1,12 +1,19 @@
 """Rule-similarity search over the ADEF catalog — does a rule like this
 already exist?
 
-Always ranks the whole catalog with the same BM25 index `adef detection
-search` ships (`adef.core.memory.MemoryIndex`) and takes the top-K. What
-happens to that shortlist depends on `similarity_mode`:
+Ranks with the same BM25 index `adef detection search` ships
+(`adef.core.memory.MemoryIndex`) and takes the top-K. Note the corpus is
+**journal-keyed**: the index is built from journal entries, with each
+record's catalog text attached as extra text, so a catalogued rule whose
+journal file is missing cannot be shortlisted at all. `RuleOverlapAgent`
+iterates the catalog directly and does not share that blind spot — the two
+can disagree about what the catalog holds within a single Refine run.
+`adef sync` re-creates missing journals, which hides this in the happy path.
+What happens to the shortlist depends on `similarity_mode`:
 - `bm25`: return the BM25 ranking as-is. No network call.
-- `agent`: return the shortlist enriched with each candidate's query, MITRE
-  IDs, platform, and data source for the *caller* to rank. No network call.
+- `agent`: return the shortlist enriched with the target's *and* each
+  candidate's query, MITRE IDs, platform, and data source for the *caller*
+  to rank. No network call.
 - `llm`: send the shortlist to an LLM judge for a true semantic re-score
   (paraphrase/synonym matches BM25's lexical scoring misses).
 - `auto`: `llm` when available (`ANTHROPIC_API_KEY` + the `llm` extra),
@@ -127,9 +134,13 @@ def _logic_fields(record: dict) -> dict[str, Any]:
     near-duplicate is exactly what Refine should show you, and the caller reads
     the empty query the same way it reads a blank one: nothing to compare.
     """
+    mitre = record.get("mitre") or []
     return {
         "query": record.get("query") or "",
-        "mitre": list(record.get("mitre") or []),
+        # A hand-edited record can carry `mitre: T1218.005` as a scalar, and
+        # `list("T1218.005")` would hand the caller nine one-character
+        # "techniques" to judge alignment against.
+        "mitre": [mitre] if isinstance(mitre, str) else list(mitre),
         "platform": record.get("platform") or "",
         "data_source": record.get("data_source") or "",
     }

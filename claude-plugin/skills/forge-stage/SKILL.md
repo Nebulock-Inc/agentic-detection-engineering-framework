@@ -72,6 +72,8 @@ is the stage doing its job.
   - The CLI prints only that the chain ran. The ranked shortlist is in the
     `### Refine / Similarity` block the chain appended to the journal —
     `adef detection show D-XXXX`.
+  - On a detection **already** at refine the chain does not re-run and the mode
+    is dropped — add `--chain` to force it. The CLI says so, but check for it.
   - That block deliberately carries **no rule logic**, only IDs, scores and
     metadata. Get the logic with `adef detection show <id>` for the target and
     for each candidate you are about to judge, and compare the **full** queries.
