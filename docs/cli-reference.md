@@ -131,21 +131,28 @@ entry point of `detection new`.
 | `DETECTION_ID` (arg, required) | e.g. `D-0001`. |
 | `--note TEXT` | Note appended to the stage block. Repeatable — several `--note`s render as a bullet list. |
 | `--chain` (refine only) | Re-run the Similarity → Overlap → Verification chain even when already at refine (e.g. after wiring the wrapper agents). |
-| `--similarity-mode` | `bm25` \| `agent` \| `llm` \| `auto` | How the Similarity step ranks. Default `bm25` — deterministic, no network call. `agent` returns the shortlist enriched with each candidate's query/MITRE/platform for the caller to rank, also with no network call. `llm` reranks with an LLM judge and **sends detection content to the Anthropic API** (requires `ANTHROPIC_API_KEY` + the `llm` extra). `auto` picks `llm` when available, else `bm25`. |
+| `--similarity-mode` | How the Similarity step ranks: `bm25` (default) is deterministic and makes no network call; `agent` returns the shortlist enriched with each candidate's query, MITRE IDs, platform, and data source for the caller to rank, also with no network call; `llm` reranks with an LLM judge and **sends detection content to the Anthropic API** (requires `ANTHROPIC_API_KEY` + the `llm` extra); `auto` picks `llm` when available, else `bm25`. |
 | `--workspace` | Workspace path (see resolution). |
 
 `refine` additionally runs the orchestration chain (Similarity → Overlap →
 Verification) **on the transition into refine**, appending each result to the
 journal (the chain does not abort on partial failure). Re-advancing to `refine`
-does *not* re-run it — use `--chain` to force a re-run. Similarity ranking defaults to BM25 and upgrades to an LLM-reranked shortlist automatically when
-`ANTHROPIC_API_KEY` is set and the `llm` extra is installed — override with `--similarity-mode`.
+does *not* re-run it — use `--chain` to force a re-run. Similarity ranking
+defaults to `bm25` and stays there regardless of environment — an
+`ANTHROPIC_API_KEY` no longer changes the default. Opt into an LLM rerank with
+`--similarity-mode llm` (or `auto`), or hand the shortlist to your own assistant
+with `--similarity-mode agent`.
 
 > **What leaves your machine in `llm`/`auto` mode.** When the LLM path actually
 > runs, ADEF sends the Anthropic API the target detection's title, MITRE
 > technique IDs, and query (truncated to 500 characters), plus — for each of the
-> `top_k` (default 5) BM25 candidates — its detection ID, title, and a
-> journal-derived snippet. Nothing else from the workspace is transmitted, and
-> `--similarity-mode bm25` makes no network call at all.
+> `top_k` (default 5) BM25 candidates — its detection ID, title, and snippet.
+> That snippet is built from both the journal body AND the catalog search text
+> (title, MITRE IDs, platform, data source, format, query — see
+> `record_search_text`), so catalog and query content can be disclosed too, not
+> just journal prose. Nothing else from the workspace is transmitted.
+> `--similarity-mode bm25` and `--similarity-mode agent` make no network call at
+> all.
 
 ```bash
 adef detection observe D-0001 --note "Checked 30d of process_create events"
