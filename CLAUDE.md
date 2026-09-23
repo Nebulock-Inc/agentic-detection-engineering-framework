@@ -378,20 +378,25 @@ When `adef detection refine D-XXXX` runs:
 2. Invokes `orchestration/refine_chain.py`
 3. Runs **three steps in sequence, native by default** (v2, 2026-09) — native
    execution and vendor-free execution are not the same guarantee: only
-   RuleSimilarity's `bm25` mode is vendor-free, and it is not the default:
+   RuleSimilarity's `bm25` and `agent` modes are vendor-free, and `bm25` is
+   the default:
    - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
      search over the catalog — does a rule like this already exist? —
      optionally reranked by an LLM judge (`adef detection refine D-XXXX
-     --similarity-mode {auto,bm25,llm}`; `auto`, the default, uses the LLM
-     when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
-     installed, otherwise stays BM25-only). **Data egress in `llm`/`auto`
-     mode:** the target's title, MITRE IDs, and query (truncated to 500
-     chars), plus each shortlisted candidate's ID, title, and snippet, are
-     sent to the Anthropic API — the snippet is built from both the
-     journal body AND the catalog search text (title, MITRE IDs, platform,
+     --similarity-mode {bm25,agent,llm,auto}`). **`bm25` is the default** and
+     makes no network call. **`agent`** returns the shortlist enriched with each
+     candidate's query, MITRE IDs, platform, and data source for the *caller* to
+     rank — also no network call, and the mode to use from an assistant session,
+     where the agent has context ADEF does not and its reasoning lands in the
+     transcript. `llm` reranks with an LLM judge; `auto` picks `llm` when
+     `ANTHROPIC_API_KEY` and the `llm` extra are both present, else `bm25`.
+     **Data egress in `llm`/`auto` mode:** the target's title, MITRE IDs, and
+     query (truncated to 500 chars), plus each shortlisted candidate's ID, title,
+     and snippet, are sent to the Anthropic API — the snippet is built from both
+     the journal body AND the catalog search text (title, MITRE IDs, platform,
      data source, format, query — see `record_search_text`), so catalog and
-     query content can be disclosed too, not just journal prose. `bm25` is
-     the only mode that makes no network call.
+     query content can be disclosed too, not just journal prose. `bm25` and `agent`
+     make no network call.
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)

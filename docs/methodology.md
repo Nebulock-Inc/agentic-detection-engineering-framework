@@ -43,7 +43,7 @@ What goes here:
 
 ### Refine — iterate the rule with structured feedback
 
-Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three steps, native by default (v2, 2026-09) — native and vendor-free are not the same guarantee here: RuleSimilarity's default `auto` mode can call the Anthropic API (see CLAUDE.md's "The Refine Chain" for the exact data egress); only its `bm25` mode is vendor-free.
+Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three steps, native by default (v2, 2026-09) — and deterministic by default: RuleSimilarity's default `bm25` mode makes no network call, as does its `agent` mode, which hands the shortlist to the calling assistant to rank. Only the opt-in `llm` and `auto` modes call the Anthropic API (see CLAUDE.md's "The Refine Chain" for the exact data egress).
 
 1. **RuleSimilarity** — BM25 nearest-neighbor search over the catalog — does a rule like this already exist?
 2. **RuleOverlap** — deterministic duplicate/complementary/redundant classification within the target's MITRE technique cluster — do its triggers heavily overlap with another rule's findings?

@@ -1,12 +1,16 @@
-"""Rule-similarity search over the ADEF catalog — BM25 retrieval, optional
-LLM rerank.
+"""Rule-similarity search over the ADEF catalog — does a rule like this
+already exist?
 
-Answers "does a rule like this already exist?" in two stages:
-1. Always: rank the whole catalog with the same BM25 index `adef detection
-   search` ships (`adef.core.memory.MemoryIndex`) and take the top-K.
-2. Optionally (`similarity_mode` "llm" or "auto" with an LLM available):
-   ask an LLM judge to re-score just that shortlist for true semantic
-   similarity (paraphrase/synonym matches BM25's lexical scoring misses).
+Always ranks the whole catalog with the same BM25 index `adef detection
+search` ships (`adef.core.memory.MemoryIndex`) and takes the top-K. What
+happens to that shortlist depends on `similarity_mode`:
+- `bm25`: return the BM25 ranking as-is. No network call.
+- `agent`: return the shortlist enriched with each candidate's query, MITRE
+  IDs, platform, and data source for the *caller* to rank. No network call.
+- `llm`: send the shortlist to an LLM judge for a true semantic re-score
+  (paraphrase/synonym matches BM25's lexical scoring misses).
+- `auto`: `llm` when available (`ANTHROPIC_API_KEY` + the `llm` extra),
+  else `bm25`.
 
 The LLM step never scans the whole corpus — cost and latency stay bounded by
 `top_k`, not catalog size. See the plan's Task 2 design rationale.

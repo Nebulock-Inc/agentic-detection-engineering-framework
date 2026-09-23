@@ -147,3 +147,66 @@ def test_format_payload_leaves_non_dict_collections_alone(value):
     """Only lists *of dicts* get the sub-bullet treatment — the plain-value
     rendering other steps rely on is unchanged."""
     assert _format_payload({"k": value}) == f"- **k:** {value}"
+
+
+def _one_rule_workspace(tmp_path: Path, name: str) -> Path:
+    """A workspace with one catalogued, journalled detection — the minimum the
+    refine chain needs to run without reporting 'no catalog record'."""
+    ws = tmp_path / name
+    (ws / "journals").mkdir(parents=True)
+    (ws / "catalog").mkdir(parents=True)
+    cat = Catalog(ws)
+    journal = Journal(ws / "journals")
+    rec = _rec("D-0001", "mshta child process", "process.name='mshta.exe'")
+    cat.write_raw(ws / "catalog" / "D-0001.yml", rec.to_yaml_dict())
+    journal.create(detection_id="D-0001", title=rec.title)
+    cat.rebuild_index()
+    return ws
+
+
+def test_refine_cli_defaults_to_bm25(tmp_path: Path, monkeypatch):
+    # The agentic promise is fulfilled by an agent CALLING adef, not by adef
+    # quietly calling a model on the user's behalf. Opt in to spend money and
+    # egress; do not opt out. An API key in the environment must not change
+    # what the CLI does by default.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
+    ws = _one_rule_workspace(tmp_path, "cli-default-ws")
+    captured: dict = {}
+
+    def _spy(journal, detection_id, **context):
+        captured.update(context)
+        return {}
+
+    monkeypatch.setattr("adef.orchestration.refine_chain.run_refine_chain", _spy)
+    result = CliRunner().invoke(
+        detection_cli, ["refine", "D-0001", "--workspace", str(ws)]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["similarity_mode"] == "bm25"
+
+
+def test_refine_cli_accepts_agent_mode(tmp_path: Path, monkeypatch):
+    ws = _one_rule_workspace(tmp_path, "cli-agent-ws")
+    captured: dict = {}
+
+    def _spy(journal, detection_id, **context):
+        captured.update(context)
+        return {}
+
+    monkeypatch.setattr("adef.orchestration.refine_chain.run_refine_chain", _spy)
+    result = CliRunner().invoke(
+        detection_cli,
+        ["refine", "D-0001", "--workspace", str(ws), "--similarity-mode", "agent"],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["similarity_mode"] == "agent"
+
+
+def test_refine_cli_rejects_an_unknown_mode(tmp_path: Path):
+    ws = _one_rule_workspace(tmp_path, "cli-bad-mode-ws")
+    result = CliRunner().invoke(
+        detection_cli,
+        ["refine", "D-0001", "--workspace", str(ws), "--similarity-mode", "nope"],
+    )
+    assert result.exit_code != 0
+    assert "nope" in result.output

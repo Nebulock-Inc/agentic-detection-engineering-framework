@@ -219,12 +219,15 @@ def _make_stage_command(stage: str) -> click.Command:
         cmd.params.append(
             click.Option(
                 ["--similarity-mode"],
-                type=click.Choice(["auto", "bm25", "llm"]),
-                default="auto",
-                help="How the Similarity refine-step ranks candidates: 'llm' reranks the "
-                "BM25 shortlist with an LLM judge (requires ANTHROPIC_API_KEY + the 'llm' "
-                "extra), 'bm25' stays fully deterministic, 'auto' (default) uses llm when "
-                "available.",
+                type=click.Choice(["bm25", "agent", "llm", "auto"]),
+                default="bm25",
+                help="How the Similarity refine-step ranks candidates. 'bm25' (default) is "
+                "fully deterministic and makes no network call. 'agent' returns the "
+                "shortlist enriched with each candidate's query and MITRE IDs for YOU to "
+                "rank — also no network call, and the mode to use from an assistant "
+                "session. 'llm' reranks with an LLM judge (requires ANTHROPIC_API_KEY + "
+                "the 'llm' extra) and sends detection content to the Anthropic API. "
+                "'auto' picks llm when available, else bm25.",
             )
         )
     return cmd

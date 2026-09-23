@@ -131,7 +131,7 @@ entry point of `detection new`.
 | `DETECTION_ID` (arg, required) | e.g. `D-0001`. |
 | `--note TEXT` | Note appended to the stage block. Repeatable — several `--note`s render as a bullet list. |
 | `--chain` (refine only) | Re-run the Similarity → Overlap → Verification chain even when already at refine (e.g. after wiring the wrapper agents). |
-| `--similarity-mode {auto,bm25,llm}` (refine only) | How the Similarity step ranks candidates. `bm25` (deterministic, no dependency) or `llm` (reranks the BM25 shortlist with an LLM judge; requires `ANTHROPIC_API_KEY` and the `llm` extra — `pip install '...[llm]'`). `auto` (default) uses `llm` when available, else `bm25`. |
+| `--similarity-mode` | `bm25` \| `agent` \| `llm` \| `auto` | How the Similarity step ranks. Default `bm25` — deterministic, no network call. `agent` returns the shortlist enriched with each candidate's query/MITRE/platform for the caller to rank, also with no network call. `llm` reranks with an LLM judge and **sends detection content to the Anthropic API** (requires `ANTHROPIC_API_KEY` + the `llm` extra). `auto` picks `llm` when available, else `bm25`. |
 | `--workspace` | Workspace path (see resolution). |
 
 `refine` additionally runs the orchestration chain (Similarity → Overlap →
