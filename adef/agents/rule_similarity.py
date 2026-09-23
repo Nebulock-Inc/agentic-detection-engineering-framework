@@ -27,7 +27,11 @@ from adef.core.memory import MemoryIndex
 
 DEFAULT_LLM_MODEL = "claude-haiku-4-5-20251001"
 
-_VALID_SIMILARITY_MODES = frozenset({"auto", "bm25", "llm"})
+#: `agent` returns the shortlist enriched for the caller to judge and ranks
+#: nothing — the caller (an assistant session) has context ADEF does not, and
+#: its reasoning lands in the transcript where it can be reviewed. Like `bm25`
+#: it never makes a network call.
+_VALID_SIMILARITY_MODES = frozenset({"auto", "bm25", "llm", "agent"})
 
 _JUDGE_PROMPT = """You are a detection engineering expert. Given a target detection rule and a \
 shortlist of candidates retrieved by keyword search, judge which candidates are a true semantic \
@@ -160,6 +164,29 @@ class RuleSimilarityAgent:
         resolved_mode = similarity_mode
         if resolved_mode == "auto":
             resolved_mode = "llm" if (llm_client is not None or _llm_available()) else "bm25"
+
+        if resolved_mode == "agent":
+            # Hand back everything the caller needs to judge logic similarity
+            # itself — a snippet is not enough, the query text is. Deliberately
+            # returns before any LLM path: `agent` guarantees no network call.
+            enriched = []
+            for candidate in candidates:
+                cand_id = str(candidate["detection_id"])
+                rec = records.get(cand_id, {})
+                enriched.append(
+                    {
+                        **candidate,
+                        "query": str(rec.get("query", "")),
+                        "mitre": list(rec.get("mitre") or []),
+                        "platform": str(rec.get("platform", "")),
+                        "data_source": str(rec.get("data_source", "")),
+                    }
+                )
+            return {
+                "detection_id": detection_id,
+                "mode_used": "agent",
+                "candidates": enriched,
+            }
 
         if resolved_mode == "llm":
             if llm_client is None and not _llm_available():
