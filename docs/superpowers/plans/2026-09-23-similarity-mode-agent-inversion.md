@@ -50,6 +50,8 @@
 - Consumes: the existing `RuleSimilarityAgent.run(detection_id, workspace, top_k, similarity_mode, llm_client, **ctx)` signature — unchanged.
 - Produces: `similarity_mode="agent"` returns `{"detection_id": str, "mode_used": "agent", "candidates": [...]}` where each candidate carries `detection_id`, `title`, `score`, `snippet`, `reasoning`, **plus** `query`, `mitre`, `platform`, `data_source` drawn from the candidate's catalog record. No LLM call is made under any circumstance.
 
+> **As shipped, this contract gained a `"target"` key** — `{"title", "query", "mitre", "platform", "data_source"}` for the target detection itself. Review found that returning only the candidates' queries left the caller with nothing to compare them against. The live contract is documented in `CLAUDE.md` and `docs/cli-reference.md`; this plan is kept as the historical record of what was planned.
+
 - [ ] **Step 1: Write the failing tests**
 
 Add to `tests/test_rule_similarity_agent.py`:

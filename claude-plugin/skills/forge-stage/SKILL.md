@@ -67,12 +67,17 @@ is the stage doing its job.
   wrapper agents aren't configured — say so; don't call it a failure.
   `--note` appends never re-run the chain; `--chain` re-runs it explicitly
   (e.g. after configuring wrappers).
-- Run it as `adef detection refine D-XXXX --similarity-mode agent`, then read
-  the shortlist out of the `### Refine / Similarity` block the chain appended
-  to the journal (`adef detection show D-XXXX`) — the CLI prints only that the
-  chain ran. `agent` mode puts the target's and each candidate's actual query
-  in that block; rank them yourself, naming each neighbor duplicate vs.
-  complementary and why, rather than trusting the default `bm25` ranking blind.
+- Run it as `adef detection refine D-XXXX --similarity-mode agent`, then rank
+  the shortlist yourself rather than trusting the default `bm25` ranking blind:
+  - The CLI prints only that the chain ran. The ranked shortlist is in the
+    `### Refine / Similarity` block the chain appended to the journal —
+    `adef detection show D-XXXX`.
+  - That block deliberately carries **no rule logic**, only IDs, scores and
+    metadata. Get the logic with `adef detection show <id>` for the target and
+    for each candidate you are about to judge, and compare the **full** queries.
+  - Name each neighbor *duplicate* (stop — tune the existing rule instead) vs.
+    *complementary* (different layer/telemetry — keep both, cross-reference),
+    and say why. Never classify from a title or a truncated preview.
 - When wrappers are unavailable, run the gates manually:
   - **Similarity**: `adef detection search "<concept>"` +
     `adef detection list --tactic/--engine`. Name the verdict per neighbor:

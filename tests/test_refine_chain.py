@@ -209,13 +209,12 @@ def test_format_payload_keeps_lines_readable_for_many_overlaps():
         }
         for i in range(2, 9)
     ]
-    # `agent` mode's candidate `query` field is stored verbatim
-    # (`CatalogRecord.query`) and is multi-line Sigma/SQL in practically
-    # every real record — unlike `snippet`, which `MemoryIndex._snippet`
-    # already sanitizes with `.replace("\n", " ")`. An embedded newline here
-    # must not survive into the rendered journal: it would sever the bullet
-    # and turn indented query text into a markdown code block.
-    overlaps[0]["query"] = "selection:\n  Image|endswith: '\\mshta.exe'\ncondition: selection"
+    # Free-text fields reach the renderer verbatim and are routinely
+    # multi-line — unlike `snippet`, which `MemoryIndex._snippet` already
+    # sanitizes with `.replace("\n", " ")`. An embedded newline must not
+    # survive into the rendered journal: it would sever the bullet and turn
+    # the indented continuation into a markdown code block.
+    overlaps[0]["reasoning"] = "selection:\n  Image|endswith: '\\mshta.exe'\ncondition: selection"
     payload = {
         "detection_id": "D-0001",
         "result": {"detection_id": "D-0001", "techniques": ["T1218.005"], "overlaps": overlaps},
@@ -227,26 +226,50 @@ def test_format_payload_keeps_lines_readable_for_many_overlaps():
     # Every entry is legible on its own line, and none were dropped.
     for entry in overlaps:
         assert sum(1 for line in lines if entry["other_id"] in line) == 1
-    # The embedded newlines in overlaps[0]'s query must not survive into the
-    # rendered output: before the fix, "selection:", "Image|endswith...", and
-    # "condition: selection" landed on three separate lines, severing the
-    # D-0002 bullet and turning the 4-space-indented middle line into a
-    # markdown code block. After the fix, all three collapse onto one line.
+    # The embedded newlines must not survive into the rendered output: before
+    # the fix, "selection:", "Image|endswith...", and "condition: selection"
+    # landed on three separate lines, severing the D-0002 bullet and turning
+    # the 4-space-indented middle line into a markdown code block. After the
+    # fix, all three collapse onto one line.
     query_line = next(line for line in lines if "D-0002" in line)
     assert "selection:" in query_line
     assert "condition: selection" in query_line
 
 
-def test_long_values_are_capped_in_the_rendered_journal():
-    # Journals are the BM25 corpus. Rendering a neighbor's whole query into the
-    # target's journal feeds that text straight back into the next similarity
-    # run, scoring the same pair higher for no new evidence. Cap the rendered
-    # form; the caller still gets the value verbatim from the return payload.
-    long_query = "process.name:mshta.exe OR " * 200
-    body = _format_payload({"detection_id": "D-0001", "query": long_query})
+def test_rule_logic_never_reaches_the_journal():
+    # Journals are the BM25 corpus. A neighbour's query rendered into the
+    # target's journal scores that same pair higher on the next similarity run
+    # for no new evidence — and the text is redundant anyway: it lives in that
+    # neighbour's own catalog record, reachable from the ID the journal does
+    # keep. Applies at every nesting depth the renderer handles.
+    payload = {
+        "detection_id": "D-0001",
+        "query": "TARGET_LOGIC_MARKER",
+        "target": {"title": "Suspicious mshta", "query": "TARGET_LOGIC_MARKER",
+                   "platform": "windows"},
+        "candidates": [
+            {"detection_id": "D-0002", "score": 9.1, "query": "CANDIDATE_LOGIC_MARKER"},
+        ],
+    }
+    body = _format_payload(payload)
 
-    rendered = next(line for line in body.splitlines() if "query" in line)
-    assert len(rendered) < len(long_query)
+    assert "LOGIC_MARKER" not in body
+    # Everything that makes the block useful survives.
+    assert "D-0002" in body
+    assert "windows" in body
+    assert "Suspicious mshta" in body
+
+
+def test_long_values_are_capped_in_the_rendered_journal():
+    # Journals are the BM25 corpus and a human artifact. Rule logic is dropped
+    # outright (see the test above), but free-text fields like an LLM judge's
+    # `reasoning` still land here and can run long. Cap the rendered form; the
+    # caller still gets the value verbatim from the return payload.
+    long_text = "the same technique from a different angle, " * 200
+    body = _format_payload({"detection_id": "D-0001", "reasoning": long_text})
+
+    rendered = next(line for line in body.splitlines() if "reasoning" in line)
+    assert len(rendered) < len(long_text)
     assert rendered.endswith("\u2026")
     # Short values are untouched — the cap must not mangle ordinary output.
     assert "**detection_id:** D-0001" in body

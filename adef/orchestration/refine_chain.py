@@ -61,6 +61,15 @@ def _inline(value: Any) -> str:
     return text if len(text) <= _MAX_RENDERED else text[:_MAX_RENDERED] + "\u2026"
 
 
+# Rule logic never goes in the journal. It is the neighbour's, not this
+# detection's; it already lives in that neighbour's catalog record, keyed by an
+# ID the journal does record; and journals are the BM25 corpus, so echoing it
+# here scores the same pair higher on the next similarity run for no new
+# evidence. The journal keeps the shortlist and the verdict; `adef detection
+# show <id>` keeps the logic. Callers still receive `query` in the payload.
+_JOURNAL_OMIT_KEYS = frozenset({"query"})
+
+
 def _format_payload(payload: Any, indent: str = "") -> str:
     """Render an agent's return value into a journal-friendly markdown body.
 
@@ -76,13 +85,21 @@ def _format_payload(payload: Any, indent: str = "") -> str:
     if isinstance(payload, dict):
         lines: list[str] = []
         for key, value in payload.items():
+            if key in _JOURNAL_OMIT_KEYS:
+                continue
             if isinstance(value, dict) and value:
-                lines.append(f"{indent}- **{key}:**")
-                lines.append(_format_payload(value, indent + "  "))
+                rendered = _format_payload(value, indent + "  ")
+                if rendered:
+                    lines.append(f"{indent}- **{key}:**")
+                    lines.append(rendered)
             elif isinstance(value, list) and value and all(isinstance(i, dict) for i in value):
                 lines.append(f"{indent}- **{key}:**")
                 lines.extend(
-                    f"{indent}  - " + ", ".join(f"{k}: {_inline(v)}" for k, v in entry.items())
+                    f"{indent}  - " + ", ".join(
+                        f"{k}: {_inline(v)}"
+                        for k, v in entry.items()
+                        if k not in _JOURNAL_OMIT_KEYS
+                    )
                     for entry in value
                 )
             else:
