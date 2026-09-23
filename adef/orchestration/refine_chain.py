@@ -38,16 +38,27 @@ REFINE_STEPS: tuple[ChainStep, ...] = (
 )
 
 
+# Comfortably above MemoryIndex's 240-char snippet, so the values that were
+# always rendered here pass through intact and only genuinely long ones (a
+# candidate's verbatim query) get cut.
+_MAX_RENDERED = 300
+
+
 def _inline(value: Any) -> str:
-    """Collapse whitespace so one rendered value stays on one journal line.
+    """Collapse whitespace and cap length for one journal line.
 
     The journal is markdown: a value containing newlines severs its bullet and
     can turn indented text into a code block. Candidate queries are stored
     verbatim and are routinely multi-line, so this is the common case, not an
-    edge one. Only the *rendered* form is collapsed — callers still receive
-    the value unchanged.
+    edge one.
+
+    The cap matters beyond readability: journals are the BM25 corpus, so a
+    neighbor's whole query rendered into the target's journal comes back as
+    score for that same pair on the next run. Only the *rendered* form is
+    collapsed and capped — callers still receive the value unchanged.
     """
-    return " ".join(str(value).split())
+    text = " ".join(str(value).split())
+    return text if len(text) <= _MAX_RENDERED else text[:_MAX_RENDERED] + "\u2026"
 
 
 def _format_payload(payload: Any, indent: str = "") -> str:

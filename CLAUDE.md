@@ -390,9 +390,9 @@ When `adef detection refine D-XXXX` runs:
      search over the catalog — does a rule like this already exist? —
      optionally reranked by an LLM judge (`adef detection refine D-XXXX
      --similarity-mode {bm25,agent,llm,auto}`). **`bm25` is the default** and
-     makes no network call. **`agent`** returns the shortlist enriched with each
-     candidate's query, MITRE IDs, platform, and data source for the *caller* to
-     rank — also no network call, and the mode to use from an assistant session,
+     makes no network call. **`agent`** returns the shortlist with the
+     target's *and* each candidate's query, MITRE IDs, platform, and data source
+     for the *caller* to rank — also no network call, and the mode to use from an assistant session,
      where the agent has context ADEF does not and its reasoning lands in the
      transcript. `llm` reranks with an LLM judge; `auto` picks `llm` when
      `ANTHROPIC_API_KEY` and the `llm` extra are both present, else `bm25`.

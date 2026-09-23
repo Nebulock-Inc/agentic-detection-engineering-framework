@@ -237,6 +237,21 @@ def test_format_payload_keeps_lines_readable_for_many_overlaps():
     assert "condition: selection" in query_line
 
 
+def test_long_values_are_capped_in_the_rendered_journal():
+    # Journals are the BM25 corpus. Rendering a neighbor's whole query into the
+    # target's journal feeds that text straight back into the next similarity
+    # run, scoring the same pair higher for no new evidence. Cap the rendered
+    # form; the caller still gets the value verbatim from the return payload.
+    long_query = "process.name:mshta.exe OR " * 200
+    body = _format_payload({"detection_id": "D-0001", "query": long_query})
+
+    rendered = next(line for line in body.splitlines() if "query" in line)
+    assert len(rendered) < len(long_query)
+    assert rendered.endswith("\u2026")
+    # Short values are untouched — the cap must not mangle ordinary output.
+    assert "**detection_id:** D-0001" in body
+
+
 @pytest.mark.parametrize("value", [[], [1, 2, 3], {}])
 def test_format_payload_leaves_non_dict_collections_alone(value):
     """Only lists *of dicts* get the sub-bullet treatment — the plain-value

@@ -305,6 +305,18 @@ def test_agent_mode_returns_candidates_with_judgment_fields(workspace: Path):
     assert "data_source" in top
 
 
+def test_agent_mode_returns_the_target_side_too(workspace: Path):
+    # Judging similarity takes two sides. Returning only the candidates' queries
+    # forces the caller into another round trip to read its own target — which
+    # defeats the point of handing back the shortlist in the first place.
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        top_k=5, similarity_mode="agent")
+    assert result["target"]["query"] == "process.name:mshta.exe"
+    assert result["target"]["title"] == "Suspicious mshta child process"
+    assert result["target"]["mitre"] == ["T1218.005"]
+    assert result["target"]["platform"] == "windows"
+
+
 def test_agent_mode_never_calls_an_injected_llm_client(workspace: Path):
     # `agent` is a promise, not a preference: the caller does the ranking, so an
     # available client must not be consulted or "no network call" stops being true.

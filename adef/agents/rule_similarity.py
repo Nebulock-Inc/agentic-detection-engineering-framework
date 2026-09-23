@@ -119,6 +119,22 @@ def _validate_judge_coverage(scored: Any, expected_ids: set[str]) -> dict[str, d
     return by_id
 
 
+def _logic_fields(record: dict) -> dict[str, Any]:
+    """The record fields a caller needs to judge *logic* similarity, not topical.
+
+    Missing record (a journal-only detection, which the BM25 index legitimately
+    surfaces) collapses to empty values rather than being dropped — a draft
+    near-duplicate is exactly what Refine should show you, and the caller reads
+    the empty query the same way it reads a blank one: nothing to compare.
+    """
+    return {
+        "query": record.get("query") or "",
+        "mitre": list(record.get("mitre") or []),
+        "platform": record.get("platform") or "",
+        "data_source": record.get("data_source") or "",
+    }
+
+
 class RuleSimilarityAgent:
     """Native replacement for the upstream RuleSimilarity wrapper agent."""
 
@@ -171,25 +187,20 @@ class RuleSimilarityAgent:
 
         if resolved_mode == "agent":
             # Hand back everything the caller needs to judge logic similarity
-            # itself — a snippet is not enough, the query text is. Deliberately
-            # returns before any LLM path: `agent` guarantees no network call.
-            enriched = []
-            for candidate in candidates:
-                cand_id = str(candidate["detection_id"])
-                rec = records.get(cand_id, {})
-                enriched.append(
-                    {
-                        **candidate,
-                        "query": rec.get("query") or "",
-                        "mitre": list(rec.get("mitre") or []),
-                        "platform": rec.get("platform") or "",
-                        "data_source": rec.get("data_source") or "",
-                    }
-                )
+            # itself — a snippet is not enough, the query text is, and it needs
+            # BOTH sides: the target's query as well as each candidate's, or
+            # the caller has nothing to compare against without another round
+            # trip. Deliberately returns before any LLM path: `agent`
+            # guarantees no network call.
+            target = records[detection_id]
             return {
                 "detection_id": detection_id,
                 "mode_used": "agent",
-                "candidates": enriched,
+                "target": {"title": target.get("title") or "", **_logic_fields(target)},
+                "candidates": [
+                    {**c, **_logic_fields(records.get(str(c["detection_id"]), {}))}
+                    for c in candidates
+                ],
             }
 
         if resolved_mode == "llm":
