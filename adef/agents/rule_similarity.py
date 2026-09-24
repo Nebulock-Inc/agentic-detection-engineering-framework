@@ -8,9 +8,9 @@ journal, so a catalogued rule with no journal is still shortlisted (by its
 record's title/mitre/platform/query), and a journal-only draft (a fresh
 `detection new`, before it has a catalog record) is still shortlisted too —
 at minimum by its title, which `CorpusEntry.index_text` always includes,
-even when the journal itself is still template-only. (`RuleOverlapAgent`
-still iterates the catalog directly as of this change; unifying it onto
-`build_corpus` is tracked separately in 10188.)
+even when the journal itself is still template-only. `RuleOverlapAgent`
+resolves membership through the same `build_corpus` call, so the two agents
+agree on what the catalog holds.
 What happens to the shortlist depends on `similarity_mode`:
 - `bm25`: return the BM25 ranking as-is. No network call.
 - `agent`: return the shortlist enriched with the target's *and* each
