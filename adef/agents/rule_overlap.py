@@ -16,7 +16,8 @@ from typing import Any
 
 import yaml
 
-from adef.core.catalog import Catalog, NoCatalogRecordError
+from adef.core.catalog import NoCatalogRecordError
+from adef.core.corpus import build_corpus
 from adef.core.journal import workspace_journals_dir
 
 _DUPLICATE_NEAR_THRESHOLD = 0.85  # matches detect-vault's RuleOverlapAgent reference
@@ -126,14 +127,18 @@ class RuleOverlapAgent:
     def run(self, detection_id: str, workspace: Path | None = None, **ctx: Any) -> dict[str, Any]:
         journals_dir = workspace_journals_dir(workspace, create=False)
         ws = journals_dir.parent
-        catalog = Catalog(ws)
 
-        target = None
-        records: dict[str, dict] = {}
-        for det_id, _path, data in catalog.iter_records():
-            records[det_id] = data
-            if det_id == detection_id:
-                target = data
+        # Same membership resolver as Similarity — the two agents disagreeing
+        # about what the catalog holds is the bug this replaced. Entries with
+        # no query are skipped here rather than absent: `classify_pair` needs
+        # logic on both sides, so a journal-only draft is in the corpus and
+        # simply not comparable.
+        records: dict[str, dict] = {
+            e.detection_id: e.record
+            for e in build_corpus(ws)
+            if e.record is not None and (e.record.get("query") or "")
+        }
+        target = records.get(detection_id)
         if target is None:
             raise NoCatalogRecordError(f"No catalog record found for {detection_id}")
 
