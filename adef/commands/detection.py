@@ -19,7 +19,6 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from adef.core.corpus_text import record_search_text as _record_search_text
 from adef.core.engines import ALLOWED_ENGINES
 from adef.core.journal import (
     FORGE_STAGES,
@@ -628,24 +627,12 @@ def search(query: str, workspace: Path | None, limit: int) -> None:
     Answers "have we looked at X before / do we cover Y?" across the *why*
     (journals) and the *what* (catalog records: title, MITRE, platform, query).
     """
-    from adef.core.catalog import Catalog
-    from adef.core.journal import Journal
+    from adef.core.corpus import build_corpus
     from adef.core.memory import MemoryIndex
 
     ws = _workspace_from(workspace)
-    journals_dir = ws / "journals"
-
-    # Map each detection id → its catalog record's searchable text.
-    record_text: dict[str, str] = {
-        det_id: _record_search_text(data)
-        for det_id, _path, data in Catalog(ws).iter_records()
-    }
-
-    index = MemoryIndex(journals_dir=journals_dir)
-    index.build(
-        entries=list(Journal(journals_dir).iter_entries()),
-        extra_text_for=lambda e: record_text.get(e.detection_id, ""),
-    )
+    index = MemoryIndex()
+    index.build(build_corpus(ws))
     hits = index.search(query, limit=limit)
 
     if not hits:
