@@ -33,7 +33,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from adef.core.catalog import Catalog, NoCatalogRecordError
+from adef.core.catalog import Catalog, catalog_dir, NoCatalogRecordError
 from adef.core.corpus import build_corpus
 from adef.core.corpus_text import record_search_text
 from adef.core.journal import workspace_journals_dir
@@ -169,11 +169,17 @@ class RuleSimilarityAgent:
 
         journals_dir = workspace_journals_dir(workspace, create=False)
         ws = journals_dir.parent
-        catalog = Catalog(ws)
 
+        # Mirror `adef.core.catalog.known_detection_ids`: constructing
+        # `Catalog(ws)` unconditionally mkdirs `catalog/`, which this read
+        # path must not do on a bare workspace.
         records: dict[str, dict] = {}
-        for det_id, _path, data in catalog.iter_records():
-            records[det_id] = data
+        if catalog_dir(ws).is_dir():
+            for det_id, _path, data in Catalog(ws).iter_records():
+                # First one wins, matching `build_corpus` (corpus.py) — a
+                # duplicate id under two platform dirs must resolve to the
+                # same record the shared BM25 index scored.
+                records.setdefault(det_id, data)
         target_record = records.get(detection_id)
         if target_record is None:
             raise NoCatalogRecordError(f"No catalog record found for {detection_id}")

@@ -346,3 +346,38 @@ def test_bm25_mode_stays_lean(workspace: Path):
     result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
                                         top_k=1, similarity_mode="bm25")
     assert "query" not in result["candidates"][0]
+
+
+# --- Read-path discipline + duplicate-id determinism (final review items 2, 3) ---
+
+def test_bare_workspace_creates_no_catalog_dir(tmp_path: Path):
+    # Global constraint: `build_corpus` never creates directories — it's a
+    # read path. `RuleSimilarityAgent.run` constructed `Catalog(ws)`
+    # unconditionally, and `Catalog.__init__` mkdirs `catalog/`, creating the
+    # directory on a bare workspace even though the call is read-only.
+    ws = tmp_path / "bare-ws"
+    (ws / "journals").mkdir(parents=True)
+    Journal(ws / "journals").create(detection_id="D-0001", title="draft only")
+    with pytest.raises(NoCatalogRecordError):
+        RuleSimilarityAgent().run(detection_id="D-0001", workspace=ws, similarity_mode="bm25")
+    assert not (ws / "catalog").exists()
+
+
+def test_duplicate_detection_id_target_resolves_first_wins(workspace: Path):
+    # `corpus.py:102` resolves a duplicate id first-wins (`setdefault` over
+    # path-sorted records) so `build_corpus`'s index and Similarity's target
+    # lookup agree on which record is "the" D-0001. `rule_similarity.py` built
+    # its own last-wins `records` map, so for a duplicated id the target
+    # record Similarity judged could differ from the one the index actually
+    # scored — this branch's own bug class (two code paths disagreeing about
+    # one catalog) surviving in miniature.
+    dup_dir = workspace / "catalog" / "linux"
+    dup_dir.mkdir()
+    Catalog(workspace).write_raw(
+        dup_dir / "D-0001.yml",
+        _make_record("D-0001", "DUPLICATE-SHOULD-NOT-WIN", "process.name:evil.exe",
+                     ["T1218.005"]).to_yaml_dict(),
+    )
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        similarity_mode="agent")
+    assert result["target"]["title"] == "Suspicious mshta child process"

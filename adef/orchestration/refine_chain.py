@@ -38,9 +38,11 @@ REFINE_STEPS: tuple[ChainStep, ...] = (
 )
 
 
-# Comfortably above MemoryIndex's 240-char snippet, so the values that were
-# always rendered here pass through intact and only genuinely long ones (a
-# candidate's verbatim query) get cut.
+# Not sized against MemoryIndex's snippet length — that coupling was a
+# leftover from the discredited content-filtering mitigation. As `_inline`'s
+# docstring says, this cap exists for free text that legitimately belongs
+# here (an LLM judge's `reasoning`, a third-party step's prose) and can run
+# long; unrelated values just happen to pass through under it intact.
 _MAX_RENDERED = 300
 
 

@@ -161,8 +161,11 @@ def narrative_text(body: str) -> str:
     boilerplate — a stage block is appended once, per transition, with
     whatever a human (or an agent, for a non-generated sub-block) actually
     wrote — so it keeps the permissive, content-based rule: drop known
-    scaffolding (headings, blockquotes, the echoed title, housekeeping,
-    generated sub-blocks by provenance), keep everything else.
+    scaffolding (headings, the echoed title, housekeeping, generated
+    sub-blocks by provenance) and strip the leading `>` marker from a
+    blockquoted line rather than dropping it — a blockquote is the natural
+    markdown for pasting intel or a customer report into a journal, and that
+    is exactly the "why" ADEF exists to retain — keep everything else.
 
     Preamble reasoning is indexed only when written in the template's own
     `- **Field:** value` grammar (plus a wrapped continuation of one, r3
@@ -193,8 +196,15 @@ def narrative_text(body: str) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        if stripped.startswith("#") or stripped.startswith(">"):
+        if stripped.startswith("#"):
             continue
+        if stripped.startswith(">"):
+            # Blockquote is markdown shape, not machine provenance — strip the
+            # marker and keep the text (a human pasting intel or a customer
+            # report is exactly the "why" this index exists to retain).
+            stripped = stripped.lstrip(">").strip()
+            if not stripped:
+                continue
         if stripped.startswith("**Title:**"):
             continue
         if "Catalogued from" in stripped and "adef" in stripped:

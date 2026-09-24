@@ -181,6 +181,21 @@ def test_narrative_drops_an_indented_continuation_of_an_unfilled_field(tmp_path:
     assert "UNFILLEDCONTINUATION" not in out
 
 
+def test_narrative_keeps_a_blockquoted_stage_note():
+    # A blockquote is the natural markdown for pasting intel or a customer
+    # report into a journal's stage area — that's human reasoning, not the
+    # machine-generated Refine text or preamble boilerplate the `>` rule was
+    # meant to catch (it was inherited verbatim from the old
+    # `_clean_for_snippet`, which only ever shaped snippets). Dropping the
+    # whole line is an unstated recall regression; only the marker should go.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: observe\n\n"
+        "> BLOCKQUOTETOKEN customer reported unusual mshta activity\n"
+    )
+    out = narrative_text(body)
+    assert "BLOCKQUOTETOKEN" in out
+
+
 def test_narrative_of_an_unadvanced_journal_is_empty():
     # `detection new` writes template only. Nothing to index.
     body = "> A FORGE journal\n\n- **Hypothesis:**\n- **Data source:**\n"

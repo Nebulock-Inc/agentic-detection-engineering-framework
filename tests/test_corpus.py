@@ -111,3 +111,19 @@ def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):
     cat.write_raw(dup_dir / "D-0001.yml", _rec("D-0001", "duplicate elsewhere").to_yaml_dict())
     entries = [e for e in build_corpus(ws) if e.detection_id == "D-0001"]
     assert len(entries) == 1
+
+
+def test_duplicate_id_resolves_first_wins_by_sorted_path(ws: Path):
+    # Pins the determinism this module's own comment claims ("First one
+    # wins, and iter_records sorts by path...") and that nothing before this
+    # test actually checked: the review's mutation of `setdefault` to plain
+    # assignment survived the whole suite because `len(entries) == 1` above
+    # doesn't say WHICH record survives. `ws/catalog/D-0001.yml` sorts before
+    # `ws/catalog/linux/D-0001.yml`, so the original ("mshta child process")
+    # must win, not the later-encountered duplicate.
+    dup_dir = ws / "catalog" / "linux"
+    dup_dir.mkdir()
+    cat = Catalog(ws)
+    cat.write_raw(dup_dir / "D-0001.yml", _rec("D-0001", "duplicate elsewhere").to_yaml_dict())
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0001")
+    assert entry.record["title"] == "mshta child process"
