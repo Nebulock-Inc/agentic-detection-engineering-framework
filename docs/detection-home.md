@@ -22,7 +22,10 @@ This guide is for that case.
 
 Your authored detections are the only copy, so treat the workspace like the
 important data it is. The workspace is plain markdown + YAML — no ADEF-specific
-tooling needed, just native git:
+tooling needed, just native git — and if you hand-edit a journal yourself, keep
+new reasoning in the template's `- **Field:** value` bullet grammar (or a
+wrapped continuation of one), since a free-text paragraph outside that grammar
+won't turn up in `adef detection search`.
 
 ```bash
 adef init ~/detections            # scaffold the workspace
