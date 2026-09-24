@@ -222,6 +222,11 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
+`refine_chain` defaults to `similarity_mode="agent"` — it returns the shortlist
+enriched for *you* to rank rather than ranking internally, since an MCP caller is
+an agent by definition. This deliberately differs from the CLI default (`bm25`):
+the split is by entry point, not by detecting which environment you are in.
+
 Tools include `health_ingest` — the MCP twin of `adef ingest`, over the same
 core. An assistant session with its own environment tooling connected can fetch
 the numbers, shape a capture document, and ingest it without a file round-trip
@@ -285,7 +290,8 @@ adef/
 │   ├── tune_recommender.py           # ADEF-native: tuning suggestions
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist + optional LLM rerank
+│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist; agent returns it for the
+│   │                                 #   caller to rank, llm reranks itself
 │   ├── rule_overlap.py               # ADEF-native: duplicate/complementary/redundant
 │   ├── verification.py               # ADEF-native: schema + four-engine constraint
 │   └── wrappers/                     # Dispatchers for the 4 rule agents the Refine chain and
@@ -378,20 +384,27 @@ When `adef detection refine D-XXXX` runs:
 2. Invokes `orchestration/refine_chain.py`
 3. Runs **three steps in sequence, native by default** (v2, 2026-09) — native
    execution and vendor-free execution are not the same guarantee: only
-   RuleSimilarity's `bm25` mode is vendor-free, and it is not the default:
+   RuleSimilarity's `bm25` and `agent` modes are vendor-free, and `bm25` is
+   the default:
    - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
      search over the catalog — does a rule like this already exist? —
      optionally reranked by an LLM judge (`adef detection refine D-XXXX
-     --similarity-mode {auto,bm25,llm}`; `auto`, the default, uses the LLM
-     when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
-     installed, otherwise stays BM25-only). **Data egress in `llm`/`auto`
-     mode:** the target's title, MITRE IDs, and query (truncated to 500
-     chars), plus each shortlisted candidate's ID, title, and snippet, are
-     sent to the Anthropic API — the snippet is built from both the
-     journal body AND the catalog search text (title, MITRE IDs, platform,
+     --similarity-mode {bm25,agent,llm,auto}`). **`bm25` is the default** and
+     makes no network call. **`agent`** returns the shortlist with the
+     target's *and* each candidate's query, MITRE IDs, platform, and data source
+     for the *caller* to rank — also no network call, and the mode to use from an assistant session,
+     where the agent has context ADEF does not and its reasoning lands in the
+     transcript. `llm` reranks with an LLM judge; `auto` picks `llm` when
+     `ANTHROPIC_API_KEY` and the `llm` extra are both present, else `bm25`.
+     **Data egress in `llm`/`auto` mode:** the target's title, MITRE IDs, and
+     query (truncated to 500 chars), plus each shortlisted candidate's ID, title,
+     and snippet, are sent to the Anthropic API — the snippet is built from both
+     the journal body AND the catalog search text (title, MITRE IDs, platform,
      data source, format, query — see `record_search_text`), so catalog and
-     query content can be disclosed too, not just journal prose. `bm25` is
-     the only mode that makes no network call.
+     query content can be disclosed too, not just journal prose. `bm25` and `agent`
+     make no network call, unless an `ADEF_WRAPPER_*` override is configured, in
+     which case the configured upstream class runs instead and this guarantee
+     no longer applies.
    - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
      duplicate/complementary/redundant classification within the target's MITRE
      technique cluster (`catalog/INDEX.yml`'s `by_technique` map)

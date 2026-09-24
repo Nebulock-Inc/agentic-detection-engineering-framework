@@ -286,3 +286,63 @@ def test_wrapper_forwards_non_native_ctx_to_configured_upstream(workspace: Path,
                                  similarity_mode="bm25", extra_context="keep-me")
 
     assert captured == {"detection_id": "D-0001", "extra_context": "keep-me"}
+
+
+# --- Agent mode (hand back everything the caller needs to judge) ---
+
+def test_agent_mode_returns_candidates_with_judgment_fields(workspace: Path):
+    # `agent` mode exists so the CALLER can judge logic similarity. A snippet is
+    # not enough for that — the candidate's actual query text is. This is the
+    # whole reason the mode is distinct from `bm25`.
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        top_k=5, similarity_mode="agent")
+    assert result["mode_used"] == "agent"
+    top = result["candidates"][0]
+    assert top["detection_id"] == "D-0002"
+    assert top["query"] == "process.name:mshta.exe"     # full text, not a snippet
+    assert top["mitre"] == ["T1218.005"]
+    assert top["platform"] == "windows"
+    assert "data_source" in top
+
+
+def test_agent_mode_returns_the_target_side_too(workspace: Path):
+    # Judging similarity takes two sides. Returning only the candidates' queries
+    # forces the caller into another round trip to read its own target — which
+    # defeats the point of handing back the shortlist in the first place.
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        top_k=5, similarity_mode="agent")
+    assert result["target"]["query"] == "process.name:mshta.exe"
+    assert result["target"]["title"] == "Suspicious mshta child process"
+    assert result["target"]["mitre"] == ["T1218.005"]
+    assert result["target"]["platform"] == "windows"
+
+
+def test_agent_mode_never_calls_an_injected_llm_client(workspace: Path):
+    # `agent` is a promise, not a preference: the caller does the ranking, so an
+    # available client must not be consulted or "no network call" stops being true.
+    fake = _FakeAnthropicClient('[{"detection_id": "D-0002", "confidence": 0.99}]')
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        similarity_mode="agent", llm_client=fake)
+    assert result["mode_used"] == "agent"
+    assert fake.calls == []
+
+
+def test_agent_mode_ignores_an_available_api_key(workspace: Path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        similarity_mode="agent")
+    assert result["mode_used"] == "agent"
+
+
+def test_agent_mode_excludes_self_like_every_other_mode(workspace: Path):
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        top_k=5, similarity_mode="agent")
+    assert "D-0001" not in [c["detection_id"] for c in result["candidates"]]
+
+
+def test_bm25_mode_stays_lean(workspace: Path):
+    # The enriched payload belongs to `agent` only — `bm25` keeps its existing
+    # shape so nothing downstream of it has to change.
+    result = RuleSimilarityAgent().run(detection_id="D-0001", workspace=workspace,
+                                        top_k=1, similarity_mode="bm25")
+    assert "query" not in result["candidates"][0]

@@ -1,12 +1,23 @@
-"""Rule-similarity search over the ADEF catalog — BM25 retrieval, optional
-LLM rerank.
+"""Rule-similarity search over the ADEF catalog — does a rule like this
+already exist?
 
-Answers "does a rule like this already exist?" in two stages:
-1. Always: rank the whole catalog with the same BM25 index `adef detection
-   search` ships (`adef.core.memory.MemoryIndex`) and take the top-K.
-2. Optionally (`similarity_mode` "llm" or "auto" with an LLM available):
-   ask an LLM judge to re-score just that shortlist for true semantic
-   similarity (paraphrase/synonym matches BM25's lexical scoring misses).
+Ranks with the same BM25 index `adef detection search` ships
+(`adef.core.memory.MemoryIndex`) and takes the top-K. Note the corpus is
+**journal-keyed**: the index is built from journal entries, with each
+record's catalog text attached as extra text, so a catalogued rule whose
+journal file is missing cannot be shortlisted at all. `RuleOverlapAgent`
+iterates the catalog directly and does not share that blind spot — the two
+can disagree about what the catalog holds within a single Refine run.
+`adef sync` re-creates missing journals, which hides this in the happy path.
+What happens to the shortlist depends on `similarity_mode`:
+- `bm25`: return the BM25 ranking as-is. No network call.
+- `agent`: return the shortlist enriched with the target's *and* each
+  candidate's query, MITRE IDs, platform, and data source for the *caller*
+  to rank. No network call.
+- `llm`: send the shortlist to an LLM judge for a true semantic re-score
+  (paraphrase/synonym matches BM25's lexical scoring misses).
+- `auto`: `llm` when available (`ANTHROPIC_API_KEY` + the `llm` extra),
+  else `bm25`.
 
 The LLM step never scans the whole corpus — cost and latency stay bounded by
 `top_k`, not catalog size. See the plan's Task 2 design rationale.
@@ -27,7 +38,11 @@ from adef.core.memory import MemoryIndex
 
 DEFAULT_LLM_MODEL = "claude-haiku-4-5-20251001"
 
-_VALID_SIMILARITY_MODES = frozenset({"auto", "bm25", "llm"})
+#: `agent` returns the shortlist enriched for the caller to judge and ranks
+#: nothing — the caller (an assistant session) has context ADEF does not, and
+#: its reasoning lands in the transcript where it can be reviewed. Like `bm25`
+#: it never makes a network call.
+_VALID_SIMILARITY_MODES = frozenset({"auto", "bm25", "llm", "agent"})
 
 _JUDGE_PROMPT = """You are a detection engineering expert. Given a target detection rule and a \
 shortlist of candidates retrieved by keyword search, judge which candidates are a true semantic \
@@ -111,6 +126,26 @@ def _validate_judge_coverage(scored: Any, expected_ids: set[str]) -> dict[str, d
     return by_id
 
 
+def _logic_fields(record: dict) -> dict[str, Any]:
+    """The record fields a caller needs to judge *logic* similarity, not topical.
+
+    Missing record (a journal-only detection, which the BM25 index legitimately
+    surfaces) collapses to empty values rather than being dropped — a draft
+    near-duplicate is exactly what Refine should show you, and the caller reads
+    the empty query the same way it reads a blank one: nothing to compare.
+    """
+    mitre = record.get("mitre") or []
+    return {
+        "query": record.get("query") or "",
+        # A hand-edited record can carry `mitre: T1218.005` as a scalar, and
+        # `list("T1218.005")` would hand the caller nine one-character
+        # "techniques" to judge alignment against.
+        "mitre": [mitre] if isinstance(mitre, str) else list(mitre),
+        "platform": record.get("platform") or "",
+        "data_source": record.get("data_source") or "",
+    }
+
+
 class RuleSimilarityAgent:
     """Native replacement for the upstream RuleSimilarity wrapper agent."""
 
@@ -119,7 +154,7 @@ class RuleSimilarityAgent:
         detection_id: str,
         workspace: Path | None = None,
         top_k: int = 5,
-        similarity_mode: str = "auto",
+        similarity_mode: str = "bm25",
         llm_client: Any | None = None,
         **ctx: Any,
     ) -> dict[str, Any]:
@@ -160,6 +195,24 @@ class RuleSimilarityAgent:
         resolved_mode = similarity_mode
         if resolved_mode == "auto":
             resolved_mode = "llm" if (llm_client is not None or _llm_available()) else "bm25"
+
+        if resolved_mode == "agent":
+            # Hand back everything the caller needs to judge logic similarity
+            # itself — a snippet is not enough, the query text is, and it needs
+            # BOTH sides: the target's query as well as each candidate's, or
+            # the caller has nothing to compare against without another round
+            # trip. Deliberately returns before any LLM path: `agent`
+            # guarantees no network call.
+            target = records[detection_id]
+            return {
+                "detection_id": detection_id,
+                "mode_used": "agent",
+                "target": {"title": target.get("title") or "", **_logic_fields(target)},
+                "candidates": [
+                    {**c, **_logic_fields(records.get(str(c["detection_id"]), {}))}
+                    for c in candidates
+                ],
+            }
 
         if resolved_mode == "llm":
             if llm_client is None and not _llm_available():

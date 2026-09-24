@@ -148,7 +148,7 @@ def _make_stage_command(stage: str) -> click.Command:
         workspace: Path | None,
         notes: tuple[str, ...],
         chain: bool = False,
-        similarity_mode: str = "auto",
+        similarity_mode: str = "bm25",
     ) -> None:
         # One note → plain line; several → a markdown bullet list.
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
@@ -205,7 +205,17 @@ def _make_stage_command(stage: str) -> click.Command:
                                   workspace=workspace, similarity_mode=similarity_mode)
                 console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
             else:
-                console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
+                # Say so when a mode was asked for and dropped — otherwise
+                # `refine D-X --similarity-mode agent` on an already-refined
+                # detection is a silent no-op that still looks like it ran.
+                dropped = (
+                    f" [yellow]--similarity-mode {similarity_mode} not applied[/yellow]"
+                    if similarity_mode != "bm25" else ""
+                )
+                console.print(
+                    f"  chain skipped (already at refine){dropped} — "
+                    "re-run it with [bold]--chain[/bold]"
+                )
 
     if stage == "refine":
         cmd.params.append(
@@ -219,12 +229,16 @@ def _make_stage_command(stage: str) -> click.Command:
         cmd.params.append(
             click.Option(
                 ["--similarity-mode"],
-                type=click.Choice(["auto", "bm25", "llm"]),
-                default="auto",
-                help="How the Similarity refine-step ranks candidates: 'llm' reranks the "
-                "BM25 shortlist with an LLM judge (requires ANTHROPIC_API_KEY + the 'llm' "
-                "extra), 'bm25' stays fully deterministic, 'auto' (default) uses llm when "
-                "available.",
+                type=click.Choice(["bm25", "agent", "llm", "auto"]),
+                default="bm25",
+                help="How the Similarity refine-step ranks candidates. 'bm25' (default) is "
+                "fully deterministic and makes no network call. 'agent' returns the "
+                "shortlist enriched with each candidate's query, MITRE IDs, platform, "
+                "and data source for YOU to rank — also no network call, and the mode "
+                "to use from an assistant session. 'llm' reranks with an LLM judge "
+                "(requires ANTHROPIC_API_KEY + the 'llm' extra) and sends detection "
+                "content to the Anthropic API. "
+                "'auto' picks llm when available, else bm25.",
             )
         )
     return cmd
