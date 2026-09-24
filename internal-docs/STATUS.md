@@ -150,7 +150,13 @@ current dir (if it has `catalog/` or `journals/`) → `~/work/adef-workspace`.
 - **Repo write-back for authored rules** — authored rules land in the ADEF
   catalog; getting them into the user's rules repo is deferred (options weighed
   in `ISA.md`).
-- **Evolve data seam** — `adef detection stats --results` for FP/volume data.
+- **Evolve data seam** — the *ingestion* half shipped with story 9335: FP/volume
+  and the other four health families arrive via `adef ingest <file>` (or the
+  `health_ingest` MCP tool) and land under `<workspace>/health/`. `adef detection
+  stats --results`, named here previously, was never built and is not planned —
+  it would have been a second, overlapping input contract for the same payloads.
+  What remains is the *analysis* half: reading those documents back into Evolve
+  recommendations and a fleet report (story 10097).
 - **Per-alias values + namespace preference (v2)** — a folded field keeps only
   the canonical spelling's `values`; pairing the alias spelling with those
   values (`Status=failure`) is legal per schema but matches nothing in the
