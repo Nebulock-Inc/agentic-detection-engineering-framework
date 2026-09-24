@@ -132,6 +132,55 @@ def test_narrative_excludes_template_static_prose_from_a_real_journal(tmp_path: 
     assert "HYPOTOKEN" in out
 
 
+def test_narrative_keeps_a_wrapped_preamble_field_value(tmp_path: Path):
+    # r3 review, Important: `_FIELD_LINE_RE` matches a single physical line,
+    # so a filled field whose value wraps onto a second line was truncated —
+    # only the first line was indexed. Hand-editing the markdown is the ONLY
+    # way ADEF provides to fill a preamble field (no CLI command writes one),
+    # and `docs/detection-home.md` tells users to treat the workspace as
+    # plain markdown to edit directly, so a wrapped, multi-sentence answer is
+    # ordinary usage, not an edge case. Built from the real template via
+    # `Journal.create`, per the finding's test requirement.
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t")
+    path = tmp_path / "journals" / "D-0001.md"
+    text = path.read_text(encoding="utf-8")
+    assert "- **Hypothesis (one sentence):**" in text  # sanity: real template
+    text = text.replace(
+        "- **Hypothesis (one sentence):**",
+        "- **Hypothesis (one sentence):** MULTILINELINE1 adversary abuses push\n"
+        "  MULTILINELINE2 fatigue against privileged accounts",
+    )
+    path.write_text(text, encoding="utf-8")
+    entry = j.read("D-0001")
+
+    out = narrative_text(entry.body)
+    assert "MULTILINELINE1" in out
+    assert "MULTILINELINE2" in out
+
+
+def test_narrative_drops_an_indented_continuation_of_an_unfilled_field(tmp_path: Path):
+    # The continuation rule is provenance-based, not indentation-based alone:
+    # an indented line only survives when it follows a field the user
+    # demonstrably filled in. A line under an unfilled placeholder is still
+    # template scaffolding — the field had no value, so nothing beneath it
+    # is an answer either.
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t")
+    path = tmp_path / "journals" / "D-0001.md"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(
+        "- **Hypothesis (one sentence):**",
+        "- **Hypothesis (one sentence):**\n"
+        "  UNFILLEDCONTINUATION should not be indexed",
+    )
+    path.write_text(text, encoding="utf-8")
+    entry = j.read("D-0001")
+
+    out = narrative_text(entry.body)
+    assert "UNFILLEDCONTINUATION" not in out
+
+
 def test_narrative_of_an_unadvanced_journal_is_empty():
     # `detection new` writes template only. Nothing to index.
     body = "> A FORGE journal\n\n- **Hypothesis:**\n- **Data source:**\n"

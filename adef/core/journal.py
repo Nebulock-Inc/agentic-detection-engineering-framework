@@ -83,26 +83,58 @@ def _preamble_narrative_lines(preamble: str) -> list[str]:
     the template's own fill-in section — `Journal.create` writes it once,
     verbatim, before any stage block exists. Unlike the stage area, it is
     *whitelisted*, not blacklisted: keep ONLY a filled `- **Field:** value`
-    line. Everything else there — plain-prose section descriptions
-    ("Tune, deprecate, replace. Detections never finish — they iterate."),
-    headings, blockquotes, unfilled placeholders — is template boilerplate,
-    byte-identical in every journal ADEF has ever created (including the
-    skeleton journal `adef catalog` pairs with every catalogued rule), so a
-    filter that lets any of it through makes every detection in a workspace
-    look alike on the template's own words (r2 review, Important). A
-    position-only rule would silently drop a filled field just because it
-    lives above the first stage block; a fill-state-only rule (r1's mistake)
-    lets the unstructured prose through. Only intersecting both catches
-    exactly the boilerplate and nothing else.
+    line, plus any indented continuation of one (see below). Everything else
+    there — plain-prose section descriptions ("Tune, deprecate, replace.
+    Detections never finish — they iterate."), headings, blockquotes,
+    unfilled placeholders — is template boilerplate, byte-identical in every
+    journal ADEF has ever created (including the skeleton journal
+    `adef catalog` pairs with every catalogued rule), so a filter that lets
+    any of it through makes every detection in a workspace look alike on the
+    template's own words (r2 review, Important). A position-only rule would
+    silently drop a filled field just because it lives above the first stage
+    block; a fill-state-only rule (r1's mistake) lets the unstructured prose
+    through. Only intersecting both catches exactly the boilerplate and
+    nothing else.
+
+    A filled field's value can wrap: hand-editing the markdown is the ONLY
+    way ADEF provides to fill a preamble field (no CLI command writes one),
+    and `docs/detection-home.md` tells users to edit the workspace as plain
+    markdown directly, so a multi-sentence answer that wraps onto an indented
+    continuation line is ordinary usage, not an edge case (r3 review,
+    Important). A continuation line is kept only while it (a) is indented —
+    the template's own section prose sits at column 0, so this alone rules
+    out the free-paragraph-under-a-heading case, which is deliberately
+    **not** covered here (see `narrative_text`'s docstring) — and (b)
+    directly follows a *filled* field line or another kept continuation, with
+    no blank line breaking the chain. A continuation of an *unfilled* field
+    is still dropped: the field had no value, so indented text under it is
+    template scaffolding, not an answer, regardless of indentation.
+
+    Note: reasoning in the preamble is indexed only when it is written in the
+    template's `- **Field:** value` grammar (plus a wrapped continuation of
+    one). A free-text paragraph typed under a `## Find`-style heading is
+    textually indistinguishable from the template's own static prose, so it
+    is not recognized — there is no reliable way to tell the two apart by
+    content alone, which is the whole reason this filters by structure
+    instead (r3 review).
     """
-    lines = []
-    for line in preamble.splitlines():
-        stripped = line.strip()
+    lines: list[str] = []
+    continuing = False  # mid-chain: the previous non-blank line was kept
+    for raw_line in preamble.splitlines():
+        stripped = raw_line.strip()
         if not stripped:
+            continuing = False
             continue
         kept = _filled_field_line_or_none(stripped)
         if kept is not None:
             lines.append(kept)
+            continuing = True
+            continue
+        is_indented = raw_line != raw_line.lstrip()
+        if continuing and is_indented:
+            lines.append(stripped)
+            continue
+        continuing = False
     return lines
 
 
@@ -131,6 +163,14 @@ def narrative_text(body: str) -> str:
     wrote — so it keeps the permissive, content-based rule: drop known
     scaffolding (headings, blockquotes, the echoed title, housekeeping,
     generated sub-blocks by provenance), keep everything else.
+
+    Preamble reasoning is indexed only when written in the template's own
+    `- **Field:** value` grammar (plus a wrapped continuation of one, r3
+    review): a free-text paragraph typed under a `## Find`-style heading
+    instead is textually indistinguishable from the template's own static
+    prose that this function exists to drop, so there is no reliable,
+    content-only way to tell the two apart — filtering by structure is the
+    honest resolution, not a documentation gap to code around.
     """
     m = _STAGE_BLOCK_RE.search(body)
     preamble = body[: m.start()] if m else body
