@@ -63,6 +63,7 @@ cwd contents.
 | `adef attack show` | Display an ATT&CK technique |
 | `adef attack refresh` | Pull a fresh ATT&CK snapshot into the workspace |
 | `adef coverage` | Coverage-quality report + optional Navigator layer |
+| `adef ingest` | Ingest a detection-health capture document |
 | `adef-mcp` | Start the FastMCP server (separate console script) |
 | `adef install-skills` | Copy bundled skills into an agent's directory |
 
@@ -562,6 +563,44 @@ gaps (covered vs total ATT&CK techniques). Read-only.
 adef coverage
 adef coverage --gaps
 adef coverage --navigator layer.json --name "Q3 coverage"
+```
+
+---
+
+## Detection health
+
+Document-driven: a producer hands ADEF a capture document describing what
+deployed detections are doing; ADEF validates, routes on the document's own
+`kind`, and stores it. ADEF never queries the environment those numbers came
+from — producing the document is the user's side of the contract. See
+`internal-docs/plans/2026-09-21-vendor-capture-design.md`.
+
+### adef ingest
+
+**Synopsis:** `adef ingest DOCUMENT [--dry-run] [--workspace PATH]`
+
+Ingest a detection-health capture document. The document declares its own
+`kind` (`metrics`, `performance`, `deployment_drift`, `field_observations`,
+`source_health`) and `schema_version`, so one command handles all five and
+there is no flag to mismatch against the file. Detection rows are keyed by
+`D-XXXX`; rows naming a detection the catalog does not have are reported and
+skipped, never silently stored. `field_observations.fields[].sample_values` is
+the one field that carries event-derived content — it is optional, and
+including it puts that data at rest in the workspace.
+
+| Option | Meaning |
+|---|---|
+| `DOCUMENT` (arg, required) | Capture document YAML (must exist). |
+| `--dry-run` | Validate and report what would be written, without writing anything. |
+| `--workspace` | Workspace path (see resolution). |
+
+Stored under `<workspace>/health/`: `latest/D-XXXX.yml` (newest snapshot per
+kind), `history/D-XXXX.jsonl` (append-only trend substrate), and
+`sources/<source>.yml`.
+
+```bash
+adef ingest health-metrics.yml              # validate, store, report
+adef ingest health-metrics.yml --dry-run    # validate and report only
 ```
 
 ---

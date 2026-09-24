@@ -10,6 +10,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ADEF wraps existing detection rules (YAML) with sibling markdown journals (`journals/D-XXXX.md`) that capture *why*, *how*, and *when next* for every detection. Rules stay in their upstream repositories; ADEF never modifies upstream YAML.
 
+## Direction of Integration (read before designing anything)
+
+**ADEF is built standalone and open-source first. Adopters integrate ADEF into their
+own stacks later — never the reverse.**
+
+Any private or in-house codebase — including the maintainers' own — is a *future
+adopter* of ADEF, not an input to it. When designing or implementing any feature:
+
+- A private codebase is **not a reference corpus**. Do not measure against it, sample
+  from it, or query its production data to settle an ADEF design question.
+- A private codebase is **not a justification**. "Our pipeline does X" is not a reason
+  for ADEF to support X. Justify from language semantics, published practitioner
+  standards, or a demonstrated ADEF user need.
+- A private dialect is **not an interface shape**. Never fit a public format to one
+  in-house implementation's quirks.
+
+If a proposed capability is only explicable by pointing at in-house tooling, it does
+not belong in ADEF yet.
+
+This is broader than the "no vendor connectors" CI guard, which only catches SDK
+imports. This one governs **design inputs**, which no test can enforce — it is on you.
+
 **Key concepts:**
 - **Journals**: Per-detection markdown files (`D-XXXX.md`) with YAML frontmatter + timestamped stage-transition blocks
 - **Workspace**: `~/work/adef-workspace/` with `journals/`, `templates/`, `config/`
@@ -131,6 +153,18 @@ Users provide a declaration document (sources + fields, produced from
 preserves human corrections and reports drift. Rules are a schema *consumer*
 (via `check`), never a schema *source*.
 
+### Detection Health Capture
+```bash
+adef ingest health-metrics.yml           # ingest a capture document (routes on its own `kind`)
+adef ingest health-metrics.yml --dry-run # validate and report, write nothing
+```
+Five self-describing document kinds — `metrics`, `performance`,
+`deployment_drift`, `field_observations`, `source_health` — bulk, keyed by
+`D-XXXX`. Stored under `<workspace>/health/` as a latest snapshot per kind plus
+an append-only `.jsonl` history. ADEF never queries the environment the numbers
+came from; the producer hands over a file. Design:
+`internal-docs/plans/2026-09-21-vendor-capture-design.md`.
+
 ### ATT&CK Reference Layer
 ```bash
 adef attack info                    # Active snapshot's ATT&CK version + counts
@@ -188,6 +222,10 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
+Tools include `health_ingest` — the MCP twin of `adef ingest`, over the same
+core. An assistant session with its own environment tooling connected can fetch
+the numbers, shape a capture document, and ingest it without a file round-trip
+through the CLI.
 
 ### Skills
 ```bash
@@ -264,13 +302,16 @@ adef/
 │   ├── schema.py               # Declaration-driven schemas (ingest/lint/check/recipe/reshape)
 │   ├── attack.py               # ATT&CK reference layer (info/show/refresh)
 │   ├── coverage.py             # Coverage-quality report + Navigator export
+│   ├── ingest.py               # `adef ingest` — detection-health capture documents
 │   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
 │   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
 │   ├── memory.py               # BM25 search over journals + catalog records
 │   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share
-│   └── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
+│   ├── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
+│   ├── health_docs.py          # capture document model, lint, load
+│   └── health_store.py         # latest snapshot + append-only history
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)

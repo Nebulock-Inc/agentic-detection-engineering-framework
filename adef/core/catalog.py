@@ -461,10 +461,24 @@ class Catalog:
         return index_path
 
 
+def known_detection_ids(workspace: Path) -> set[str]:
+    """Detection IDs already in the workspace catalog, without creating it.
+
+    `Catalog.__init__` mkdirs `catalog/`, which a read-only caller must not
+    do — `adef ingest --dry-run` has to write nothing at all. Constructing
+    the catalog only when its directory already exists keeps that true while
+    still reusing `iter_records`' parsing.
+    """
+    if not catalog_dir(workspace).is_dir():
+        return set()
+    return {det_id for det_id, _path, _data in Catalog(workspace).iter_records()}
+
+
 __all__ = [
     "Catalog",
     "CatalogRecord",
     "NoCatalogRecordError",
     "catalog_dir",
+    "known_detection_ids",
     "record_from_discovered",
 ]

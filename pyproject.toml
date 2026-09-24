@@ -84,6 +84,7 @@ profile = "adef.commands.profile:profile"
 attack = "adef.commands.attack:attack"
 coverage = "adef.commands.coverage:coverage"
 sync = "adef.commands.sync:sync"
+ingest = "adef.commands.ingest:ingest"
 reindex = "adef.commands.reindex:reindex"
 install-skills = "adef.commands.install_skills:install_skills"
 
