@@ -1,0 +1,18 @@
+# CodeRabbit configuration.
+#
+# Why this file exists: auto review only runs on PRs targeting the default
+# branch (`main`) unless base branches are named explicitly. The ADEFv2 work
+# lands as stacked PRs into `dev` and onto each other, so every PR in the stack
+# was being skipped with a collapsed "Review skipped" notice and no failing
+# check — silent, and easy to miss for weeks.
+#
+# `base_branches` takes regex, anchored implicitly.
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - dev
+      - "feat/.*"
+      - "fix/.*"
+      - "chore/.*"
+      - "spike/.*"
