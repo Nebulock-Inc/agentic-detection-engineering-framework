@@ -36,14 +36,11 @@ _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 GENERATED_MARKER = "<!-- adef:generated -->"
 
 # The first timestamped stage block ends the static template preamble.
-# `narrative_text` still treats the preamble differently from the stage
-# area (only the stage area is split into `###` sub-blocks to drop generated
-# ones), but unfilled-vs-filled `- **Field:**` filtering applies to both — the
-# preamble is where the template's own fill-in prompts live, so it is exactly
-# where a user's filled-in answer would otherwise go missing. Moved here from
-# memory.py: the journal module owns its own format, and leaving block
-# structure in the search layer is what made "which blocks are machine
-# output?" hard to answer.
+# `narrative_text` filters the preamble and the stage area by different
+# rules — see `_preamble_narrative_lines` for why fill-state alone isn't
+# enough there. Moved here from memory.py: the journal module owns its own
+# format, and leaving block structure in the search layer is what made
+# "which blocks are machine output?" hard to answer.
 _STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
 
 # A `### ` sub-block inside a stage block. Refine results land here.
@@ -67,34 +64,73 @@ def _is_generated_block(block: str) -> bool:
 def _is_unfilled_field_line(line: str) -> bool:
     """True for a template placeholder (`- **Field:**`) with nothing typed
     after the colon. The same line with a value filled in is reasoning a
-    human wrote, not scaffolding, regardless of which section it sits in."""
+    human wrote, not scaffolding."""
     m = _FIELD_LINE_RE.match(line)
     return m is not None and not m.group(1).strip()
+
+
+def _filled_field_line_or_none(line: str) -> Optional[str]:
+    """The line itself if it's a `- **Field:** value` line with a value,
+    else ``None``."""
+    m = _FIELD_LINE_RE.match(line)
+    if m is not None and m.group(1).strip():
+        return line
+    return None
+
+
+def _preamble_narrative_lines(preamble: str) -> list[str]:
+    """The preamble (everything before the first timestamped stage block) is
+    the template's own fill-in section — `Journal.create` writes it once,
+    verbatim, before any stage block exists. Unlike the stage area, it is
+    *whitelisted*, not blacklisted: keep ONLY a filled `- **Field:** value`
+    line. Everything else there — plain-prose section descriptions
+    ("Tune, deprecate, replace. Detections never finish — they iterate."),
+    headings, blockquotes, unfilled placeholders — is template boilerplate,
+    byte-identical in every journal ADEF has ever created (including the
+    skeleton journal `adef catalog` pairs with every catalogued rule), so a
+    filter that lets any of it through makes every detection in a workspace
+    look alike on the template's own words (r2 review, Important). A
+    position-only rule would silently drop a filled field just because it
+    lives above the first stage block; a fill-state-only rule (r1's mistake)
+    lets the unstructured prose through. Only intersecting both catches
+    exactly the boilerplate and nothing else.
+    """
+    lines = []
+    for line in preamble.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        kept = _filled_field_line_or_none(stripped)
+        if kept is not None:
+            lines.append(kept)
+    return lines
 
 
 def narrative_text(body: str) -> str:
     """The human-authored prose in a journal body, for indexing.
 
-    Drops: unfilled template placeholders (wherever they sit — the preamble's
-    `- **Field:**` fill-in sections as much as anywhere else), every
-    machine-generated sub-block, and `Catalogued from…` housekeeping. What
-    remains is reasoning a person or an agent wrote deliberately — the only
-    journal content that can be evidence without feeding retrieval its own
-    output.
+    Drops: the static template preamble (position-based — see
+    `_preamble_narrative_lines`, which whitelists only its filled
+    `- **Field:** value` lines and drops everything else there, plain prose
+    included), unfilled placeholders and other scaffolding within the stage
+    area (fill-state/content-based), every machine-generated sub-block, and
+    `Catalogued from…` housekeeping. What remains is reasoning a person or an
+    agent wrote deliberately — the only journal content that can be evidence
+    without feeding retrieval its own output.
 
-    The static preamble (everything before the first timestamped stage block)
-    is *not* dropped wholesale: `Journal.create` writes it once, before the
-    Find block is ever appended, so a user who fills in
-    `- **Baseline of normal:** ...` there — the normal way to answer the
-    template's own prompts — must not have that answer silently excluded from
-    retrieval just because no stage block happens to sit above it yet (r1
-    review, Important). Only the *unfilled* placeholder lines are scaffolding;
-    filtering happens per-line, by whether a value was actually typed, not by
-    position.
-
-    Filtering generated sub-blocks is by *provenance*, never by content: two
-    earlier attempts filtered by key name and both failed, because the same
-    text arrived under a different key.
+    The preamble and the stage area are filtered differently on purpose.
+    `Journal.create` writes the preamble once, verbatim from the shipped
+    template, before the Find block is ever appended — so a user who fills in
+    `- **Baseline of normal:** ...` there (the normal way to answer the
+    template's own prompts) must not have that answer silently excluded (r1
+    review), but the section's plain-prose descriptions must never reach the
+    index either, because they are byte-identical in every journal ADEF has
+    ever created (r2 review). The stage area has no such guaranteed
+    boilerplate — a stage block is appended once, per transition, with
+    whatever a human (or an agent, for a non-generated sub-block) actually
+    wrote — so it keeps the permissive, content-based rule: drop known
+    scaffolding (headings, blockquotes, the echoed title, housekeeping,
+    generated sub-blocks by provenance), keep everything else.
     """
     m = _STAGE_BLOCK_RE.search(body)
     preamble = body[: m.start()] if m else body
@@ -112,8 +148,8 @@ def narrative_text(body: str) -> str:
 
     kept = [p for p in pieces if not _is_generated_block(p)]
 
-    lines: list[str] = []
-    for line in (preamble + "".join(kept)).splitlines():
+    lines: list[str] = _preamble_narrative_lines(preamble)
+    for line in "".join(kept).splitlines():
         stripped = line.strip()
         if not stripped:
             continue

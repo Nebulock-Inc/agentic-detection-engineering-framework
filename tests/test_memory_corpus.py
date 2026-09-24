@@ -97,3 +97,22 @@ def test_a_journal_only_detection_is_findable_by_its_title(ws: Path):
     # mirror image of the record-only headline bug this task fixes.
     Journal(ws / "journals").create(detection_id="D-0003", title="okta mfa bypass fatigue")
     assert "D-0003" in [h.detection_id for h in _search(ws, "fatigue")]
+
+
+def test_template_boilerplate_is_not_searchable_but_titles_are(ws: Path):
+    # r2 findings, Important (blocking): the template's own static guidance
+    # prose ("Tune, deprecate, replace. Detections never finish — they
+    # iterate.") is byte-identical in every journal ADEF creates — including
+    # the skeleton journal `adef catalog` pairs with a record-backed rule
+    # (this fixture's D-0001 is exactly that: both a record AND a journal).
+    # None of it may reach the index, or every detection in the workspace
+    # matches every generic FORGE-lifecycle word.
+    Journal(ws / "journals").create(detection_id="D-0002", title="okta mfa bypass fatigue")
+    Journal(ws / "journals").create(detection_id="D-0003", title="aws root login anomaly")
+
+    assert _search(ws, "deprecate") == []
+    assert _search(ws, "telemetry") == []
+    assert _search(ws, "iterate") == []
+
+    hits = _search(ws, "fatigue")
+    assert [h.detection_id for h in hits] == ["D-0002"]

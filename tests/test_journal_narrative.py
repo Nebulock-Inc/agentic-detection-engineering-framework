@@ -101,6 +101,37 @@ def test_narrative_drops_an_unfilled_preamble_field():
     assert "Data source" not in out
 
 
+def test_narrative_excludes_template_static_prose_from_a_real_journal(tmp_path: Path):
+    # r2 review, Important (blocking): round 1's per-line fill-state filter
+    # replaced position-based filtering, but the template's plain-prose
+    # section descriptions under Find/Observe/Refine/Govern/Evolve (e.g.
+    # "Tune, deprecate, replace. Detections never finish — they iterate.")
+    # aren't `- **Field:**` shaped, so nothing dropped them — and they're
+    # byte-identical in every journal ADEF has ever created. A synthetic body
+    # (as in the tests above) can't exercise this: it never contains that
+    # prose. This test uses the REAL shipped template via `Journal.create`,
+    # then simulates a user filling in one of the template's own prompts —
+    # the ordinary way anyone would actually use it — to confirm the fix
+    # doesn't overcorrect and drop real answers along with the boilerplate.
+    j = _journal(tmp_path)
+    j.create("D-0001", title="okta mfa bypass fatigue")
+    path = tmp_path / "journals" / "D-0001.md"
+    text = path.read_text(encoding="utf-8")
+    assert "- **Hypothesis (one sentence):**" in text  # sanity: real template
+    text = text.replace(
+        "- **Hypothesis (one sentence):**",
+        "- **Hypothesis (one sentence):** HYPOTOKEN attacker abuses mshta",
+    )
+    path.write_text(text, encoding="utf-8")
+    entry = j.read("D-0001")
+
+    out = narrative_text(entry.body)
+    assert "deprecate" not in out.lower()
+    assert "iterate" not in out.lower()
+    assert "telemetry" not in out.lower()
+    assert "HYPOTOKEN" in out
+
+
 def test_narrative_of_an_unadvanced_journal_is_empty():
     # `detection new` writes template only. Nothing to index.
     body = "> A FORGE journal\n\n- **Hypothesis:**\n- **Data source:**\n"
