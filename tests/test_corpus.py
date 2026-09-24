@@ -1,0 +1,113 @@
+from pathlib import Path
+
+import pytest
+
+from adef.core.catalog import Catalog, CatalogRecord
+from adef.core.corpus import build_corpus
+from adef.core.journal import Journal
+
+
+def _rec(rid: str, title: str, query: str = "process.name = 'x'") -> CatalogRecord:
+    return CatalogRecord(
+        id=rid, title=title, rule_ref=f"r/{rid}.yml", original_path=f"/tmp/{rid}.yml",
+        platform="windows", kind="atomic", engine="sigma", format="sigma",
+        query=query, mitre=["T1218.005"],
+    )
+
+
+@pytest.fixture
+def ws(tmp_path: Path) -> Path:
+    w = tmp_path / "ws"
+    (w / "catalog").mkdir(parents=True)
+    (w / "journals").mkdir(parents=True)
+    cat, journal = Catalog(w), Journal(w / "journals")
+
+    # D-0001: both artifacts
+    r1 = _rec("D-0001", "mshta child process")
+    cat.write_raw(w / "catalog" / "D-0001.yml", r1.to_yaml_dict())
+    journal.create(detection_id="D-0001", title=r1.title)
+
+    # D-0002: record only (journal deleted) — invisible to Similarity today
+    r2 = _rec("D-0002", "mshta spawning child")
+    cat.write_raw(w / "catalog" / "D-0002.yml", r2.to_yaml_dict())
+
+    # D-0003: journal only (a `detection new` draft)
+    journal.create(detection_id="D-0003", title="draft rundll32 idea")
+
+    cat.rebuild_index()
+    return w
+
+
+def test_membership_is_the_union_of_records_and_journals(ws: Path):
+    ids = sorted(e.detection_id for e in build_corpus(ws))
+    assert ids == ["D-0001", "D-0002", "D-0003"]
+
+
+def test_each_detection_appears_exactly_once(ws: Path):
+    ids = [e.detection_id for e in build_corpus(ws)]
+    assert len(ids) == len(set(ids))
+
+
+def test_record_only_entry_reports_the_record_path_not_a_fake_journal(ws: Path):
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0002")
+    assert entry.journal is None
+    # Deviation from the brief (controller ruling): catalog_dir() resolves the
+    # workspace (.expanduser().resolve()); on macOS tmp_path lives under a
+    # symlink (/tmp -> /private/tmp), so the unresolved `ws / ...` expectation
+    # the brief wrote would not compare equal to entry.path. Resolve both
+    # sides.
+    assert entry.path.resolve() == (ws / "catalog" / "D-0002.yml").resolve()
+    assert entry.path.exists()
+
+
+def test_record_only_entry_reports_the_records_stage(ws: Path):
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0002")
+    assert entry.current_stage == "find"   # CatalogRecord.stage default
+
+
+def test_journal_only_entry_has_no_record(ws: Path):
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0003")
+    assert entry.record is None
+    assert entry.title == "draft rundll32 idea"
+    # Deviation from the brief (controller ruling): same resolve-both-sides
+    # fix as above — Journal() resolves its directory too.
+    assert entry.path.resolve() == (ws / "journals" / "D-0003.md").resolve()
+
+
+def test_index_text_includes_the_record_query(ws: Path):
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0001")
+    assert "process.name" in entry.index_text
+
+
+def test_index_text_survives_either_half_missing(ws: Path):
+    by_id = {e.detection_id: e for e in build_corpus(ws)}
+    assert "mshta spawning child" in by_id["D-0002"].index_text   # record only
+    assert isinstance(by_id["D-0003"].index_text, str)            # journal only
+
+
+def test_bare_workspace_returns_nothing_and_creates_nothing(tmp_path: Path):
+    # Review Focus 1. `Catalog.__init__` mkdirs, so a naive implementation
+    # silently creates `catalog/` on a read path.
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    assert build_corpus(bare) == []
+    assert not (bare / "catalog").exists()
+    assert not (bare / "journals").exists()
+
+
+def test_unparseable_artifacts_are_skipped_not_fatal(ws: Path):
+    # Review Focus 2.
+    (ws / "catalog" / "D-0009.yml").write_text("{{{ not yaml", encoding="utf-8")
+    (ws / "journals" / "D-0010.md").write_text("no frontmatter here", encoding="utf-8")
+    ids = sorted(e.detection_id for e in build_corpus(ws))
+    assert "D-0001" in ids and "D-0002" in ids and "D-0003" in ids
+
+
+def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):
+    # Review Focus 3.
+    dup_dir = ws / "catalog" / "linux"
+    dup_dir.mkdir()
+    cat = Catalog(ws)
+    cat.write_raw(dup_dir / "D-0001.yml", _rec("D-0001", "duplicate elsewhere").to_yaml_dict())
+    entries = [e for e in build_corpus(ws) if e.detection_id == "D-0001"]
+    assert len(entries) == 1
