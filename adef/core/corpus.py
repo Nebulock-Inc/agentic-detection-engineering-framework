@@ -61,14 +61,23 @@ class CorpusEntry:
 
     @property
     def index_text(self) -> str:
-        """What retrieval scores: the record projection plus human journal prose.
+        """What retrieval scores: the title, plus the record projection and/or
+        human journal prose — whichever artifacts exist.
+
+        The title is unconditional: a journal-only detection (a fresh
+        `detection new` draft, with no catalog record yet) has no
+        `record_search_text` to fall back on, and a sparse, unadvanced journal
+        has no narrative either — without the title, such an entry scores 0.0
+        against every query and can never be shortlisted (r1 review, Critical).
+        Record-backed entries already carry the title via `record_search_text`;
+        listing it again here is harmless duplication, not a correctness risk.
 
         Both artifacts, working together. A human's Observe note is legitimate
         evidence for "does a rule like this already exist?" and can never feed
         back, because nothing automated writes it. Machine-generated blocks are
         already gone — `narrative_text` drops them by provenance.
         """
-        parts = []
+        parts = [self.title]
         if self.record:
             parts.append(record_search_text(self.record))
         if self.journal is not None:

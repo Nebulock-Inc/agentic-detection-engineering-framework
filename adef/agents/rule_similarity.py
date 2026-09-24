@@ -4,9 +4,13 @@ already exist?
 Ranks with the same BM25 index `adef detection search` ships
 (`adef.core.memory.MemoryIndex`), built over `adef.core.corpus.build_corpus` —
 a detection is a member of the corpus if it has a catalog record OR a
-journal, so a catalogued rule with no journal (or vice versa) is still
-shortlisted. (`RuleOverlapAgent` still iterates the catalog directly as of
-this change; unifying it onto `build_corpus` is tracked separately in 10188.)
+journal, so a catalogued rule with no journal is still shortlisted (by its
+record's title/mitre/platform/query), and a journal-only draft (a fresh
+`detection new`, before it has a catalog record) is still shortlisted too —
+at minimum by its title, which `CorpusEntry.index_text` always includes,
+even when the journal itself is still template-only. (`RuleOverlapAgent`
+still iterates the catalog directly as of this change; unifying it onto
+`build_corpus` is tracked separately in 10188.)
 What happens to the shortlist depends on `similarity_mode`:
 - `bm25`: return the BM25 ranking as-is. No network call.
 - `agent`: return the shortlist enriched with the target's *and* each

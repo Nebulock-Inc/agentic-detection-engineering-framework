@@ -35,8 +35,12 @@ _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 GENERATED_MARKER = "<!-- adef:generated -->"
 
-# The first timestamped stage block ends the static template preamble —
-# everything before it is fill-in scaffolding, not reasoning. Moved here from
+# The first timestamped stage block ends the static template preamble.
+# `narrative_text` still treats the preamble differently from the stage
+# area (only the stage area is split into `###` sub-blocks to drop generated
+# ones), but unfilled-vs-filled `- **Field:**` filtering applies to both — the
+# preamble is where the template's own fill-in prompts live, so it is exactly
+# where a user's filled-in answer would otherwise go missing. Moved here from
 # memory.py: the journal module owns its own format, and leaving block
 # structure in the search layer is what made "which blocks are machine
 # output?" hard to answer.
@@ -49,42 +53,67 @@ _SUB_BLOCK_RE = re.compile(r"^### ", re.MULTILINE)
 # prefix identifies them. Permanent fallback, not a migration step.
 _LEGACY_GENERATED_HEADING = "### Refine / "
 
+# A template fill-in line: `- **Field:** value`. Matched against a single
+# already-stripped line so it can be checked in the same per-line pass as
+# every other filter in narrative_text.
+_FIELD_LINE_RE = re.compile(r"^-\s+\*\*[^*]+:\*\*\s*(.*)$")
+
 
 def _is_generated_block(block: str) -> bool:
     """True when this ``### `` sub-block was written by ADEF, not a human."""
     return GENERATED_MARKER in block or block.startswith(_LEGACY_GENERATED_HEADING)
 
 
+def _is_unfilled_field_line(line: str) -> bool:
+    """True for a template placeholder (`- **Field:**`) with nothing typed
+    after the colon. The same line with a value filled in is reasoning a
+    human wrote, not scaffolding, regardless of which section it sits in."""
+    m = _FIELD_LINE_RE.match(line)
+    return m is not None and not m.group(1).strip()
+
+
 def narrative_text(body: str) -> str:
     """The human-authored prose in a journal body, for indexing.
 
-    Drops three things: the static template preamble, every machine-generated
-    sub-block, and `Catalogued from…` housekeeping. What remains is reasoning
-    a person or an agent wrote deliberately — the only journal content that can
-    be evidence without feeding retrieval its own output.
+    Drops: unfilled template placeholders (wherever they sit — the preamble's
+    `- **Field:**` fill-in sections as much as anywhere else), every
+    machine-generated sub-block, and `Catalogued from…` housekeeping. What
+    remains is reasoning a person or an agent wrote deliberately — the only
+    journal content that can be evidence without feeding retrieval its own
+    output.
 
-    Filtering is by *provenance*, never by content: two earlier attempts
-    filtered by key name and both failed, because the same text arrived under
-    a different key.
+    The static preamble (everything before the first timestamped stage block)
+    is *not* dropped wholesale: `Journal.create` writes it once, before the
+    Find block is ever appended, so a user who fills in
+    `- **Baseline of normal:** ...` there — the normal way to answer the
+    template's own prompts — must not have that answer silently excluded from
+    retrieval just because no stage block happens to sit above it yet (r1
+    review, Important). Only the *unfilled* placeholder lines are scaffolding;
+    filtering happens per-line, by whether a value was actually typed, not by
+    position.
+
+    Filtering generated sub-blocks is by *provenance*, never by content: two
+    earlier attempts filtered by key name and both failed, because the same
+    text arrived under a different key.
     """
     m = _STAGE_BLOCK_RE.search(body)
-    if not m:
-        return ""
-    body = body[m.start():]
+    preamble = body[: m.start()] if m else body
+    stage_area = body[m.start():] if m else ""
 
-    # Split into sub-blocks, keeping any text before the first `### ` heading
-    # (that is stage-block prose, which is human by definition).
+    # Split the stage area into sub-blocks, keeping any text before the first
+    # `### ` heading (that is stage-block prose, which is human by
+    # definition).
     pieces: list[str] = []
     last = 0
-    for match in _SUB_BLOCK_RE.finditer(body):
-        pieces.append(body[last:match.start()])
+    for match in _SUB_BLOCK_RE.finditer(stage_area):
+        pieces.append(stage_area[last:match.start()])
         last = match.start()
-    pieces.append(body[last:])
+    pieces.append(stage_area[last:])
 
     kept = [p for p in pieces if not _is_generated_block(p)]
 
     lines: list[str] = []
-    for line in "".join(kept).splitlines():
+    for line in (preamble + "".join(kept)).splitlines():
         stripped = line.strip()
         if not stripped:
             continue
@@ -95,6 +124,8 @@ def narrative_text(body: str) -> str:
         if "Catalogued from" in stripped and "adef" in stripped:
             continue
         if stripped == GENERATED_MARKER:
+            continue
+        if _is_unfilled_field_line(stripped):
             continue
         lines.append(stripped)
     return "\n".join(lines)

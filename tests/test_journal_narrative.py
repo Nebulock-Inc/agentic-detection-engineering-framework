@@ -72,6 +72,35 @@ def test_narrative_drops_catalogued_from_housekeeping():
     assert "Catalogued from" not in out
 
 
+def test_narrative_keeps_a_filled_preamble_field():
+    # r1 findings, Important: a user who fills in a preamble field (before
+    # any stage block exists to hold it) has written reasoning, not
+    # scaffolding — dropping it silently stopped it from ever scoring.
+    body = (
+        "> A FORGE journal\n\n"
+        "- **Hypothesis (one sentence):** HYPOTOKEN attacker abuses mshta\n"
+        "- **Baseline of normal:** SPOOKYBASELINE mshta from Office ~3/day\n\n"
+        "## [2026-09-24T10:00:00-04:00] Stage: find\n\n"
+        "**Title:** t\n"
+    )
+    out = narrative_text(body)
+    assert "HYPOTOKEN" in out
+    assert "SPOOKYBASELINE" in out
+
+
+def test_narrative_drops_an_unfilled_preamble_field():
+    body = (
+        "> A FORGE journal\n\n"
+        "- **Hypothesis (one sentence):** HYPOTOKEN attacker abuses mshta\n"
+        "- **Data source(s):**\n\n"
+        "## [2026-09-24T10:00:00-04:00] Stage: find\n\n"
+        "**Title:** t\n"
+    )
+    out = narrative_text(body)
+    assert "HYPOTOKEN" in out
+    assert "Data source" not in out
+
+
 def test_narrative_of_an_unadvanced_journal_is_empty():
     # `detection new` writes template only. Nothing to index.
     body = "> A FORGE journal\n\n- **Hypothesis:**\n- **Data source:**\n"

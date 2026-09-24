@@ -89,3 +89,11 @@ def test_an_unadvanced_journal_does_not_break_scoring(ws: Path):
     Journal(ws / "journals").create(detection_id="D-0009", title="bare draft")
     hits = _search(ws, "mshta")            # must not raise ZeroDivisionError
     assert "D-0001" in [h.detection_id for h in hits]
+
+
+def test_a_journal_only_detection_is_findable_by_its_title(ws: Path):
+    # r1 findings, Critical: a fresh `detection new` draft (journal only, no
+    # catalog record yet) must still be searchable by its own title — the
+    # mirror image of the record-only headline bug this task fixes.
+    Journal(ws / "journals").create(detection_id="D-0003", title="okta mfa bypass fatigue")
+    assert "D-0003" in [h.detection_id for h in _search(ws, "fatigue")]

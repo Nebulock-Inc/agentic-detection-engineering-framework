@@ -86,8 +86,15 @@ class MemoryIndex:
                 self._df[term] += 1
             total_len += doc.length
             self._docs.append(doc)
-        # Empty documents (a template-only journal with no record) must not
-        # divide by zero or drag `avgdl` toward zero and inflate every score.
+        # Average only over non-empty documents. This is not a divide-by-zero
+        # guard — `_score` already returns 0.0 whenever `doc.length == 0 or
+        # self._avgdl == 0`, a guard that predates this change. It's about
+        # what `avgdl` means: folding in zero-length documents (a
+        # template-only journal with no record) would pull `avgdl` down,
+        # which *deflates* every other document's score (BM25's length-norm
+        # term grows, not shrinks, when a doc is long relative to `avgdl`),
+        # not inflate it. Averaging over documents that actually have content
+        # keeps `avgdl` representative of the corpus being scored.
         scored = [d for d in self._docs if d.length > 0]
         self._avgdl = (total_len / len(scored)) if scored else 0.0
         self._built = True

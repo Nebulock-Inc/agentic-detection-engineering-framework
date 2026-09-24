@@ -72,12 +72,25 @@ def test_extra_text_makes_sparse_journal_findable(tmp_path):
     gone — the record/journal join now happens once, in
     ``CorpusEntry.index_text`` (Task 2), so this builds ``CorpusEntry`` objects
     directly rather than going through ``build_corpus``.
-    """
-    journal_entry = Journal(tmp_path / "journals").create("D-0001", title="Cred dump rule")
 
-    # Journal alone (no catalog record) says nothing about lsass.
+    Needs a positive control alongside the negative one (r1 review,
+    Important): an entry whose ``index_text`` is empty returns ``[]`` for
+    *every* query, so "lsass" absent alone doesn't distinguish "the join is
+    missing" from "nothing is indexed at all." Advancing the journal with a
+    real, lsass-unrelated note and confirming that note IS findable rules the
+    second case out.
+    """
+    journal = Journal(tmp_path / "journals")
+    journal.create("D-0001", title="Cred dump rule")
+    journal.advance_stage("D-0001", "observe", note="PARENTPROCTOKEN spawned by explorer.exe")
+    journal_entry = journal.read("D-0001")
+
+    # Positive control: the journal alone has real, indexed content...
     index = MemoryIndex()
     index.build([CorpusEntry(detection_id="D-0001", journal=journal_entry)])
+    hits = index.search("PARENTPROCTOKEN")
+    assert hits and hits[0].detection_id == "D-0001"
+    # ...negative control: that content still says nothing about lsass.
     assert index.search("lsass") == []
 
     # With the catalog record's searchable text joined in, it's findable.
