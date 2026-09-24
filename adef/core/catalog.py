@@ -31,6 +31,10 @@ class CatalogError(Exception):
     """A catalog write would corrupt state (e.g. a duplicate-ID clobber)."""
 
 
+class NoCatalogRecordError(ValueError):
+    """Raised by a native Refine agent when `detection_id` has no catalog record yet (still journal-only)."""
+
+
 class _CatalogDumper(yaml.SafeDumper):
     """SafeDumper that renders multi-line strings as literal block scalars.
 
@@ -457,4 +461,10 @@ class Catalog:
         return index_path
 
 
-__all__ = ["Catalog", "CatalogRecord", "catalog_dir", "record_from_discovered"]
+__all__ = [
+    "Catalog",
+    "CatalogRecord",
+    "NoCatalogRecordError",
+    "catalog_dir",
+    "record_from_discovered",
+]

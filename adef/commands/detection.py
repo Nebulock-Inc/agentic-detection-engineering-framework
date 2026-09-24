@@ -19,6 +19,8 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from adef.core.corpus_text import record_search_text as _record_search_text
+from adef.core.engines import ALLOWED_ENGINES
 from adef.core.journal import (
     FORGE_STAGES,
     Journal,
@@ -30,8 +32,8 @@ console = Console()
 
 # Closed value-sets for validating `detection list` filters — a typo should
 # error, not read as zero coverage. (Open-ended --platform/--rule-format have no
-# fixed set to check against.)
-_ENGINES = frozenset({"sigma", "sql", "sch_sql", "composite"})
+# fixed set to check against.) Engines come from `adef.core.engines`, the single
+# canonical copy — never re-type the literal set.
 _STATUSES = frozenset({"draft", "ready", "tuning", "deprecated"})
 
 
@@ -146,6 +148,7 @@ def _make_stage_command(stage: str) -> click.Command:
         workspace: Path | None,
         notes: tuple[str, ...],
         chain: bool = False,
+        similarity_mode: str = "auto",
     ) -> None:
         # One note → plain line; several → a markdown bullet list.
         note = notes[0] if len(notes) == 1 else "\n".join(f"- {n}" for n in notes)
@@ -194,7 +197,12 @@ def _make_stage_command(stage: str) -> click.Command:
             if chain or not result.was_idempotent:
                 from adef.orchestration.refine_chain import run_refine_chain
 
-                run_refine_chain(journal=journal, detection_id=detection_id)
+                # `workspace` must be forwarded: every native Refine agent
+                # resolves `workspace_journals_dir(None)` when not given one,
+                # which would silently read a *different* catalog than the one
+                # `--workspace` named.
+                run_refine_chain(journal=journal, detection_id=detection_id,
+                                  workspace=workspace, similarity_mode=similarity_mode)
                 console.print("[green]Refine chain complete[/green] — Similarity → Overlap → Verification appended.")
             else:
                 console.print("  chain skipped (already at refine) — re-run it with [bold]--chain[/bold]")
@@ -206,6 +214,17 @@ def _make_stage_command(stage: str) -> click.Command:
                 is_flag=True,
                 help="Re-run the Similarity → Overlap → Verification chain even if "
                 "already at refine (e.g. after configuring the wrapper agents).",
+            )
+        )
+        cmd.params.append(
+            click.Option(
+                ["--similarity-mode"],
+                type=click.Choice(["auto", "bm25", "llm"]),
+                default="auto",
+                help="How the Similarity refine-step ranks candidates: 'llm' reranks the "
+                "BM25 shortlist with an LLM judge (requires ANTHROPIC_API_KEY + the 'llm' "
+                "extra), 'bm25' stays fully deterministic, 'auto' (default) uses llm when "
+                "available.",
             )
         )
     return cmd
@@ -329,9 +348,9 @@ def list_cmd(
     # Validate closed-set filters up front so a typo errors instead of looking
     # like genuine zero coverage. A valid value with no matches still falls
     # through to the normal "No detections match".
-    if engine and engine not in _ENGINES:
+    if engine and engine not in ALLOWED_ENGINES:
         raise click.ClickException(
-            f"unknown engine {engine!r}. Valid: {', '.join(sorted(_ENGINES))}."
+            f"unknown engine {engine!r}. Valid: {', '.join(sorted(ALLOWED_ENGINES))}."
         )
     if status and status not in _STATUSES:
         raise click.ClickException(
@@ -578,21 +597,6 @@ def tag_mitre_cmd(
         )
     if not result.added and not result.already_present:
         console.print("Nothing to add.")
-
-
-def _record_search_text(data: dict) -> str:
-    """The catalog fields worth searching on — so a detection is findable by
-    *what it detects* (title, MITRE, platform, source, query), not only by what
-    its journal says."""
-    parts = [
-        str(data.get("title", "")),
-        " ".join(data.get("mitre") or []),
-        str(data.get("platform", "")),
-        str(data.get("data_source", "")),
-        str(data.get("format", "")),
-        str(data.get("query", "")),
-    ]
-    return " ".join(p for p in parts if p)
 
 
 @detection.command("search")

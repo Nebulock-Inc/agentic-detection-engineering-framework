@@ -43,9 +43,13 @@ def register(server: Any) -> None:
         workspace: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run the Refine chain (Similarity → Overlap → Verification) for a detection."""
-        journals_dir = workspace_journals_dir(Path(workspace) if workspace else None)
+        ws = Path(workspace) if workspace else None
+        journals_dir = workspace_journals_dir(ws)
         journal = Journal(journals_dir)
-        return cast("dict[str, Any]", _to_dict(run_refine_chain(journal, detection_id)))
+        return cast(
+            "dict[str, Any]",
+            _to_dict(run_refine_chain(journal, detection_id, workspace=ws)),
+        )
 
     @server.tool()
     def hypothesis_from_intel(intel_url_or_text: str) -> dict[str, Any]:

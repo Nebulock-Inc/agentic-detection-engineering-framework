@@ -130,12 +130,21 @@ entry point of `detection new`.
 | `DETECTION_ID` (arg, required) | e.g. `D-0001`. |
 | `--note TEXT` | Note appended to the stage block. Repeatable — several `--note`s render as a bullet list. |
 | `--chain` (refine only) | Re-run the Similarity → Overlap → Verification chain even when already at refine (e.g. after wiring the wrapper agents). |
+| `--similarity-mode {auto,bm25,llm}` (refine only) | How the Similarity step ranks candidates. `bm25` (deterministic, no dependency) or `llm` (reranks the BM25 shortlist with an LLM judge; requires `ANTHROPIC_API_KEY` and the `llm` extra — `pip install '...[llm]'`). `auto` (default) uses `llm` when available, else `bm25`. |
 | `--workspace` | Workspace path (see resolution). |
 
 `refine` additionally runs the orchestration chain (Similarity → Overlap →
 Verification) **on the transition into refine**, appending each result to the
 journal (the chain does not abort on partial failure). Re-advancing to `refine`
-does *not* re-run it — use `--chain` to force a re-run.
+does *not* re-run it — use `--chain` to force a re-run. Similarity ranking defaults to BM25 and upgrades to an LLM-reranked shortlist automatically when
+`ANTHROPIC_API_KEY` is set and the `llm` extra is installed — override with `--similarity-mode`.
+
+> **What leaves your machine in `llm`/`auto` mode.** When the LLM path actually
+> runs, ADEF sends the Anthropic API the target detection's title, MITRE
+> technique IDs, and query (truncated to 500 characters), plus — for each of the
+> `top_k` (default 5) BM25 candidates — its detection ID, title, and a
+> journal-derived snippet. Nothing else from the workspace is transmitted, and
+> `--similarity-mode bm25` makes no network call at all.
 
 ```bash
 adef detection observe D-0001 --note "Checked 30d of process_create events"

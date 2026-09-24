@@ -22,6 +22,16 @@ class WrapperUnavailable(RuntimeError):
     """Raised when the underlying upstream agent cannot be imported."""
 
 
+#: Kwargs the Refine chain injects for the *native* agents that a
+#: pre-existing, strict-signature configured (``ADEF_WRAPPER_*``) upstream
+#: class was never written to accept. Each wrapper's configured-upstream
+#: branch strips these out of ``**ctx`` before forwarding — everything else
+#: the caller passed still reaches the configured class (found live via
+#: CodeRabbit review, PR #1: an earlier fix dropped ALL of ``ctx``, not just
+#: these two keys).
+NATIVE_ONLY_CTX_KEYS = frozenset({"workspace", "similarity_mode"})
+
+
 class WrapperBase:
     """Common shape for all upstream rule-agent wrappers."""
 
@@ -71,4 +81,4 @@ class WrapperBase:
         return {"detection_id": detection_id, "result": result}
 
 
-__all__ = ["WrapperBase", "WrapperUnavailable"]
+__all__ = ["WrapperBase", "WrapperUnavailable", "NATIVE_ONLY_CTX_KEYS"]

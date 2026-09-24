@@ -247,7 +247,14 @@ adef/
 │   ├── tune_recommender.py           # ADEF-native: tuning suggestions
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   └── wrappers/                     # Thin wrappers around the upstream rule agents ADEF orchestrates (4: similarity, overlap, verification, performance-metrics)
+│   ├── rule_similarity.py            # ADEF-native: BM25 shortlist + optional LLM rerank
+│   ├── rule_overlap.py               # ADEF-native: duplicate/complementary/redundant
+│   ├── verification.py               # ADEF-native: schema + four-engine constraint
+│   └── wrappers/                     # Dispatchers for the 4 rule agents the Refine chain and
+│                                     #   tune recommender orchestrate. Similarity/Overlap/
+│                                     #   Verification run the native agents above unless
+│                                     #   ADEF_WRAPPER_<KEY> is explicitly set; performance-
+│                                     #   metrics is the one remaining upstream-only wrapper.
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
@@ -260,8 +267,10 @@ adef/
 │   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
-│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation
-│   └── memory.py               # BM25 search over journals + catalog records
+│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
+│   ├── memory.py               # BM25 search over journals + catalog records
+│   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share
+│   └── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)
@@ -301,7 +310,7 @@ ADEF uses Python entry points for extensibility (same as ATHF):
 ADEF never hardcodes upstream package names. Integration uses env vars:
 
 ```bash
-# Wrapper bindings (the upstream rule-engineering agents ADEF orchestrates)
+# Wrapper bindings (optional upstream overrides — native by default since v2)
 ADEF_WRAPPER_RULE_SIMILARITY=package.module:RuleSimilarityClass
 ADEF_WRAPPER_RULE_OVERLAP=package.module:RuleOverlapClass
 ADEF_WRAPPER_VERIFICATION=package.module:VerificationClass
@@ -316,19 +325,52 @@ ADEF_HUNT_ROOT=/path/to/upstream/hunts      # Read-only hunt artifacts directory
 ADEF_WORKSPACE=/path/to/adef-workspace      # Override default workspace location
 ```
 
-If a binding is missing or import fails, the wrapper raises `WrapperUnavailable` → orchestration logs error to journal and continues.
+For Similarity/Overlap/Verification, a missing binding now runs the native
+agent instead of raising `WrapperUnavailable` (PerformanceMetrics has no
+native implementation yet and is unaffected by this change). An explicitly
+set binding whose import fails still raises `WrapperUnavailable` as before.
 
 ### The Refine Chain
 
 When `adef detection refine D-XXXX` runs:
 1. Advances stage to `refine`
 2. Invokes `orchestration/refine_chain.py`
-3. Runs **three upstream agents in sequence**:
-   - **RuleSimilarity**: Does a rule like this already exist?
-   - **RuleOverlap**: Do triggers heavily overlap with another rule?
-   - **Verification**: Would the rule pass schema validation + four-engine constraint?
+3. Runs **three steps in sequence, native by default** (v2, 2026-09) — native
+   execution and vendor-free execution are not the same guarantee: only
+   RuleSimilarity's `bm25` mode is vendor-free, and it is not the default:
+   - **RuleSimilarity** (`adef/agents/rule_similarity.py`): BM25 nearest-neighbor
+     search over the catalog — does a rule like this already exist? —
+     optionally reranked by an LLM judge (`adef detection refine D-XXXX
+     --similarity-mode {auto,bm25,llm}`; `auto`, the default, uses the LLM
+     when `ANTHROPIC_API_KEY` is set and the optional `llm` extra is
+     installed, otherwise stays BM25-only). **Data egress in `llm`/`auto`
+     mode:** the target's title, MITRE IDs, and query (truncated to 500
+     chars), plus each shortlisted candidate's ID, title, and snippet, are
+     sent to the Anthropic API — the snippet is built from both the
+     journal body AND the catalog search text (title, MITRE IDs, platform,
+     data source, format, query — see `record_search_text`), so catalog and
+     query content can be disclosed too, not just journal prose. `bm25` is
+     the only mode that makes no network call.
+   - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
+     duplicate/complementary/redundant classification within the target's MITRE
+     technique cluster (`catalog/INDEX.yml`'s `by_technique` map)
+   - **Verification** (`adef/agents/verification.py`): schema field-usage +
+     four-engine-constraint check, via `adef.commands.schema.run_schema_check`
+     scoped to one detection
 4. Each result is appended to the detection's journal under `### Refine / <step>` heading
 5. Chain does NOT abort on failure; partial results are valuable
+6. Each step still honors its `ADEF_WRAPPER_<KEY>` env var as an opt-in override
+   — if set, the step delegates to the configured upstream class exactly as
+   before v2. Unset (the default) now runs the native implementation instead of
+   raising `WrapperUnavailable`. `detection_id` plus any other caller context is
+   forwarded to an override — except the chain's native-only kwargs
+   (`workspace`, `similarity_mode`), which are filtered out so a
+   strict-signature upstream class keeps working.
+7. A detection with no catalog record yet (still journal-only) raises
+   `NoCatalogRecordError` from the native agent; the chain renders that as
+   *"Not run — no catalog record for D-XXXX yet (still journal-only)"*. That's
+   a distinct case from `WrapperUnavailable`'s *"isn't configured"*, which now
+   only fires for a genuinely broken explicit `ADEF_WRAPPER_*` override.
 
 ## Hard Rules (CI-Enforced Anti-Goals)
 

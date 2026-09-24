@@ -1,0 +1,13 @@
+id: D-1005
+title: "IAM - Okta - Cred Access - Repeated MFA Push Notifications"
+rule_ref: fixtures/D-1005.yml
+original_path: /fixtures/D-1005.yml
+platform: okta
+kind: atomic
+engine: sql
+format: sql
+query: "actor.user.email != '' AND event.outcome = 'FAILURE'"
+mitre: [T1621]
+data_source: iam
+status: draft
+stage: refine

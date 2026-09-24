@@ -9,10 +9,14 @@ adef/                    # importable Python package
   cli.py                 # Click root group, registers entry-point commands
   plugin_system.py       # entry-point discovery (defensive load, never kills CLI)
   __version__ via __init__.py
-  agents/                # ADEF-native agents (Hypothesis, Tune, Deprecation, HuntPromotion)
-    wrappers/            # Thin wrappers around the 4 upstream rule-engineering agents
+  agents/                # ADEF-native agents (7): Hypothesis, Tune, Deprecation,
+                         #   HuntPromotion, RuleSimilarity, RuleOverlap, Verification
+    wrappers/            # Dispatchers for the 4 orchestrated rule agents. Similarity/
+                         #   Overlap/Verification are native by default and only delegate
+                         #   upstream when ADEF_WRAPPER_<KEY> is explicitly set;
+                         #   PerformanceMetrics is the one true upstream-only wrapper.
   commands/              # Click subgroups: detection, init, hunt-promote, catalog, sync, schema
-  core/                  # Journal, MemoryIndex, Catalog
+  core/                  # Journal, MemoryIndex, Catalog, corpus_text, engines (ALLOWED_ENGINES)
   data/                  # Package data — templates/, prompts/
   mcp/                   # FastMCP server + tool modules
   orchestration/         # Refine chain (Similarity → Overlap → Verification)
@@ -43,7 +47,7 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 - `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName` — bind `adef hunt-promote` to a hunt-rule generator that exposes `run(hunt_id=...)`.
 - `ADEF_HUNT_ROOT=/path/to/hunts` (or `--hunt-root`) — directory of upstream hunt artifacts.
 
-If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
+For Similarity/Overlap/Verification, a missing binding runs the native agent instead of raising `WrapperUnavailable`. PerformanceMetrics (which has no native implementation) and any explicitly set binding whose import fails still raise `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
 
 ## Cataloging
 
