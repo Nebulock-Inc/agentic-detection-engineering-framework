@@ -32,7 +32,72 @@ FORGE_STAGES: tuple[str, ...] = ("find", "observe", "refine", "govern", "evolve"
 
 _DETECTION_ID_RE = re.compile(r"^D-(\d{4,})$")
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
-_STAGE_BLOCK_RE = re.compile(r"^## \[([^\]]+)\] Stage: (\w+)$", re.MULTILINE)
+
+GENERATED_MARKER = "<!-- adef:generated -->"
+
+# The first timestamped stage block ends the static template preamble —
+# everything before it is fill-in scaffolding, not reasoning. Moved here from
+# memory.py: the journal module owns its own format, and leaving block
+# structure in the search layer is what made "which blocks are machine
+# output?" hard to answer.
+_STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
+
+# A `### ` sub-block inside a stage block. Refine results land here.
+_SUB_BLOCK_RE = re.compile(r"^### ", re.MULTILINE)
+
+# Journals written before GENERATED_MARKER existed carry no marker. This
+# prefix identifies them. Permanent fallback, not a migration step.
+_LEGACY_GENERATED_HEADING = "### Refine / "
+
+
+def _is_generated_block(block: str) -> bool:
+    """True when this ``### `` sub-block was written by ADEF, not a human."""
+    return GENERATED_MARKER in block or block.startswith(_LEGACY_GENERATED_HEADING)
+
+
+def narrative_text(body: str) -> str:
+    """The human-authored prose in a journal body, for indexing.
+
+    Drops three things: the static template preamble, every machine-generated
+    sub-block, and `Catalogued from…` housekeeping. What remains is reasoning
+    a person or an agent wrote deliberately — the only journal content that can
+    be evidence without feeding retrieval its own output.
+
+    Filtering is by *provenance*, never by content: two earlier attempts
+    filtered by key name and both failed, because the same text arrived under
+    a different key.
+    """
+    m = _STAGE_BLOCK_RE.search(body)
+    if not m:
+        return ""
+    body = body[m.start():]
+
+    # Split into sub-blocks, keeping any text before the first `### ` heading
+    # (that is stage-block prose, which is human by definition).
+    pieces: list[str] = []
+    last = 0
+    for match in _SUB_BLOCK_RE.finditer(body):
+        pieces.append(body[last:match.start()])
+        last = match.start()
+    pieces.append(body[last:])
+
+    kept = [p for p in pieces if not _is_generated_block(p)]
+
+    lines: list[str] = []
+    for line in "".join(kept).splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#") or stripped.startswith(">"):
+            continue
+        if stripped.startswith("**Title:**"):
+            continue
+        if "Catalogued from" in stripped and "adef" in stripped:
+            continue
+        if stripped == GENERATED_MARKER:
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
 
 
 class JournalError(RuntimeError):
@@ -293,14 +358,20 @@ class Journal:
             timestamp=ts,
         )
 
-    def append_block(self, detection_id: str, heading: str, body: str) -> None:
+    def append_block(
+        self, detection_id: str, heading: str, body: str, generated: bool = False
+    ) -> None:
         """Append an arbitrary ``### heading``-level block under the current stage.
 
-        Used by orchestration (Refine chain) to record agent results.
+        Used by orchestration (Refine chain) to record agent results. Pass
+        ``generated=True`` for machine-written blocks: the block stays in the
+        file and stays visible to readers, but retrieval excludes it, so a
+        Refine result can never feed back into the scoring that produced it.
         """
         entry = self.read(detection_id)
         ts = _now_iso()
-        block = f"\n### {heading} ({ts})\n\n{body.strip()}\n"
+        marker = f"{GENERATED_MARKER}\n" if generated else ""
+        block = f"\n### {heading} ({ts})\n{marker}\n{body.strip()}\n"
         new_fm = {**entry.frontmatter, "updated": ts}
         _atomic_write(entry.path, _join_frontmatter(new_fm, entry.body.rstrip() + "\n" + block))
 
@@ -332,11 +403,13 @@ class Journal:
 
 __all__ = [
     "FORGE_STAGES",
+    "GENERATED_MARKER",
     "Journal",
     "JournalEntry",
     "JournalError",
     "HardInvariantViolation",
     "StageAdvanceResult",
+    "narrative_text",
     "next_detection_id",
     "workspace_journals_dir",
 ]
