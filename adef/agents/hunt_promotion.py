@@ -129,6 +129,12 @@ class HuntPromotionAgent:
         body = generated.get("yaml") if isinstance(generated, dict) else str(generated)
         staging_yaml.write_text(body or "", encoding="utf-8")
 
+        # Deliberately NOT `generated=True` (10188 follow-up item 2): unlike
+        # sync/catalog housekeeping, this note records a fact not recoverable
+        # anywhere else in the workspace — which upstream hunt this detection
+        # came from. "Which detections came from H-0042?" is a real search
+        # question, so this stays indexed. Do not "fix" this to match the
+        # other machine writers.
         journal = Journal(journals_dir).create(
             detection_id=detection_id,
             title=str(

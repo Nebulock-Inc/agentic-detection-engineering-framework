@@ -52,6 +52,35 @@ _STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
 # `_is_generated_block` still decides which pieces are generated.
 _SUB_BLOCK_RE = re.compile(r"^(?:### |## \[.+?\] Stage:)", re.MULTILINE)
 
+# A fence marker line (opening or closing, ``` or ~~~). Toggled pairwise by
+# `_fenced_spans` below — no nesting, no info-string awareness, just enough to
+# know when a `### `/`## [ts] Stage:` match is text *inside* a fence rather
+# than a real sub-block boundary (10188 follow-up item 1: a traceback written
+# inside a fence by `run_refine_chain`'s generic-failure branch can contain a
+# line starting with `### `, which used to split the generated block it
+# belonged to — the tail then carried neither the marker nor the legacy
+# prefix, and got indexed).
+_FENCE_MARK_RE = re.compile(r"^(?:```|~~~)", re.MULTILINE)
+
+
+def _fenced_spans(text: str) -> list[tuple[int, int]]:
+    """Byte ranges of fenced code blocks in ``text``, open/close by line order."""
+    spans: list[tuple[int, int]] = []
+    open_at: Optional[int] = None
+    for m in _FENCE_MARK_RE.finditer(text):
+        if open_at is None:
+            open_at = m.start()
+        else:
+            spans.append((open_at, m.end()))
+            open_at = None
+    if open_at is not None:
+        spans.append((open_at, len(text)))  # unclosed fence: rest of text is fenced
+    return spans
+
+
+def _inside_any(pos: int, spans: list[tuple[int, int]]) -> bool:
+    return any(start <= pos < end for start, end in spans)
+
 # Journals written before GENERATED_MARKER existed carry no marker. This
 # prefix identifies them. Permanent fallback, not a migration step.
 _LEGACY_GENERATED_HEADING = "### Refine / "
@@ -63,8 +92,22 @@ _FIELD_LINE_RE = re.compile(r"^-\s+\*\*[^*]+:\*\*\s*(.*)$")
 
 
 def _is_generated_block(block: str) -> bool:
-    """True when this ``### `` sub-block was written by ADEF, not a human."""
-    return GENERATED_MARKER in block or block.startswith(_LEGACY_GENERATED_HEADING)
+    """True when this piece is a machine-written ``### `` sub-block — Refine
+    chain output via ``append_block(generated=True)``, or the permanent
+    legacy-heading fallback — dropped whole, by provenance.
+
+    Deliberately narrower than "marker anywhere in the piece": restricted to
+    ``### ``-headed pieces because `append_block` always mints a fresh piece
+    per call, so a marker inside one can never share space with unrelated
+    content. A ``## [ts] Stage: ...`` piece is different — it accumulates
+    notes across repeated `advance_stage` calls, human and machine mixed — so
+    it is never whole-block-dropped here; an individual generated note inside
+    one is instead excluded by the line-scoped marker handling in
+    `narrative_text` (10188 follow-up item 2).
+    """
+    if block.startswith(_LEGACY_GENERATED_HEADING):
+        return True
+    return block.startswith("### ") and GENERATED_MARKER in block
 
 
 def _is_unfilled_field_line(line: str) -> bool:
@@ -151,10 +194,18 @@ def narrative_text(body: str) -> str:
     `_preamble_narrative_lines`, which whitelists only its filled
     `- **Field:** value` lines and drops everything else there, plain prose
     included), unfilled placeholders and other scaffolding within the stage
-    area (fill-state/content-based), every machine-generated sub-block, and
-    `Catalogued from…` housekeeping. What remains is reasoning a person or an
-    agent wrote deliberately — the only journal content that can be evidence
-    without feeding retrieval its own output.
+    area, every machine-generated sub-block, and every machine-generated note
+    (both by provenance — the `GENERATED_MARKER`, never by content). What
+    remains is reasoning a person or an agent wrote deliberately — the only
+    journal content that can be evidence without feeding retrieval its own
+    output.
+
+    There is deliberately no content-based rule here — e.g. a former
+    `"Catalogued from" in line and "adef" in line` filter, removed in the
+    10188 follow-up, that dropped a human line just for containing those
+    substrings. Provenance is the only thing that excludes machine text; a
+    human writing about `adef catalog` in their own reasoning is indexed like
+    anything else they write.
 
     The preamble and the stage area are filtered differently on purpose.
     `Journal.create` writes the preamble once, verbatim from the shipped
@@ -166,10 +217,10 @@ def narrative_text(body: str) -> str:
     ever created (r2 review). The stage area has no such guaranteed
     boilerplate — a stage block is appended once, per transition, with
     whatever a human (or an agent, for a non-generated sub-block) actually
-    wrote — so it keeps the permissive, content-based rule: drop known
-    scaffolding (headings, the echoed title, housekeeping, generated
-    sub-blocks by provenance) and strip the leading `>` marker from a
-    blockquoted line rather than dropping it — a blockquote is the natural
+    wrote — so it keeps the permissive rule: drop known scaffolding (headings,
+    the echoed title, generated sub-blocks and generated notes by provenance)
+    and strip the leading `>` marker from a blockquoted line rather than
+    dropping it — a blockquote is the natural
     markdown for pasting intel or a customer report into a journal, and that
     is exactly the "why" ADEF exists to retain — keep everything else.
 
@@ -192,7 +243,12 @@ def narrative_text(body: str) -> str:
     # never swallowing it.
     pieces: list[str] = []
     last = 0
+    fences = _fenced_spans(stage_area)
     for match in _SUB_BLOCK_RE.finditer(stage_area):
+        if _inside_any(match.start(), fences):
+            # Not a real boundary — text inside a fenced code block, not a
+            # `### `/`## [ts] Stage:` heading (10188 follow-up item 1).
+            continue
         pieces.append(stage_area[last:match.start()])
         last = match.start()
     pieces.append(stage_area[last:])
@@ -200,11 +256,24 @@ def narrative_text(body: str) -> str:
     kept = [p for p in pieces if not _is_generated_block(p)]
 
     lines: list[str] = _preamble_narrative_lines(preamble)
+    in_generated_note = False
     for line in "".join(kept).splitlines():
         stripped = line.strip()
         if not stripped:
+            in_generated_note = False
             continue
         if stripped.startswith("#"):
+            in_generated_note = False
+            continue
+        if stripped == GENERATED_MARKER:
+            # Scopes to just the note that follows, not the whole stage
+            # block — a `## [ts] Stage:` piece can hold both a generated note
+            # (sync/catalog housekeeping) and human content appended by a
+            # later `advance_stage` call (10188 follow-up item 2). Ends at
+            # the next blank line or heading.
+            in_generated_note = True
+            continue
+        if in_generated_note:
             continue
         if stripped.startswith(">"):
             # Blockquote is markdown shape, not machine provenance — strip the
@@ -214,10 +283,6 @@ def narrative_text(body: str) -> str:
             if not stripped:
                 continue
         if stripped.startswith("**Title:**"):
-            continue
-        if "Catalogued from" in stripped and "adef" in stripped:
-            continue
-        if stripped == GENERATED_MARKER:
             continue
         if _is_unfilled_field_line(stripped):
             continue
@@ -357,6 +422,15 @@ class JournalEntry:
         return str(self.frontmatter.get("rule_uuid", "") or "")
 
 
+# Resolved paths already warned about for malformed frontmatter (10188
+# follow-up item 4). `build_corpus` re-runs `iter_entries()` on every search
+# and every refine, in processes that can live a long time (the MCP server) —
+# without this, one bad journal warns to stderr forever. Bounded by the number
+# of malformed files in the workspace, process-lifetime, module-level by
+# design (mirrors the plugin-discovery failure log, which also never resets).
+_WARNED_MALFORMED: set[Path] = set()
+
+
 class Journal:
     """File-system-backed CRUD for ``D-XXXX.md`` journal files.
 
@@ -391,8 +465,16 @@ class Journal:
         owner: str = "",
         rule_uuid: str = "",
         note: str = "",
+        generated: bool = False,
     ) -> JournalEntry:
-        """Create a new journal at the Find stage. Returns the populated entry."""
+        """Create a new journal at the Find stage. Returns the populated entry.
+
+        Pass ``generated=True`` when ``note`` is machine-written derived
+        restatement (e.g. `catalog`/`sync`'s "Catalogued from …" housekeeping)
+        — mirrors `append_block`/`advance_stage`. Marks only the note, not the
+        stage block: `**Title:**` is unaffected either way, it is already
+        dropped by its own rule in `narrative_text`.
+        """
         path = self._path_for(detection_id)
         if path.exists():
             raise JournalError(f"Journal {path} already exists.")
@@ -413,10 +495,11 @@ class Journal:
         }
         # Lean Find block, consistent with the other stages — the Find guidance
         # lives in the template's `## Find` fill-in section, not re-printed here.
+        marker = f"{GENERATED_MARKER}\n" if (generated and note) else ""
         find_block = (
             f"\n## [{ts}] Stage: find\n\n"
             f"**Title:** {title}\n\n"
-            + (f"{note}\n" if note else "")
+            + (f"{marker}{note}\n" if note else "")
         )
         text = _join_frontmatter(fm, body_template.rstrip() + "\n" + find_block)
         _atomic_write(path, text)
@@ -436,12 +519,20 @@ class Journal:
         detection_id: str,
         stage: str,
         note: str = "",
+        generated: bool = False,
     ) -> StageAdvanceResult:
         """Advance the journal to ``stage``, append a stage block, return outcome.
 
         Idempotent: re-advancing to the same stage emits a stderr warning and
         does not append a duplicate block (a note, if given, is still added as
         a sub-block within the existing stage).
+
+        Pass ``generated=True`` when ``note`` is machine-written derived
+        restatement (e.g. `sync`'s "Source rule gone"/"Source changed…"
+        housekeeping) — mirrors `append_block`. The marker scopes to just this
+        note, not the whole stage block: a `## [ts] Stage:` block accumulates
+        notes across repeated calls, human and machine mixed, so a later
+        human note appended here is unaffected.
         """
         if stage not in FORGE_STAGES:
             raise JournalError(f"Unknown stage {stage!r}. Expected one of {FORGE_STAGES}.")
@@ -449,6 +540,7 @@ class Journal:
         entry = self.read(detection_id)
         ts = _now_iso()
         was_idempotent = entry.current_stage == stage
+        marker = f"{GENERATED_MARKER}\n" if (generated and note) else ""
 
         if was_idempotent:
             print(
@@ -458,7 +550,7 @@ class Journal:
             )
             new_body = entry.body
             if note:
-                new_body = entry.body.rstrip() + f"\n\n_Note ({ts}):_ {note}\n"
+                new_body = entry.body.rstrip() + f"\n\n{marker}_Note ({ts}):_ {note}\n"
         else:
             # A lean transition record: timestamp + note. The FORGE guidance
             # (what to capture at each stage) lives once in the template's
@@ -466,7 +558,7 @@ class Journal:
             # duplicated it and buried the actual notes (ISA 2026-07-22).
             block = (
                 f"\n## [{ts}] Stage: {stage}\n\n"
-                + (f"{note}\n" if note else "_(no note)_\n")
+                + (f"{marker}{note}\n" if note else "_(no note)_\n")
             )
             new_body = entry.body.rstrip() + "\n" + block
 
@@ -504,7 +596,8 @@ class Journal:
         """Yield every journal in the directory.
 
         A journal with malformed YAML frontmatter is skipped (reported to
-        stderr), not raised — a corpus-wide reader (`build_corpus`) must not
+        stderr once per resolved path per process — see `_WARNED_MALFORMED`
+        below), not raised — a corpus-wide reader (`build_corpus`) must not
         let one bad file take down every other detection. Mirrors
         `Catalog.iter_records`' tolerance of a bad catalog YAML.
         """
@@ -513,10 +606,13 @@ class Journal:
             try:
                 fm, body = _split_frontmatter(text)
             except yaml.YAMLError as exc:
-                print(
-                    f"[adef.journal] skipping {child} — malformed frontmatter: {exc}",
-                    file=sys.stderr,
-                )
+                resolved = child.resolve()
+                if resolved not in _WARNED_MALFORMED:
+                    _WARNED_MALFORMED.add(resolved)
+                    print(
+                        f"[adef.journal] skipping {child} — malformed frontmatter: {exc}",
+                        file=sys.stderr,
+                    )
                 continue
             yield JournalEntry(path=child, frontmatter=fm, body=body)
 

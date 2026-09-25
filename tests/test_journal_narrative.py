@@ -52,6 +52,28 @@ def test_narrative_drops_unmarked_legacy_refine_blocks():
     assert "LEGACYOUTPUT" not in out
 
 
+def test_narrative_ignores_sub_block_heading_inside_a_fence():
+    # 10188 follow-up item 1: `run_refine_chain`'s generic-failure branch
+    # writes a traceback inside a ``` fence. A traceback line that starts
+    # with `### ` used to split the generated block it belonged to — the
+    # tail piece carried neither the marker nor the legacy prefix, so it got
+    # indexed. The fence must protect the whole generated block, including
+    # everything after the fenced `### ` line.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: refine\n\n"
+        f"### Refine / Verification (2026-09-24T10:01:00-04:00)\n{GENERATED_MARKER}\n\n"
+        "**Failed:** boom\n\n"
+        "```\n"
+        "Traceback (most recent call last):\n"
+        "### something that looks like a heading\n"
+        "MACHINETRACEBACK line after the fake heading\n"
+        "```\n"
+    )
+    out = narrative_text(body)
+    assert "MACHINETRACEBACK" not in out
+    assert "something that looks like a heading" not in out
+
+
 def test_narrative_keeps_a_note_written_after_a_generated_block():
     # Major finding (10188 follow-up): `_SUB_BLOCK_RE` used to split the stage
     # area on `### ` only, so a generated Refine block "extended" past the
@@ -79,7 +101,13 @@ def test_narrative_keeps_a_human_block_that_is_not_refine():
     assert "KEEPTHIS" in narrative_text(body)
 
 
-def test_narrative_drops_catalogued_from_housekeeping():
+def test_narrative_no_longer_filters_catalogued_from_by_content():
+    # 10188 follow-up item 2: the content-based `"Catalogued from" in line and
+    # "adef" in line` filter is gone — a human line that happens to contain
+    # both substrings is no longer silently dropped. Provenance (the
+    # generated marker) is the only thing that excludes machine housekeeping
+    # now; see `test_narrative_drops_a_generated_note_by_marker_not_content`
+    # below for the actual generated note, which IS excluded, by marker.
     body = (
         "## [2026-09-24T10:00:00-04:00] Stage: find\n\n"
         "Catalogued from /repo/rules/x.yml by adef catalog\n"
@@ -87,7 +115,38 @@ def test_narrative_drops_catalogued_from_housekeeping():
     )
     out = narrative_text(body)
     assert "REALCONTENT" in out
-    assert "Catalogued from" not in out
+    assert "Catalogued from" in out
+
+
+def test_narrative_drops_a_generated_note_by_marker_not_content(tmp_path: Path):
+    # The real production shape: `catalog`/`sync` mark their housekeeping note
+    # generated at write time (`Journal.create(generated=True)`). Deliberately
+    # NOT using "Catalogued from ... adef ..." wording here — that phrase also
+    # happens to match the now-deleted content filter, which would make this
+    # test pass even with a broken marker-scoping implementation (the same
+    # false-pass trap this branch has hit five times already). MACHINETOKEN
+    # has no content-based rule anywhere, so exclusion here can only be by
+    # provenance.
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t", note="MACHINETOKEN housekeeping text", generated=True)
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "MACHINETOKEN" not in out
+
+
+def test_narrative_keeps_a_human_note_after_a_generated_one(tmp_path: Path):
+    # The marker must scope to just the generated note, not the whole stage
+    # block: a later human re-advance to the same stage appends its note to
+    # the SAME piece (idempotent path), and must not be swallowed along with
+    # the generated one that came before it (10188 follow-up item 2).
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t")
+    j.advance_stage("D-0001", "observe", note="MACHINETOKEN sync housekeeping", generated=True)
+    j.advance_stage("D-0001", "observe", note="HUMANTOKEN analyst follow-up")
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "MACHINETOKEN" not in out
+    assert "HUMANTOKEN" in out
 
 
 def test_narrative_keeps_a_filled_preamble_field():

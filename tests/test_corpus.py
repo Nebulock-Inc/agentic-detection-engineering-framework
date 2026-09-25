@@ -129,6 +129,25 @@ def test_unparseable_artifacts_are_skipped_not_fatal(ws: Path):
     assert "D-0011" not in ids
 
 
+def test_malformed_journal_warns_once_per_process(tmp_path: Path, capsys):
+    # 10188 follow-up item 4: `build_corpus` runs on every search and every
+    # refine, so a process that lives a long time (the MCP server) used to
+    # re-emit the same "skipping ... malformed frontmatter" warning forever.
+    # Two consecutive `build_corpus` calls over the same bad file must
+    # produce exactly one warning.
+    w = tmp_path / "ws"
+    (w / "journals").mkdir(parents=True)
+    (w / "journals" / "D-0099.md").write_text(
+        "---\n{{{ not: [valid\n---\n\nbroken frontmatter body\n", encoding="utf-8"
+    )
+
+    build_corpus(w)
+    build_corpus(w)
+
+    err = capsys.readouterr().err
+    assert err.count("malformed frontmatter") == 1
+
+
 def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):
     # Review Focus 3.
     dup_dir = ws / "catalog" / "linux"

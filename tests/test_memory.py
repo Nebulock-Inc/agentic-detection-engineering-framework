@@ -9,10 +9,12 @@ when a test's point is ``MemoryIndex.build()``'s own behavior (scoring
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from adef.core.corpus import CorpusEntry, build_corpus
-from adef.core.journal import Journal
+from adef.core.journal import Journal, JournalEntry
 from adef.core.memory import MemoryIndex
 
 
@@ -49,10 +51,15 @@ def test_search_empty_workspace(tmp_path):
 
 def test_snippet_prefers_real_content_over_boilerplate(tmp_path):
     """The snippet should surface the matched note, not the empty template
-    scaffolding or the 'Catalogued from…' housekeeping line (ISA 2026-07-22)."""
+    scaffolding or the 'Catalogued from…' housekeeping line (ISA 2026-07-22).
+
+    The housekeeping note is marked `generated=True` here, matching the real
+    `adef catalog`/`adef sync` call sites (10188 follow-up item 2) — the
+    content-based "Catalogued from ... adef ..." filter this test used to
+    rely on is gone; provenance is what excludes it now."""
     journal = Journal(tmp_path / "journals")
     journal.create("D-0001", title="Beacon rule",
-                   note="Catalogued from repo/x.conf by `adef catalog`.")
+                   note="Catalogued from repo/x.conf by `adef catalog`.", generated=True)
     journal.advance_stage("D-0001", "observe",
                           note="beaconing to known C2 over DNS TXT records")
     index = MemoryIndex()
@@ -112,3 +119,42 @@ def test_extra_text_makes_sparse_journal_findable(tmp_path):
     ])
     hits = index.search("lsass windows")
     assert hits and hits[0].detection_id == "D-0001"
+
+
+def _plain_entry(detection_id: str, text: str) -> CorpusEntry:
+    # A `## [ts] Stage:` body whose stage content is exactly `text` (no
+    # title, no record) — narrative_text passes it through untouched, so the
+    # resulting index_text token counts are exactly under test's control.
+    body = f"## [2026-09-24T10:00:00-04:00] Stage: observe\n\n{text}\n"
+    entry = JournalEntry(path=Path(f"/tmp/{detection_id}.md"), frontmatter={"title": ""}, body=body)
+    return CorpusEntry(detection_id=detection_id, journal=entry)
+
+
+def test_zero_length_docs_do_not_reorder_a_multiterm_query():
+    # 10188 follow-up item 3: `_idf`'s `n` used to include zero-length docs
+    # (`len(self._docs)`) while `avgdl` already excluded them — the
+    # inconsistency inflates `n`, compressing idf's relative weighting
+    # between a rare and a common query term enough to reorder a multi-term
+    # query. Three real docs establish the asymmetric df this needs: only
+    # D-000A has "rare" (df=1), D-000B and D-000C both have "common" (df=2).
+    docs = [
+        _plain_entry("D-000A", "rare filler"),   # rare x1, len 2
+        _plain_entry("D-000B", "common"),        # common x1, len 1
+        _plain_entry("D-000C", "common"),        # common x1, len 1 (df(common)=2)
+    ]
+    index = MemoryIndex()
+    index.build(docs)
+    hits = index.search("rare common")
+    order_before = [h.detection_id for h in hits if h.detection_id in ("D-000A", "D-000B")]
+    assert order_before == ["D-000A", "D-000B"]  # the rarer term wins
+
+    # 20 zero-length "documents" (drafts with nothing indexable yet) must not
+    # change that relative order.
+    padded = docs + [
+        CorpusEntry(detection_id=f"D-EMPTY{i}") for i in range(20)
+    ]
+    index2 = MemoryIndex()
+    index2.build(padded)
+    hits2 = index2.search("rare common")
+    order_after = [h.detection_id for h in hits2 if h.detection_id in ("D-000A", "D-000B")]
+    assert order_after == order_before

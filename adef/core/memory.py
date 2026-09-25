@@ -70,6 +70,7 @@ class MemoryIndex:
         self._docs: list[_Doc] = []
         self._df: Counter[str] = Counter()
         self._avgdl: float = 0.0
+        self._n: int = 0
         self._built = False
 
     def build(self, entries: Iterable["CorpusEntry"]) -> None:
@@ -97,10 +98,16 @@ class MemoryIndex:
         # keeps `avgdl` representative of the corpus being scored.
         scored = [d for d in self._docs if d.length > 0]
         self._avgdl = (total_len / len(scored)) if scored else 0.0
+        # `n` in the idf formula must match `avgdl`'s population: a
+        # zero-length doc (an un-noted draft) can never score (`_score`
+        # returns 0.0 for it), so counting it in `n` inflates the document
+        # count without adding anything scorable, compressing idf's relative
+        # weighting between rare and common terms (10188 follow-up item 3).
+        self._n = len(scored)
         self._built = True
 
     def _idf(self, term: str) -> float:
-        n = len(self._docs)
+        n = self._n
         df = self._df.get(term, 0)
         if df == 0:
             return 0.0
