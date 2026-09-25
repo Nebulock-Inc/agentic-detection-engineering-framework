@@ -85,6 +85,23 @@ def test_index_text_survives_either_half_missing(ws: Path):
     assert isinstance(by_id["D-0003"].index_text, str)            # journal only
 
 
+def test_record_backed_title_is_not_double_counted(ws: Path):
+    # Minor finding: `index_text` used to prepend `self.title` unconditionally,
+    # and `record_search_text` already starts with the record's title, so a
+    # record-backed entry indexed its title twice — double-weighting it in
+    # BM25 relative to every other field.
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0001")
+    assert entry.index_text.count("mshta child process") == 1
+
+
+def test_journal_only_entry_still_carries_its_title(ws: Path):
+    # The unconditional prepend was there for exactly this case (r1 review,
+    # Critical) — a journal-only entry has no `record_search_text` to fall
+    # back on, so it must still get its title from somewhere.
+    entry = next(e for e in build_corpus(ws) if e.detection_id == "D-0003")
+    assert "draft rundll32 idea" in entry.index_text
+
+
 def test_bare_workspace_returns_nothing_and_creates_nothing(tmp_path: Path):
     # Review Focus 1. `Catalog.__init__` mkdirs, so a naive implementation
     # silently creates `catalog/` on a read path.
@@ -96,11 +113,20 @@ def test_bare_workspace_returns_nothing_and_creates_nothing(tmp_path: Path):
 
 
 def test_unparseable_artifacts_are_skipped_not_fatal(ws: Path):
-    # Review Focus 2.
+    # Review Focus 2. `D-0010` has NO frontmatter at all, which parses fine
+    # (`_split_frontmatter` just returns `{}, text`) — it never exercises a
+    # parse failure. `D-0011` is the real case: frontmatter that IS present
+    # but is malformed YAML, which used to propagate a `yaml.YAMLError` out
+    # of `Journal.iter_entries()` and abort `build_corpus` entirely (Major
+    # finding, 10188 follow-up).
     (ws / "catalog" / "D-0009.yml").write_text("{{{ not yaml", encoding="utf-8")
     (ws / "journals" / "D-0010.md").write_text("no frontmatter here", encoding="utf-8")
+    (ws / "journals" / "D-0011.md").write_text(
+        "---\n{{{ not: [valid\n---\n\nbroken frontmatter body\n", encoding="utf-8"
+    )
     ids = sorted(e.detection_id for e in build_corpus(ws))
     assert "D-0001" in ids and "D-0002" in ids and "D-0003" in ids
+    assert "D-0011" not in ids
 
 
 def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):

@@ -31,7 +31,7 @@ def register(server: Any) -> None:
         matched journal or catalog record — a catalogued detection with no
         journal, or a fresh draft with no catalog record yet, is included
         too, not just detections with both."""
-        ws = workspace_journals_dir(Path(workspace) if workspace else None).parent
+        ws = workspace_journals_dir(Path(workspace) if workspace else None, create=False).parent
         index = MemoryIndex()
         index.build(build_corpus(ws))
         hits = index.search(query, limit=limit)

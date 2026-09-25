@@ -43,8 +43,14 @@ GENERATED_MARKER = "<!-- adef:generated -->"
 # "which blocks are machine output?" hard to answer.
 _STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
 
-# A `### ` sub-block inside a stage block. Refine results land here.
-_SUB_BLOCK_RE = re.compile(r"^### ", re.MULTILINE)
+# A `### ` sub-block inside a stage block (Refine results land here), OR the
+# next `## [ts] Stage:` transition — either one ends the current piece. Just
+# `### ` was not enough: a generated block would otherwise "extend" past the
+# next stage transition and swallow it (and whatever a human wrote under it)
+# into the same piece, which `_is_generated_block` would then drop whole
+# (Major finding, 10188 follow-up). This only changes where a piece ends —
+# `_is_generated_block` still decides which pieces are generated.
+_SUB_BLOCK_RE = re.compile(r"^(?:### |## \[.+?\] Stage:)", re.MULTILINE)
 
 # Journals written before GENERATED_MARKER existed carry no marker. This
 # prefix identifies them. Permanent fallback, not a migration step.
@@ -179,9 +185,11 @@ def narrative_text(body: str) -> str:
     preamble = body[: m.start()] if m else body
     stage_area = body[m.start():] if m else ""
 
-    # Split the stage area into sub-blocks, keeping any text before the first
-    # `### ` heading (that is stage-block prose, which is human by
-    # definition).
+    # Split the stage area into pieces at every `### ` sub-block AND every
+    # `## [ts] Stage:` transition, keeping any text before the first boundary
+    # (that is stage-block prose, which is human by definition). Breaking on
+    # stage transitions too means a generated piece ends at the next stage,
+    # never swallowing it.
     pieces: list[str] = []
     last = 0
     for match in _SUB_BLOCK_RE.finditer(stage_area):
@@ -493,10 +501,23 @@ class Journal:
         _atomic_write(entry.path, _join_frontmatter(new_fm, entry.body.rstrip() + "\n" + block))
 
     def iter_entries(self) -> Iterable[JournalEntry]:
-        """Yield every journal in the directory."""
+        """Yield every journal in the directory.
+
+        A journal with malformed YAML frontmatter is skipped (reported to
+        stderr), not raised — a corpus-wide reader (`build_corpus`) must not
+        let one bad file take down every other detection. Mirrors
+        `Catalog.iter_records`' tolerance of a bad catalog YAML.
+        """
         for child in sorted(self._dir.glob("D-*.md")):
             text = child.read_text(encoding="utf-8")
-            fm, body = _split_frontmatter(text)
+            try:
+                fm, body = _split_frontmatter(text)
+            except yaml.YAMLError as exc:
+                print(
+                    f"[adef.journal] skipping {child} — malformed frontmatter: {exc}",
+                    file=sys.stderr,
+                )
+                continue
             yield JournalEntry(path=child, frontmatter=fm, body=body)
 
     def find_by_rule_uuid(self, rule_uuid: str) -> Optional[JournalEntry]:

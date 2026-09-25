@@ -52,6 +52,24 @@ def test_narrative_drops_unmarked_legacy_refine_blocks():
     assert "LEGACYOUTPUT" not in out
 
 
+def test_narrative_keeps_a_note_written_after_a_generated_block():
+    # Major finding (10188 follow-up): `_SUB_BLOCK_RE` used to split the stage
+    # area on `### ` only, so a generated Refine block "extended" past the
+    # next `## [ts] Stage:` transition and swallowed it whole — including a
+    # human govern note written under it. This is the normal FORGE flow:
+    # refine runs the chain, then govern adds a note.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: refine\n\n"
+        f"### Refine / Similarity (2026-09-24T10:01:00-04:00)\n{GENERATED_MARKER}\n\n"
+        "- **candidates:** MACHINETOKEN D-0002\n"
+        "## [2026-09-24T11:00:00-04:00] Stage: govern\n\n"
+        "GOVERNNOTE approved by on-call lead\n"
+    )
+    out = narrative_text(body)
+    assert "GOVERNNOTE" in out
+    assert "MACHINETOKEN" not in out
+
+
 def test_narrative_keeps_a_human_block_that_is_not_refine():
     body = (
         "## [2026-09-24T10:00:00-04:00] Stage: govern\n\n"

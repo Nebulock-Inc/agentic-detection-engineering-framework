@@ -22,10 +22,13 @@ This guide is for that case.
 
 Your authored detections are the only copy, so treat the workspace like the
 important data it is. The workspace is plain markdown + YAML — no ADEF-specific
-tooling needed, just native git — and if you hand-edit a journal yourself, keep
-new reasoning in the template's `- **Field:** value` bullet grammar (or a
-wrapped continuation of one), since a free-text paragraph outside that grammar
-won't turn up in `adef detection search`.
+tooling needed, just native git. This caveat applies only to the template
+**preamble** (the fields before the first `## [<timestamp>] Stage:` heading):
+if you hand-edit one of those fields yourself, keep new reasoning in the
+template's `- **Field:** value` bullet grammar (or a wrapped continuation of
+one), since a free-text paragraph there won't turn up in `adef detection
+search`. Text inside a stage block (after the first `## Stage:` heading) has
+no such restriction — it is indexed as written.
 
 ```bash
 adef init ~/detections            # scaffold the workspace
