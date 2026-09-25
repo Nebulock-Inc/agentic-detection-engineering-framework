@@ -196,11 +196,33 @@ ignored by any markdown consumer:
 
 The exact marker string is `<!-- adef:generated -->`, defined once in
 `journal.py` and referenced by both the writer and the indexer.
-`run_refine_chain` is the only caller that passes `generated=True`.
+`run_refine_chain` is the only caller that passes `generated=True` to
+`append_block` — the call shown above. It is not the only writer of generated
+content overall: `catalog` and `sync` also pass `generated=True`, both
+into `Journal.create` and, for `sync`, into `Journal.advance_stage` (via its
+`_journal_note` helper) — marking their own housekeeping notes (e.g.
+"Catalogued from … by `adef catalog`.") so Refine's feedback loop is not the
+only thing this marker closes.
 
-The indexer drops any block carrying the marker. For journals that already
-exist it falls back to matching the `### Refine / ` heading prefix — a
-permanent fallback, not a transition.
+A close marker, `<!-- /adef:generated -->`, states where a marked span ends;
+`append_block` and the `Journal.create`/`advance_stage` `generated=True` path
+both emit it. The indexer strips every span between a paired open/close
+marker wholesale — heading, blank lines, fences, anything the content
+contains — *before* any structural splitting runs, so nothing inside a closed
+span can be mistaken for a boundary. Only an **unclosed** open marker (a
+journal already on disk from before the close marker existed) falls through
+to the older, structure-inferring fallback: the `### `/`## [ts] Stage:` +
+fence-aware split described below, and beyond that, matching the
+`### Refine / ` heading prefix — both permanent fallbacks, not a transition.
+Likewise, a `catalog`/`sync` housekeeping note written before either marker
+existed carries no marker at all; the indexer falls back to matching that
+note's exact known text (see "Migration" below).
+
+**Known limitation:** a content line that happens to equal
+`<!-- /adef:generated -->` verbatim closes the span early — the indexer has no
+way to distinguish that from the real close marker it emits itself. This is
+accepted, not fixed, for the same reason the open marker's shape is trusted:
+the marker is ADEF's own writer output, not an escaped user format.
 
 **Splitting the stage area into blocks.** The indexer splits on every `### `
 sub-block heading — where Refine results land — but *also* on every
@@ -284,6 +306,16 @@ None required.
 
 - Existing journals are read via the heading-prefix fallback; nothing on disk
   is rewritten.
+- Existing journals' `catalog`/`sync` housekeeping notes (written before
+  `generated=True` marking existed, so they carry no marker) are read via a
+  legacy fallback of their own: the indexer matches the exact, known writer
+  text of each such note — e.g. "Catalogued from … by `adef catalog`.",
+  "Source rule gone — orphaned by `adef sync`." — as a whole line, never a
+  substring. This is the same permanent-fallback treatment as the
+  `### Refine / ` heading prefix, carried across from `### `-block provenance
+  to these `## [ts] Stage:`-block notes; it does not revert to the old
+  "`Catalogued from` and `adef` anywhere in the line" content filter this spec
+  replaced, which also matched a human sentence merely mentioning either CLI.
 - No workspace version bump: the provenance marker is an HTML comment, so an
   older ADEF reading a newer journal sees an inert comment.
 - Search results change for existing workspaces — catalog-only detections start

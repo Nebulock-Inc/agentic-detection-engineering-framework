@@ -426,3 +426,105 @@ def test_narrative_keeps_an_unrelated_heading_not_adjacent_to_a_closed_span():
     assert "HUMANHEADING" in out
     assert "Human prose right before a generated note" in out
     assert "MACHINETOKEN" not in out
+
+
+# 10188 follow-up finding 1 (controller repro): the content filter
+# `"Catalogued from" in line and "adef" in line` was deleted in favor of
+# write-time provenance marks. Right for journals written from now on, wrong
+# for journals already on disk — their housekeeping notes predate
+# GENERATED_MARKER and carry no marker at all. `_LEGACY_GENERATED_HEADING`
+# already gets this treatment for `### `-blocks; the same permanent legacy
+# fallback was never carried across to these `## [ts] Stage:`-block notes.
+#
+# Each test below builds the note via `generated=False` (the default) on
+# `create`/`advance_stage` — the exact shape an existing workspace's
+# pre-marker journal has. Going through `generated=True` would mark the note
+# and pass even with a broken legacy fallback (the false-pass trap this
+# branch has hit repeatedly) — these must fail red before the fallback
+# exists.
+
+
+def test_narrative_drops_legacy_unmarked_catalog_note(tmp_path: Path):
+    # adef/commands/catalog.py: f"Catalogued from {rec.rule_ref} by `adef catalog`."
+    j = _journal(tmp_path)
+    j.create(
+        "D-0001",
+        title="t",
+        note="Catalogued from rules/win/mshta.yml by `adef catalog`.",
+    )
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "Catalogued from" not in out
+    assert "mshta.yml" not in out
+
+
+def test_narrative_drops_legacy_unmarked_sync_catalogued_note(tmp_path: Path):
+    # adef/commands/sync.py (NEW action): f"Catalogued from {rec.rule_ref} by `adef sync`."
+    j = _journal(tmp_path)
+    j.create(
+        "D-0001",
+        title="t",
+        note="Catalogued from rules/win/mshta.yml by `adef sync`.",
+    )
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "Catalogued from" not in out
+    assert "mshta.yml" not in out
+
+
+def test_narrative_drops_legacy_unmarked_sync_repair_note(tmp_path: Path):
+    # adef/commands/sync.py (repair pass): "Journal missing for this record — re-created by `adef sync`."
+    j = _journal(tmp_path)
+    j.create(
+        "D-0001",
+        title="t",
+        note="Journal missing for this record — re-created by `adef sync`.",
+    )
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "re-created by" not in out
+
+
+def test_narrative_drops_legacy_unmarked_sync_orphaned_note(tmp_path: Path):
+    # adef/commands/sync.py (ORPHANED action): "Source rule gone — orphaned by `adef sync`."
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t")
+    j.advance_stage(
+        "D-0001",
+        "observe",
+        note="Source rule gone — orphaned by `adef sync`.",
+    )
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "orphaned by" not in out
+
+
+def test_narrative_drops_legacy_unmarked_sync_modified_note(tmp_path: Path):
+    # adef/commands/sync.py (MODIFIED action):
+    # f"Source changed (hash {disc.source_hash[:8]}); derived fields refreshed by `adef sync`."
+    j = _journal(tmp_path)
+    j.create("D-0001", title="t")
+    j.advance_stage(
+        "D-0001",
+        "observe",
+        note="Source changed (hash a1b2c3d4); derived fields refreshed by `adef sync`.",
+    )
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "derived fields refreshed" not in out
+
+
+def test_narrative_keeps_human_prose_that_mentions_adef_sync():
+    # The old filter's over-reach — dropping any line containing "Catalogued
+    # from" and "adef" as substrings — is deliberately not reinstated. A
+    # human sentence that merely mentions `adef sync`/`adef catalog` in its
+    # own reasoning, but isn't one of the exact known writer lines, must
+    # still be indexed.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: observe\n\n"
+        "HUMANTOKEN I ran adef sync by hand before this landed, catalogued "
+        "the new rule myself, and confirmed no drift.\n"
+    )
+    out = narrative_text(body)
+    assert "HUMANTOKEN" in out
+    assert "adef sync" in out

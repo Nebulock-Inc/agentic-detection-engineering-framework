@@ -203,6 +203,38 @@ _LEGACY_GENERATED_HEADING = "### Refine / "
 # every other filter in narrative_text.
 _FIELD_LINE_RE = re.compile(r"^-\s+\*\*[^*]+:\*\*\s*(.*)$")
 
+# `catalog`/`sync` housekeeping notes written before GENERATED_MARKER existed
+# carry no marker (10188 follow-up finding 1). Same migration gap
+# `_LEGACY_GENERATED_HEADING` closes for `### `-blocks — a permanent legacy
+# fallback, not a migration step — just never carried across to these
+# `## [ts] Stage:`-block notes (`Journal.create`/`advance_stage`'s `note`).
+#
+# Matched as exact whole lines (`re.match` anchored `^...$` against the
+# already-stripped line), not substrings: the deleted
+# `"Catalogued from" in line and "adef" in line` filter dropped a human
+# sentence for merely containing those substrings, and that over-reach is
+# deliberately not reinstated. One pattern per writer message shape, read
+# from the actual call sites rather than guessed:
+#   - adef/commands/catalog.py: f"Catalogued from {rec.rule_ref} by `adef catalog`."
+#   - adef/commands/sync.py (NEW):      f"Catalogued from {rec.rule_ref} by `adef sync`."
+#   - adef/commands/sync.py (repair):   "Journal missing for this record — re-created by `adef sync`."
+#   - adef/commands/sync.py (ORPHANED): "Source rule gone — orphaned by `adef sync`."
+#   - adef/commands/sync.py (MODIFIED): f"Source changed (hash {hash8}); derived fields refreshed by `adef sync`."
+_LEGACY_HOUSEKEEPING_LINE_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^Catalogued from .+ by `adef (?:catalog|sync)`\.$"),
+    re.compile(r"^Journal missing for this record — re-created by `adef sync`\.$"),
+    re.compile(r"^Source rule gone — orphaned by `adef sync`\.$"),
+    re.compile(
+        r"^Source changed \(hash [0-9a-f]+\); derived fields refreshed by `adef sync`\.$"
+    ),
+)
+
+
+def _is_legacy_housekeeping_line(line: str) -> bool:
+    """True for a pre-marker `catalog`/`sync` housekeeping note, matched
+    exactly against the known writer message shapes — never by substring."""
+    return any(p.match(line) is not None for p in _LEGACY_HOUSEKEEPING_LINE_RES)
+
 
 def _is_generated_block(block: str) -> bool:
     """True when this piece is a machine-written ``### `` sub-block — Refine
@@ -308,17 +340,26 @@ def narrative_text(body: str) -> str:
     `- **Field:** value` lines and drops everything else there, plain prose
     included), unfilled placeholders and other scaffolding within the stage
     area, every machine-generated sub-block, and every machine-generated note
-    (both by provenance — the `GENERATED_MARKER`, never by content). What
-    remains is reasoning a person or an agent wrote deliberately — the only
-    journal content that can be evidence without feeding retrieval its own
-    output.
+    (both primarily by provenance — the `GENERATED_MARKER`, never by
+    content). What remains is reasoning a person or an agent wrote
+    deliberately — the only journal content that can be evidence without
+    feeding retrieval its own output.
 
-    There is deliberately no content-based rule here — e.g. a former
-    `"Catalogued from" in line and "adef" in line` filter, removed in the
-    10188 follow-up, that dropped a human line just for containing those
-    substrings. Provenance is the only thing that excludes machine text; a
+    Provenance is the only thing that excludes machine text going forward; a
     human writing about `adef catalog` in their own reasoning is indexed like
-    anything else they write.
+    anything else they write. The former `"Catalogued from" in line and
+    "adef" in line` filter, removed in the 10188 follow-up, is deliberately
+    NOT reinstated — it dropped a human line just for containing those
+    substrings.
+
+    One narrow exception: `_is_legacy_housekeeping_line` excludes the exact
+    (whole-line, not substring) text of `catalog`/`sync`'s housekeeping notes
+    for journals already on disk from before `GENERATED_MARKER` existed —
+    those notes carry no marker to filter by provenance. This is the same
+    permanent migration fallback `_LEGACY_GENERATED_HEADING` provides for
+    `### `-blocks, carried across to these `## [ts] Stage:`-block notes. It
+    is anchored to the known writer message shapes exactly, so it cannot
+    reintroduce the deleted filter's over-reach.
 
     The preamble and the stage area are filtered differently on purpose.
     `Journal.create` writes the preamble once, verbatim from the shipped
@@ -403,6 +444,8 @@ def narrative_text(body: str) -> str:
         if stripped.startswith("**Title:**"):
             continue
         if _is_unfilled_field_line(stripped):
+            continue
+        if _is_legacy_housekeeping_line(stripped):
             continue
         lines.append(stripped)
     return "\n".join(lines)
