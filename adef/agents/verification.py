@@ -27,6 +27,11 @@ class VerificationAgent:
         NOT factor in `undeclared_type_fields`: an undeclared type is the
         *schema's* incompleteness, not the rule's defect. It is still reported
         for visibility — just not gating.
+
+        `schema_matched` is False when the rule's literals match no declared
+        schema — the normal state of a freshly imported hunt detection. `passed`
+        is still True there (the engine check ran and found no defect), so the
+        flag is what distinguishes "fields verified" from "no fields checked".
         """
         journals_dir = workspace_journals_dir(workspace, create=False)
         ws = journals_dir.parent
@@ -55,6 +60,7 @@ class VerificationAgent:
         return {
             "detection_id": detection_id,
             "passed": not engine_error and not missing_fields,
+            "schema_matched": detection_id not in result.rules_skipped_unmatched,
             "engine_error": engine_error,
             "missing_schema_fields": missing_fields,
             "undeclared_type_fields": undeclared_type_fields,

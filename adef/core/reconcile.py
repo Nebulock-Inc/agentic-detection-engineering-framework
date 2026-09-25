@@ -163,11 +163,13 @@ def reconcile(
         )
 
     # 6. existing records with no discovered match → orphaned — EXCEPT records
-    # authored in ADEF, which have no upstream source to reconcile against.
-    # Orphaning them would mark a repo-less team's own detections deprecated;
-    # they pass through untouched (ISA 2026-07-22, "ADEF as a detection home").
+    # authored in ADEF or promoted from a hunt, which have no upstream source to
+    # reconcile against. Orphaning them would mark a repo-less team's own
+    # detections deprecated; they pass through untouched (ISA 2026-07-22, "ADEF
+    # as a detection home"). `promoted` records point at an ATHF GATES document,
+    # not a rule repo, so a sync of the rule repo must not touch them either.
     for rec in existing:
-        if rec.get("origin") == "authored":
+        if rec.get("origin") in ("authored", "promoted"):
             continue
         if rec["id"] not in matched_ids:
             orphaned = dict(rec)

@@ -13,6 +13,8 @@ This guide is for that case.
 - Detections you **author in ADEF** (`adef detection new --source <schema>`)
   carry `origin: authored`. ADEF owns the durable copy — there is no upstream
   file.
+- Detections **promoted from an ATHF hunt** carry `origin: promoted`. ADEF owns the
+  durable copy here too; the GATES document is provenance, not an upstream to sync.
 - Detections **catalogued from a repo** carry `origin: catalogued`. The repo is
   the source of truth; ADEF's record is a derivation.
 
@@ -68,7 +70,8 @@ no such restriction — it is indexed as written.
 ## 3. Sync is safe here
 
 You can still run `adef sync` (e.g. if you later *also* catalog a repo). **It
-never touches `origin: authored` records** — they have no upstream to reconcile
+never touches `origin: authored` or `origin: promoted` records** — neither has an
+upstream rule repo to reconcile
 against, so your authored detections pass through untouched. Sync only
 reconciles catalogued rules.
 

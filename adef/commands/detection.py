@@ -284,9 +284,10 @@ def _workspace_from(workspace: Path | None) -> Path:
 @click.option("--stage", default=None, help="Filter by FORGE stage (find … evolve).")
 @click.option(
     "--origin",
-    type=click.Choice(["authored", "catalogued"]),
+    type=click.Choice(["authored", "catalogued", "promoted"]),
     default=None,
-    help="Filter by origin: authored (created in ADEF) vs catalogued (from a repo).",
+    help="Filter by origin: authored (created in ADEF), catalogued (from a repo), "
+    "or promoted (imported from an ATHF GATES document).",
 )
 @click.option(
     "--needs-review",

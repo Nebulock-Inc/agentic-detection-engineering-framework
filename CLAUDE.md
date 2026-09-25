@@ -114,11 +114,13 @@ Core: `adef/core/reconcile.py` (pure cascade) + `adef/commands/sync.py`. Fuzzy
 rename-match (UUID-less renamed+edited rules) is deferred → such a rule shows as
 `new` for a human to merge, never a silent mis-attribution.
 
-Records carry `origin: authored | catalogued` (`detection new --source` →
+Records carry `origin: authored | catalogued | promoted` (`detection new --source` →
 authored; `catalog`/`sync` → catalogued). **`sync` never touches `authored`
 records** — they were created in ADEF and have no upstream to reconcile, so a
 repo-less team using ADEF as its detection home keeps its own rules through a
-sync. Filter with `adef detection list --origin authored`.
+sync. `hunt-promote --gates` → `promoted`, which sync also skips: its `rule_ref`
+points at a GATES document in the *ATHF* workspace, not a rule repo ADEF walks.
+Filter with `adef detection list --origin authored`.
 
 ### Cataloging Existing Rules
 ```bash

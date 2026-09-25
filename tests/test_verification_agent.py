@@ -43,6 +43,28 @@ def test_passes_a_conformant_rule(workspace: Path):
     result = VerificationAgent().run(detection_id="D-0001", workspace=workspace)
     assert result["passed"] is True
     assert result["engine_error"] is None
+    assert result["schema_matched"] is True
+
+
+def test_undeclared_source_passes_but_reports_nothing_was_matched(workspace: Path):
+    """A rule whose literals match no schema must not read as field-verified.
+
+    This is the normal state of a freshly imported hunt detection: `passed` is
+    True because the engine check found no defect, so `schema_matched` is the
+    only thing distinguishing that from "every field checked out".
+    """
+    rec = CatalogRecord(
+        id="D-0003", title="no schema", rule_ref="r/d3.yml", original_path="/tmp/d3.yml",
+        platform="windows", kind="atomic", engine="sql", format="sql",
+        query="SELECT `process.name` FROM undeclared_source", query_language="sql",
+        data_source="undeclared_source",
+    )
+    Catalog(workspace).write_raw(workspace / "catalog" / "D-0003.yml", rec.to_yaml_dict())
+
+    result = VerificationAgent().run(detection_id="D-0003", workspace=workspace)
+    assert result["passed"] is True
+    assert result["schema_matched"] is False
+    assert result["missing_schema_fields"] == []
 
 
 def test_fails_on_bad_engine_and_unknown_field(workspace: Path):

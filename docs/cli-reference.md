@@ -293,7 +293,7 @@ error rather than reporting zero coverage.
 | `--rule-format` | Source format (`sigma`, `spl`, `<profile>`). |
 | `--status` | `draft`, `ready`, `tuning`, `deprecated`. |
 | `--stage` | FORGE stage (`find` … `evolve`). |
-| `--origin` | `authored` (created in ADEF) or `catalogued` (from a repo). |
+| `--origin` | `authored` (created in ADEF), `catalogued` (from a repo), or `promoted` (imported from an ATHF GATES document). |
 | `--needs-review [REASON]` | Only detections needing review. Bare = structural reasons (malformed, external_logic, no_platform); pass a reason (e.g. `no_mitre`) to filter it specifically. |
 | `--report json` | Machine-readable output; adds a derived `tactics` array per row. |
 | `--workspace` | Workspace path (see resolution). |

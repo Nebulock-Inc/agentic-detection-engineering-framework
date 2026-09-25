@@ -124,9 +124,10 @@ class CatalogRecord:
     catalog_sha: str = ""  # repo HEAD SHA at catalog time (git repos only) — the
                            # one-shot staleness check + `git diff` base for sync.
     origin: str = "catalogued"  # authored (created in ADEF — ADEF owns the durable
-                           # copy) | catalogued (derived from a source repo). `adef
-                           # sync` skips `authored` records (no upstream to
-                           # reconcile). ISA 2026-07-22.
+                           # copy) | catalogued (derived from a source repo) |
+                           # promoted (imported from an ATHF GATES document). `adef
+                           # sync` skips `authored` and `promoted` records — neither
+                           # has an upstream rule repo to reconcile. ISA 2026-07-22.
     query_language: str = ""  # language of `query` (spl|kql|cql|sql) — drives `schema check`
     query: str = ""        # the detection query/logic, verbatim (empty if external, e.g. Panther .py)
     data_source: str = ""  # raw table/index/logsource literal (schema prioritization + `schema check` key)
@@ -135,6 +136,18 @@ class CatalogRecord:
     status: str = "draft"  # draft | ready | tuning | deprecated
     stage: str = "find"    # find | observe | refine | govern | evolve
     owner: str = ""
+    # --- enrichment: human/agent-supplied, never derived from the source rule.
+    # `adef sync` preserves every field below (see reconcile.py); they are only
+    # written on the way in (catalog/promote) or by a human afterwards. Omitted
+    # from the YAML entirely when empty, so catalogued records stay terse.
+    description: str = ""  # what it detects and how, in prose (cf. Sigma `description`)
+    alert: dict = dataclass_field(default_factory=dict)  # {severity, throttle:{entity,duration}}
+    entities: list[dict] = dataclass_field(default_factory=list)  # [{name,type}] correlation keys
+    observables: list[dict] = dataclass_field(default_factory=list)  # [{name,type}] other artifacts
+    references: list[str] = dataclass_field(default_factory=list)
+    hunt_ref: str = ""     # `H-XXXX#<gates-detection-id>` for promoted records —
+                           # provenance, and the stable identity key that makes
+                           # re-importing a GATES document idempotent.
     needs_review: bool = False
     # Why (REVIEW_* constants from rule_discovery); needs_review == bool(reasons).
     review_reasons: list[str] = dataclass_field(default_factory=list)
@@ -144,7 +157,7 @@ class CatalogRecord:
     def to_yaml_dict(self) -> dict:
         """Serialize to the on-disk catalog YAML shape (ordered, no None noise)."""
         ts = _now_iso()
-        return {
+        data = {
             "id": self.id,
             "title": self.title,
             "rule_ref": self.rule_ref,
@@ -170,6 +183,19 @@ class CatalogRecord:
             "created": self.created or ts,
             "updated": self.updated or ts,
         }
+        # Enrichment is opt-in: a rule catalogued from a repo has none of it, and
+        # emitting six empty keys per record would bloat every file in the tree.
+        for key, value in (
+            ("description", self.description),
+            ("alert", dict(self.alert)),
+            ("entities", [dict(e) for e in self.entities]),
+            ("observables", [dict(o) for o in self.observables]),
+            ("references", list(self.references)),
+            ("hunt_ref", self.hunt_ref),
+        ):
+            if value:
+                data[key] = value
+        return data
 
 
 def record_from_discovered(
