@@ -29,6 +29,7 @@ from adef.core.gates import (
     parse_gates,
     record_from_gates,
 )
+from adef.core.journal import Journal
 
 pytestmark = pytest.mark.unit
 
@@ -280,9 +281,88 @@ def test_dry_run_writes_nothing(tmp_path, monkeypatch):
     monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
     results = import_gates(_write(tmp_path), dry_run=True)
 
+    # Not even a directory: `--dry-run` against a path that turns out to be the
+    # wrong workspace must not leave a scaffolded one behind. Asserted before
+    # Catalog(ws) below, which creates `catalog/` itself.
+    assert not ws.exists()
     assert len(results) == 3
     assert not list(Catalog(ws).iter_records())
     assert not list((ws / "journals").glob("D-*.md"))
+
+
+def test_reimport_preserves_enrichment_and_journal_stage(tmp_path, monkeypatch):
+    """A regenerated document refreshes the logic, not the engineer's work.
+
+    `adef sync` guarantees enrichment survives a re-run; this path owes the same
+    guarantee. Before the fix a re-import rewrote the record from the document
+    (status/stage/owner/mitre back to their import-time defaults) and called
+    `advance_stage(stage="find")`, dragging an advanced journal back to the start.
+    """
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path / "ws"))
+    path = _write(tmp_path)
+    detection_id = next(r.detection_id for r in import_gates(path) if r.detection_id)
+
+    catalog = Catalog(tmp_path / "ws")
+    rec_path, data = catalog.find_record(detection_id)
+    catalog.write_raw(
+        rec_path,
+        {**data, "status": "ready", "stage": "govern", "owner": "alice", "mitre": ["T1003"]},
+    )
+    journal = Journal(tmp_path / "ws" / "journals")
+    journal.advance_stage(detection_id=detection_id, stage="govern", note="Deployed.")
+
+    import_gates(path)
+
+    _p, after = catalog.find_record(detection_id)
+    assert (after["status"], after["stage"], after["owner"]) == ("ready", "govern", "alice")
+    assert after["mitre"] == ["T1003"]
+    assert after["created"] == data["created"]  # identity, not a fresh timestamp
+    assert journal.read(detection_id).current_stage == "govern"
+
+
+def test_duplicate_candidate_id_is_rejected(tmp_path):
+    """Two candidates sharing an id collapse onto one `hunt_ref`, so the second
+    import would silently overwrite the first's record."""
+    dupe = DOC.replace("detection_id: 2", "detection_id: 1")
+    with pytest.raises(GatesError, match="appears twice"):
+        parse_gates(_write(tmp_path, dupe))
+
+
+def test_unknown_verdict_is_rejected_not_read_as_archival(tmp_path):
+    """A typo'd verdict used to fall through to "archival", so a deployable
+    candidate vanished and the output looked like the hunt built nothing."""
+    typo = yaml.safe_load(DOC)
+    typo["detections"][0]["gates_assessment"]["verdict"] = "PROMOTED"
+    with pytest.raises(GatesError, match="not a GATES verdict"):
+        parse_gates(_write(tmp_path, yaml.safe_dump(typo)))
+
+    missing = yaml.safe_load(DOC)
+    del missing["detections"][0]["gates_assessment"]["verdict"]
+    with pytest.raises(GatesError, match="not a GATES verdict"):
+        parse_gates(_write(tmp_path, yaml.safe_dump(missing)))
+
+
+def test_deployable_without_detection_logic_is_an_error(tmp_path):
+    """An empty query is coverage that doesn't exist — the "fictional coverage"
+    `adef coverage` reports on. Rejected at the boundary like a missing engine."""
+    raw = yaml.safe_load(DOC)
+    del raw["detections"][0]["deployment"]["detection_logic"]
+    doc = parse_gates(_write(tmp_path, yaml.safe_dump(raw)))
+    with pytest.raises(GatesError, match="no detection logic"):
+        record_from_gates("D-0001", doc.candidates[0], doc, tmp_path)
+
+
+def test_a_rejected_candidate_does_not_half_import_the_document(tmp_path, monkeypatch):
+    """Validation is a whole-document pass, so the first candidate isn't written
+    only for the second to abort the run."""
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path / "ws"))
+    raw = yaml.safe_load(DOC)
+    raw["detections"][1]["deployment"]["engine"] = "eql"  # second candidate, not first
+    path = _write(tmp_path, yaml.safe_dump(raw))
+
+    with pytest.raises(GatesError, match="eql"):
+        import_gates(path)
+    assert not list(Catalog(tmp_path / "ws").iter_records())
 
 
 def test_markdown_narrative_is_rejected_with_its_reason(tmp_path):

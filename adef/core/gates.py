@@ -39,7 +39,14 @@ import yaml
 
 from adef.core.catalog import _UNKNOWN_PLATFORM, Catalog, CatalogRecord
 from adef.core.journal import Journal, workspace_journals_dir
+# One definition of "what counts as enrichment" for every re-entrant write path
+# (`sync` and this one), so the two can't drift apart on what they preserve.
+from adef.core.reconcile import _ENRICHMENT_FIELDS
 from adef.core.rule_discovery import REVIEW_NO_MITRE
+
+# Stand-in ID for a candidate a dry run *would* mint. The real one is allocated
+# in the write phase, where the catalog can see what's already on disk.
+_PENDING_ID = "D-????"
 
 # ADEF's four engines (tests/test_no_new_engine_types.py). GATES leaves its own
 # `engine` field unconstrained, so a fifth value is rejected at the boundary
@@ -48,6 +55,11 @@ VALID_ENGINES = frozenset({"sigma", "sql", "sch_sql", "composite"})
 
 DEPLOYABLE_VERDICTS = frozenset({"PROMOTE", "CONDITIONAL", "TIME_BOX"})
 ARCHIVAL_VERDICTS = frozenset({"HOLD", "DROP", "RECURRING_HUNT"})
+# Anything outside the enum is rejected rather than read as archival: a typo
+# ("PROMOTED", "CONDITONAL") would otherwise silently drop a deployable
+# detection, and "nothing was imported" looks identical to "the hunt built
+# nothing" in the output.
+KNOWN_VERDICTS = DEPLOYABLE_VERDICTS | ARCHIVAL_VERDICTS
 
 # GATES `deployment.status` → ADEF `status`. EXPERIMENTAL means "entering soak",
 # which is ADEF's `draft`; nothing arrives pre-promoted.
@@ -209,6 +221,7 @@ def parse_gates(path: Path) -> GatesDocument:
         detections = []
 
     candidates = []
+    seen_ids: set[str] = set()
     for entry in detections:
         if not isinstance(entry, dict):
             continue
@@ -226,7 +239,22 @@ def parse_gates(path: Path) -> GatesDocument:
                 f"{path.name}: a detection has no `candidate_id`. ADEF needs a stable "
                 "per-candidate key to make re-import idempotent."
             )
+        # `candidate_id` is the identity key, so a document that reuses one maps
+        # two candidates onto the same `hunt_ref` — the second import would
+        # overwrite the first's record and the first detection would vanish.
+        if local_id in seen_ids:
+            raise GatesError(
+                f"{path.name}: `candidate_id: {local_id}` appears twice. Each candidate "
+                "needs its own id — it is the key ADEF matches on across re-imports."
+            )
+        seen_ids.add(local_id)
+
         verdict = _candidate_verdict(assessment)
+        if verdict not in KNOWN_VERDICTS:
+            raise GatesError(
+                f"{path.name}: candidate {local_id!r} has verdict {verdict or '(none)'!r}, "
+                f"which is not a GATES verdict. Expected one of {', '.join(sorted(KNOWN_VERDICTS))}."
+            )
         candidates.append(
             GatesCandidate(
                 hunt_id=hunt_id,
@@ -279,7 +307,16 @@ def record_from_gates(
         )
 
     query, description = _extract_logic(deployment)
-    mitre = [str(m).strip() for m in (deployment.get("mitre_attack") or []) if str(m).strip()]
+    if not query:
+        # Rejected at the boundary for the same reason a missing engine is: a
+        # record with no logic is a detection that cannot be verified, refined or
+        # deployed, and `adef coverage` would count it as covering its techniques.
+        # That is the "fictional coverage" the coverage report exists to flag.
+        raise GatesError(
+            f"{cand.hunt_ref} has verdict {cand.verdict} but no detection logic — "
+            "`deployment.detection_logic` is empty. A deployable candidate needs a query."
+        )
+    mitre =[str(m).strip() for m in (deployment.get("mitre_attack") or []) if str(m).strip()]
     if not mitre:
         mitre = list(doc.techniques)
 
@@ -362,6 +399,38 @@ def journal_note(cand: GatesCandidate, doc: GatesDocument) -> str:
     return "\n".join(lines)
 
 
+def _existing_hunt_refs(ws: Path) -> dict[str, str]:
+    """``hunt_ref`` → ``D-XXXX`` for the promoted records already in the catalog.
+
+    Read-only by construction: ``Catalog.__init__`` creates ``catalog/``, so a
+    dry run against a workspace that doesn't exist yet must not go through it.
+    No catalog means nothing to match, which is the truth for a fresh workspace.
+    """
+    if not (ws / "catalog").is_dir():
+        return {}
+    return {
+        str(data["hunt_ref"]): det_id
+        for det_id, _path, data in Catalog(ws).iter_records()
+        if data.get("hunt_ref")
+    }
+
+
+def _preserve_enrichment(rec: CatalogRecord, existing: dict) -> None:
+    """Carry the engineer's work across a re-import, mutating ``rec`` in place.
+
+    ``adef sync`` guarantees that re-running it never loses enrichment
+    (``mitre``/``status``/``stage``/``owner``, plus the original ``created``) —
+    see ``reconcile._merge``. A GATES re-import is the same operation against a
+    different kind of source and owes the same guarantee: without this,
+    regenerating a hunt's document resets a detection someone had taken to Govern
+    back to a ``draft`` at ``find``. Every other field on the record *is* derived
+    from the GATES document, so it refreshes.
+    """
+    for name in (*_ENRICHMENT_FIELDS, "created"):
+        if value := existing.get(name):
+            setattr(rec, name, value)
+
+
 @dataclass
 class ImportResult:
     hunt_ref: str
@@ -385,98 +454,98 @@ def import_gates(
     branch for why. Idempotent on ``hunt_ref``.
     """
     doc = parse_gates(path)
-    journals_dir = workspace_journals_dir(workspace)
+    journals_dir = workspace_journals_dir(workspace, create=not dry_run)
     ws = journals_dir.parent
+    # Existing promoted records, so a re-import updates rather than duplicates.
+    by_hunt_ref = _existing_hunt_refs(ws)
+
+    # Build every record *before* writing any. `record_from_gates` is where all
+    # the boundary rejections live (no engine, an engine outside ADEF's four, no
+    # query), so validating the whole document up front means a bad candidate
+    # halfway down can't leave a half-imported workspace behind. It is also
+    # exactly what a dry run has to do, so there is only one validation path.
+    #
+    # An archival verdict is the hunt deciding *not* to build this, and gets no
+    # record: minting a permanent D-XXXX for a non-detection would pollute the ID
+    # space and show up in `detection list`, and there'd be no record to carry the
+    # hunt_ref — so a re-import could never recognize it and would mint again
+    # every run. The reasoning is preserved in the GATES document itself, which
+    # every promoted sibling record already points at via `rule_ref`.
+    # ponytail: aborts on the first bad candidate, so validating a broken document
+    # is fix-one-and-rerun. Accumulate errors if that gets tedious.
+    # ponytail: rejected candidates aren't in ADEF's search corpus. If they need
+    # to be, that's a coverage-gaps store, not a per-candidate journal.
+    planned: list[tuple[GatesCandidate, CatalogRecord | None]] = [
+        (
+            cand,
+            record_from_gates(by_hunt_ref.get(cand.hunt_ref) or _PENDING_ID, cand, doc, ws)
+            if cand.deployable
+            else None,
+        )
+        for cand in doc.candidates
+    ]
+
+    def _result(
+        cand: GatesCandidate,
+        rec: CatalogRecord | None,
+        record_path: Path | None = None,
+        journal_path: Path | None = None,
+    ) -> ImportResult:
+        return ImportResult(
+            hunt_ref=cand.hunt_ref,
+            name=cand.name,
+            verdict=cand.verdict,
+            detection_id="" if rec is None else rec.id,
+            minted=rec is not None and cand.hunt_ref not in by_hunt_ref,
+            record_path=record_path,
+            journal_path=journal_path,
+        )
+
+    if dry_run:
+        return [_result(cand, rec) for cand, rec in planned]
+
     catalog = Catalog(ws)
     journal = Journal(journals_dir)
-
-    # Existing promoted records, so a re-import updates rather than duplicates.
-    by_hunt_ref = {
-        str(data.get("hunt_ref")): det_id
-        for det_id, _path, data in catalog.iter_records()
-        if data.get("hunt_ref")
-    }
+    # `next_id` reads the catalog, so it can't tell two unwritten records apart —
+    # allocate from one seed instead of re-reading between writes.
+    next_index = int(catalog.next_id().removeprefix("D-"))
 
     results = []
-    for cand in doc.candidates:
+    for cand, rec in planned:
+        if rec is None:
+            results.append(_result(cand, None))
+            continue
+
+        # `rec.id` is already the existing ID when there is one (set in the plan).
         existing = by_hunt_ref.get(cand.hunt_ref)
+        if existing is None:
+            rec.id = f"D-{next_index:04d}"
+            next_index += 1
+        elif (found := catalog.find_record(existing)) is not None:
+            _preserve_enrichment(rec, found[1])
+        record_path = catalog.write(rec)
 
-        # An archival verdict is the hunt deciding *not* to build this. Minting a
-        # permanent D-XXXX for a non-detection would pollute the ID space and show
-        # up in `detection list`, and there'd be no record to carry the hunt_ref —
-        # so a re-import could never recognize it and would mint again every run.
-        # The reasoning is preserved in the GATES document itself, which every
-        # promoted sibling record already points at via `rule_ref`.
-        # ponytail: rejected candidates aren't in ADEF's search corpus. If they
-        # need to be, that's a coverage-gaps store, not a per-candidate journal.
-        if not cand.deployable:
-            results.append(
-                ImportResult(
-                    hunt_ref=cand.hunt_ref,
-                    name=cand.name,
-                    verdict=cand.verdict,
-                    detection_id="",
-                    minted=False,
-                    record_path=None,
-                    journal_path=None,
-                )
-            )
-            continue
-
-        if dry_run:
-            # Build the record and throw it away. A dry run that skipped this would
-            # report success on a document the real run rejects (missing engine,
-            # engine outside ADEF's four) — which is the one thing a dry run exists
-            # to tell you.
-            # ponytail: aborts on the first bad candidate, same as the real run, so
-            # validating a broken document is fix-one-and-rerun. Accumulate errors
-            # if that gets tedious.
-            record_from_gates(existing or "D-????", cand, doc, ws)
-            results.append(
-                ImportResult(
-                    hunt_ref=cand.hunt_ref,
-                    name=cand.name,
-                    verdict=cand.verdict,
-                    detection_id=existing or "D-????",
-                    minted=existing is None,
-                    record_path=None,
-                    journal_path=None,
-                )
-            )
-            continue
-
-        detection_id = existing or catalog.next_id()
-        record_path = catalog.write(record_from_gates(detection_id, cand, doc, ws))
-
-        journal_path = journals_dir / f"{detection_id}.md"
+        journal_path = journals_dir / f"{rec.id}.md"
         if journal_path.exists():
-            # Re-import of an edited hunt: advance_stage is idempotent for the
-            # stage it's already on and appends the note as a sub-block.
-            journal.advance_stage(
-                detection_id=detection_id, stage="find", note=journal_note(cand, doc)
+            # Re-import of an edited hunt. The note lands under whatever stage the
+            # journal is already on — `advance_stage(stage="find")` would drag a
+            # detection someone has taken to Govern back to the start. Marked
+            # generated: it's a machine restatement of a document the first
+            # import's note already put in the search corpus.
+            journal.append_block(
+                rec.id, "GATES re-import", journal_note(cand, doc), generated=True
             )
         else:
             journal_path = journal.create(
-                detection_id=detection_id,
+                detection_id=rec.id,
                 title=cand.name,
                 owner="",
                 note=journal_note(cand, doc),
             ).path
 
-        by_hunt_ref[cand.hunt_ref] = detection_id
-        results.append(
-            ImportResult(
-                hunt_ref=cand.hunt_ref,
-                name=cand.name,
-                verdict=cand.verdict,
-                detection_id=detection_id,
-                minted=existing is None,
-                record_path=record_path,
-                journal_path=journal_path,
-            )
-        )
+        results.append(_result(cand, rec, record_path=record_path, journal_path=journal_path))
 
-    if results and not dry_run:
+    if results:
         catalog.rebuild_index()
     return results
 
