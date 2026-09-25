@@ -124,6 +124,13 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
                 owner=rdata.get("owner") or "",
                 rule_uuid=rdata.get("rule_uuid") or "",
                 note="Journal missing for this record — re-created by `adef sync`.",
+                # Derived restatement, same class as the other sync housekeeping
+                # notes below: the fact that a journal was missing is recoverable
+                # from nothing (the file now exists), and repeats on every sync
+                # that runs the repair pass. Direct `journal.create()` call, not
+                # `_journal_note` — its default doesn't reach here (10188
+                # follow-up, coordinator catch).
+                generated=True,
             )
             repaired += 1
     if repaired:
