@@ -146,11 +146,15 @@ index_text = record_search_text(record)          # title, mitre, platform,
            + journal narrative                   # human-authored blocks only
 ```
 
-Precisely, **journal narrative** is the journal body minus three things: the
+Precisely, **journal narrative** is the journal body minus two things: the
 static template preamble (everything before the first `## [ts] Stage:` block —
-unfilled scaffolding, not reasoning, already stripped for snippets today),
-every block marked machine-generated, and the `Catalogued from…` housekeeping
-line. Either half may be empty: a journal-only draft contributes narrative
+unfilled scaffolding, not reasoning, already stripped for snippets today) and
+every block or note marked machine-generated — by provenance (the
+`<!-- adef:generated -->` marker, set at write time), never by content.
+Housekeeping notes such as `catalog`/`sync`'s "Catalogued from …" line are
+excluded the same way: they are marked generated at write time like any other
+machine writer, not matched by their text. Either half may be empty: a
+journal-only draft contributes narrative
 only, a record-only detection contributes the record projection only, and
 `index_text` must handle `record is None` and `journal is None` without a
 guard at every call site.

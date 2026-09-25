@@ -95,19 +95,52 @@ _GENERATED_MARKER_LINE_RE = re.compile(
 )
 
 
+def _heading_line_start_before(text: str, pos: int) -> Optional[int]:
+    """If the line immediately before ``pos`` (no blank line, no gap) is a
+    bare ``### `` heading line, return that line's start offset; else
+    ``None``.
+
+    "Immediately before" is deliberately strict — contiguous lines only, `\\n`
+    to `\\n`. `append_block` writes its heading and the `GENERATED_MARKER`
+    line as consecutive lines with nothing between them, so this matches
+    exactly the heading a closed span's own block introduced, never a heading
+    that merely happens to sit somewhere earlier in the same stage block.
+    """
+    if pos == 0 or text[pos - 1] != "\n":
+        return None
+    line_start = text.rfind("\n", 0, pos - 1) + 1
+    line = text[line_start:pos]
+    if line.startswith("### "):
+        return line_start
+    return None
+
+
 def _strip_closed_generated_spans(text: str) -> str:
     """Remove every explicitly-closed generated span from ``text`` wholesale,
     before any structure-inferring rule below ever sees it (10188 follow-up
-    items 1 and 2).
+    items 1 and 2), *and* the ``### `` heading immediately introducing it, if
+    any (Major finding, 10188 follow-up).
 
     Everything from an opening ``GENERATED_MARKER`` line to its matching
     ``GENERATED_END_MARKER`` line is opaque here — a heading-shaped line, a
     blank line, a fake stage transition, a fence, anything the content
     happens to contain is removed along with it, because the extent is
-    stated by the markers, not inferred from what sits between them. The
-    heading line a `### `-block marker follows (e.g. `### Refine / X (ts)`)
-    is deliberately left standing: it carries no content of its own and is
-    already dropped by `narrative_text`'s own heading-line rule.
+    stated by the markers, not inferred from what sits between them.
+
+    The heading line a `### `-block marker follows (e.g. `### Refine / X
+    (ts)`) is removed too, but ONLY when it sits directly on the line above
+    the opening marker with nothing between them — the exact shape
+    `append_block` writes. Leaving it standing was the original design (it
+    carries no content of its own, and `narrative_text`'s heading-line rule
+    already keeps it out of the index on its own) — but leaving it standing
+    also leaves it matching `_is_generated_block`'s legacy `### Refine / `
+    prefix check once the span between the markers is gone, which then drops
+    the *entire* piece — heading plus whatever human text shares it with no
+    heading of its own (e.g. hand-edited prose appended after the span). This
+    check is deliberately narrow: it removes only the one heading that
+    directly introduced this span, never a heading that merely precedes it
+    somewhere earlier in the same stage block — that would start discarding
+    human sub-block headings, the opposite failure.
 
     Pairing is a single left-to-right walk, not "nearest close anywhere
     later": an open is tracked until either a close pairs it (span removed)
@@ -130,7 +163,11 @@ def _strip_closed_generated_spans(text: str) -> str:
         if m.group("open") is not None:
             open_start = m.start()
         elif open_start is not None:
-            out.append(text[last:open_start])
+            span_start = open_start
+            heading_start = _heading_line_start_before(text, span_start)
+            if heading_start is not None and heading_start >= last:
+                span_start = heading_start
+            out.append(text[last:span_start])
             last = m.end()
             open_start = None
         # else: a close with no open currently tracked — writers never emit

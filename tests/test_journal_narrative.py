@@ -1,7 +1,7 @@
 # tests/test_journal_narrative.py
 from pathlib import Path
 
-from adef.core.journal import GENERATED_MARKER, Journal, narrative_text
+from adef.core.journal import GENERATED_END_MARKER, GENERATED_MARKER, Journal, narrative_text
 
 
 def _journal(tmp_path: Path) -> Journal:
@@ -365,4 +365,64 @@ def test_narrative_drops_every_paragraph_of_a_multi_paragraph_generated_note(tmp
     out = narrative_text(entry.body)
     assert "PARA1" not in out
     assert "PARA2" not in out
-    assert "HUMANNOTE" in out
+
+
+def test_narrative_keeps_handwritten_prose_after_a_closed_span_with_no_heading_of_its_own(
+    tmp_path: Path,
+):
+    # Major finding, 10188 follow-up: stripping a closed generated span
+    # removed the marked content but left the `### Refine / ...` heading
+    # above it standing. That orphaned heading then matched
+    # `_is_generated_block`'s legacy `### Refine / ` prefix, so hand-edited
+    # prose appended after the span with no `### ` heading of its own shared
+    # the same piece and was dropped whole. This is reachable by the
+    # workflow docs/detection-home.md recommends: editing the workspace file
+    # directly as plain markdown.
+    #
+    # NOTE: two `append_block` calls do NOT reproduce this bug — each mints
+    # its own piece. Only a raw hand edit with no heading of its own does,
+    # which is why this test appends to the file directly rather than
+    # through the Journal API.
+    j = _journal(tmp_path)
+    j.create(detection_id="D-0001", title="t")
+    j.append_block("D-0001", "Refine / Similarity", "- MACHINE result", generated=True)
+    path = tmp_path / "journals" / "D-0001.md"
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write("HANDWRITTEN analyst note\n")
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "HANDWRITTEN" in out
+    assert "MACHINE" not in out
+
+
+def test_narrative_keeps_an_unrelated_heading_not_adjacent_to_a_closed_span():
+    # Regression guard for finding 1's fix: only the `### ` heading
+    # IMMEDIATELY preceding a closed span (contiguous, no gap — the exact
+    # shape `append_block` writes) may be removed. An unrelated `### `
+    # heading earlier in the same stage block — separated from the closed
+    # span by other content, with no heading of its own directly above the
+    # span's marker — must survive along with the human text under it. A
+    # broader rule (e.g. "nearest preceding heading anywhere", or dropping
+    # headings generally) would start discarding human sub-block headings,
+    # which is the opposite failure this fix must not introduce.
+    #
+    # The closed span here is deliberately a generated NOTE shape (marker
+    # follows a blank line, not a heading of its own — what
+    # `advance_stage(generated=True)` writes), not an `append_block` shape:
+    # if the span's own marker sat directly under its own heading, "nearest
+    # preceding heading anywhere" and "immediately preceding heading" would
+    # pick the same line and this test would pass under either rule, proving
+    # nothing about which one is implemented.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: refine\n\n"
+        "### Human hypothesis\n"
+        "HUMANHEADING reasoning under an unrelated heading\n\n"
+        "Human prose right before a generated note, no heading of its own.\n"
+        f"{GENERATED_MARKER}\n"
+        "MACHINETOKEN note\n"
+        f"{GENERATED_END_MARKER}\n"
+    )
+    out = narrative_text(body)
+    assert "HUMANHEADING" in out
+    assert "Human prose right before a generated note" in out
+    assert "MACHINETOKEN" not in out
