@@ -322,7 +322,8 @@ Contract fixes worth remembering:
 - Scores are floats `0.0–5.0`, never `"X.X/5"`.
 
 **Public-clearance sweep** (the repo is public): removed an internal ClickHouse table
-name (`nocsf_unified_events` → `unified_events`), campaign/actor designators, a
+name (the internal prefix stripped, leaving `unified_events`), campaign/actor
+designators, a
 service-account naming convention, and rounded verbatim production volumetrics to
 order-of-magnitude. The most serious was H-0066 — a risk assessment's output is a
 named organization's *unremediated* weaknesses, which is more sensitive than a
@@ -897,6 +898,56 @@ nothing to score.
 Ordering note: (1) and (2) are honest about the gap and cost almost nothing; (3) is a
 design question that should not be answered from our own pipeline's habits.
 
+## ADEF branch review: 13 findings, 9 fixed, 4 held (2026-09-25)
+
+`coderabbit review --agent --committed --base dev` on `feat/adef-gates-handoff`, run
+twice (7 findings, then 6 on the fix commit's diff). Base is **`dev`**, not `main` —
+per `.coderabbit.yaml`, ADEFv2 lands as stacked PRs into `dev`.
+
+**Fixed (9).** All the same failure family — a re-import or a malformed document
+changing state without saying so:
+
+| # | Defect | Why it mattered |
+|---|--------|-----------------|
+| 1 | Re-import rebuilt the record from the document | Reset `status`/`stage`/`owner`/`mitre` and re-stamped `created` — an engineer's FORGE progress erased by a regenerated hunt |
+| 2 | Re-import called `advance_stage(stage="find")` | Dragged a detection someone had taken to Govern back to the start of the lifecycle |
+| 3 | Unrecognized verdict read as archival | `PROMOTED` (typo) or a missing `verdict` silently dropped a deployable candidate; "nothing imported" is indistinguishable from "the hunt built nothing" |
+| 4 | Duplicate `candidate_id` accepted | Two candidates collapse onto one `hunt_ref`; the second write overwrote the first's record |
+| 5 | Empty `detection_logic` minted a record | A query-less detection can't be verified, refined or deployed — and `adef coverage` counts it as coverage. That is the "fictional coverage" the report exists to flag |
+| 6 | Non-list `detections` defaulted to `[]` | Reported 0 candidates for a malformed document |
+| 7 | A mid-document rejection left a half-import | Candidate 1 written, candidate 2's bad engine aborts the run |
+| 8 | `--dry-run` scaffolded a workspace | `workspace_journals_dir` defaults `create=True`, and `Catalog`/`Journal` both mkdir — a dry run against a mistyped path created the tree it was only inspecting |
+| 9 | **Path traversal via `platforms`** | `platform` becomes a directory name in `catalog/<platform>/`. A document declaring `platforms: ["../../escaped"]` wrote the record outside the workspace entirely. Confirmed by execution, not inference. Guarded in `Catalog._path_for`, where every writer routes, so no caller has to remember to sanitize — this protects `catalog`/`sync` too, whose platform comes from a source rule's `logsource` |
+
+Plus two smaller ones: `VerificationAgent.run` reported `schema_matched: true` for a
+rule in `rules_skipped_unparseable` (claiming a field check that never ran), and
+`record_from_gates` hardcoded `kind="atomic"` even for a `composite` engine.
+
+**Held (4), each with the reasoning:**
+
+1. **No reverse reconciliation.** A candidate that was PROMOTE last import and is now
+   HOLD — or dropped from the document entirely — leaves its record behind untouched.
+   Real gap, but the answer is an orphan pass, not deletion inside the import loop:
+   `adef sync` already answers this shape of question by reporting a vanished source
+   rule as **orphaned, never deleted**, and this path should match it. Marked with a
+   `ponytail:` comment in `import_gates`.
+2. **The re-import journal note is marked `generated`**, so the newest GATES reasoning
+   is in the journal but not in the BM25 corpus. Kept deliberately: a re-import is
+   usually a no-op re-run, and leaving these searchable stacks a near-duplicate block
+   per run. `sync`'s housekeeping notes are `generated` for the same reason. The cost
+   — a *changed* verdict isn't searchable until someone writes it up — is named in the
+   comment rather than hidden.
+3. **`TIME_BOX` routing** (again): the reviewer's fix is "let ADEF import the `.md`",
+   which is backwards — a narrative has no query. Still the same open design call
+   below: either `TIME_BOX` hunts emit `.yaml`, or ADEF stops treating `TIME_BOX` as
+   deployable. Not a review fix.
+4. `Catalog._path_for` containment was suggested *alongside* sanitizing `_platform_of`.
+   Only the `_path_for` guard was taken — one guard at the chokepoint beats two.
+
+Verified after: 637 passed / 2 skipped, ruff and mypy clean, and the H-0062 example
+re-imported end to end with `govern`/`ready`/`alice` on D-0003 surviving intact and the
+journal still at `govern`.
+
 ## State / next
 
 - [x] ATHF cloned to `../agentic-threat-hunting-framework`, on `feat/gates-validation-skill`
@@ -915,8 +966,11 @@ design question that should not be answered from our own pipeline's habits.
 - [ ] Ask the PR author to fix the acronym in PR #62's *body* (not editable from the repo)
 - [ ] Raise the pre-existing `n/43` production statistics with Sydney — a separate
       clearance call on her corpus, not this PR's scope
-- [ ] Commit the branch / open the ADEF PR *(per `.claude/rules/pre-pr-review.md`:
-      `coderabbit review --agent --committed --base main` before the first push)*
+- [x] Commit the branch, rebase onto `origin/dev`, run the CodeRabbit pass (twice) and
+      push `feat/adef-gates-handoff` — see the review section above. **A PR targets
+      `dev`, not `main`** (stacked-PR topology, `.coderabbit.yaml`); not opened yet.
+- [ ] Close the two held design calls: reverse reconciliation (orphan pass for a
+      candidate that flipped to HOLD) and `TIME_BOX` routing
 - [ ] Commit + push to `feat/gates-validation-skill` — this updates the live PR #62,
       so it's outward-facing and needs Jarrett's go-ahead. Commit message should
       summarize the contract fixes for the reviewers already on the PR.

@@ -21,7 +21,7 @@ import textwrap
 import pytest
 import yaml
 
-from adef.core.catalog import Catalog
+from adef.core.catalog import Catalog, CatalogError
 from adef.core.gates import (
     GatesError,
     import_gates,
@@ -350,6 +350,37 @@ def test_deployable_without_detection_logic_is_an_error(tmp_path):
     doc = parse_gates(_write(tmp_path, yaml.safe_dump(raw)))
     with pytest.raises(GatesError, match="no detection logic"):
         record_from_gates("D-0001", doc.candidates[0], doc, tmp_path)
+
+
+def test_non_list_detections_is_rejected(tmp_path):
+    """Defaulting a malformed `detections` to empty reports "0 candidates", which
+    reads identically to a hunt that genuinely built nothing."""
+    raw = yaml.safe_load(DOC)
+    raw["detections"] = {"1": raw["detections"][0]}  # mapping, not a list
+    with pytest.raises(GatesError, match="expected a list"):
+        parse_gates(_write(tmp_path, yaml.safe_dump(raw)))
+
+
+def test_composite_engine_is_not_labelled_atomic(tmp_path):
+    raw = yaml.safe_load(DOC)
+    raw["detections"][0]["deployment"]["engine"] = "composite"
+    doc = parse_gates(_write(tmp_path, yaml.safe_dump(raw)))
+    assert record_from_gates("D-0001", doc.candidates[0], doc, tmp_path).kind == "composite"
+    assert record_from_gates("D-0002", doc.candidates[1], doc, tmp_path).kind == "atomic"
+
+
+def test_platform_from_the_document_cannot_escape_the_catalog(tmp_path, monkeypatch):
+    """`platforms` is attacker-adjacent input that becomes a directory name. A
+    traversal value used to write the record outside the workspace entirely."""
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path / "ws"))
+    raw = yaml.safe_load(DOC)
+    raw["hunt_metadata"]["platforms"] = ["../../escaped"]
+    path = _write(tmp_path, yaml.safe_dump(raw))
+
+    with pytest.raises(CatalogError, match="resolves outside"):
+        import_gates(path)
+    assert not list(tmp_path.glob("escaped*"))
+    assert not (tmp_path / "escaped").exists()
 
 
 def test_a_rejected_candidate_does_not_half_import_the_document(tmp_path, monkeypatch):

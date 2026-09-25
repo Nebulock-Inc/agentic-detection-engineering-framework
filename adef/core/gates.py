@@ -216,9 +216,15 @@ def parse_gates(path: Path) -> GatesDocument:
     if not isinstance(validation, dict):
         validation = {}
 
-    detections = raw.get("detections")
+    detections = raw.get("detections", [])
+    # Absent is fine (a hunt that produced no candidates). Present but not a list
+    # is a malformed document, and defaulting it to empty would report "0
+    # candidates" — indistinguishable from a hunt that genuinely built nothing.
     if not isinstance(detections, list):
-        detections = []
+        raise GatesError(
+            f"{path.name}: `detections` is {type(detections).__name__}, expected a list "
+            "of candidates."
+        )
 
     candidates = []
     seen_ids: set[str] = set()
@@ -343,7 +349,11 @@ def record_from_gates(
         rule_ref=f"{gates_path.parent.name}/{gates_path.name}",
         original_path=str(gates_path),
         platform=doc.platform,
-        kind="atomic",
+        # `kind` and `engine` are separate axes, but a composite engine is a
+        # composite detection by definition — leaving it `atomic` mislabels it in
+        # `detection list` and in the INDEX. `correlation` has no GATES signal, so
+        # it isn't inferred.
+        kind="composite" if engine == "composite" else "atomic",
         engine=engine,
         format=engine,
         origin="promoted",
@@ -475,6 +485,11 @@ def import_gates(
     # is fix-one-and-rerun. Accumulate errors if that gets tedious.
     # ponytail: rejected candidates aren't in ADEF's search corpus. If they need
     # to be, that's a coverage-gaps store, not a per-candidate journal.
+    # ponytail: no reverse reconciliation. A candidate that was PROMOTE last
+    # import and is now HOLD (or dropped from the document entirely) leaves its
+    # record behind, untouched. `adef sync` has the same shape of answer for a
+    # vanished source rule — report it orphaned, never delete — so the fix is an
+    # orphan pass here, not deletion inside this loop.
     planned: list[tuple[GatesCandidate, CatalogRecord | None]] = [
         (
             cand,
@@ -530,8 +545,12 @@ def import_gates(
             # Re-import of an edited hunt. The note lands under whatever stage the
             # journal is already on — `advance_stage(stage="find")` would drag a
             # detection someone has taken to Govern back to the start. Marked
-            # generated: it's a machine restatement of a document the first
-            # import's note already put in the search corpus.
+            # generated (as `sync`'s housekeeping notes are): it's a machine
+            # restatement of a document the first import's note already put in the
+            # search corpus, and a re-import is usually a no-op re-run, so leaving
+            # these searchable would stack near-duplicates in the BM25 corpus for
+            # every run. The cost is that a *changed* verdict is visible in the
+            # journal but not searchable until someone writes it up.
             journal.append_block(
                 rec.id, "GATES re-import", journal_note(cand, doc), generated=True
             )

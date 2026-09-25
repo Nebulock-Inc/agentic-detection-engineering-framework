@@ -341,6 +341,16 @@ class Catalog:
         slug = _slugify(rec.title, rec.id.lower())
         candidate = self._dir / rec.platform / f"{rec.id}-{slug}.yml"
         _check_not_under_detections(candidate)
+        # `platform` becomes a directory name, and it arrives from outside ADEF:
+        # a source rule's `logsource.product` or a GATES document's `platforms`.
+        # A value like `../../etc` would put the record outside the workspace
+        # entirely. Checked here because every writer routes through _path_for,
+        # so no caller has to remember to sanitize.
+        if self._dir not in candidate.resolve().parents:
+            raise CatalogError(
+                f"Refused to write {rec.id} to {candidate}: platform "
+                f"{rec.platform!r} resolves outside {self._dir}."
+            )
         return candidate
 
     def write(self, rec: CatalogRecord) -> Path:
