@@ -38,9 +38,11 @@ REFINE_STEPS: tuple[ChainStep, ...] = (
 )
 
 
-# Comfortably above MemoryIndex's 240-char snippet, so the values that were
-# always rendered here pass through intact and only genuinely long ones (a
-# candidate's verbatim query) get cut.
+# Not sized against MemoryIndex's snippet length — that coupling was a
+# leftover from the discredited content-filtering mitigation. As `_inline`'s
+# docstring says, this cap exists for free text that legitimately belongs
+# here (an LLM judge's `reasoning`, a third-party step's prose) and can run
+# long; unrelated values just happen to pass through under it intact.
 _MAX_RENDERED = 300
 
 
@@ -52,31 +54,26 @@ def _inline(value: Any) -> str:
     verbatim and are routinely multi-line, so this is the common case, not an
     edge one.
 
-    The cap is for the free-text that legitimately belongs here — an LLM
-    judge's `reasoning`, a third-party step's prose — which reaches the renderer
-    verbatim and can run long. (Rule logic does not reach it at all; see
-    `_JOURNAL_OMIT_KEYS`.) Only the *rendered* form is collapsed and capped —
-    callers still receive the value unchanged.
+    The cap is for free text that legitimately belongs here — an LLM judge's
+    `reasoning`, a third-party step's prose — which reaches the renderer
+    verbatim and can run long. Only the *rendered* form is collapsed and
+    capped; callers still receive the value unchanged.
     """
     text = " ".join(str(value).split())
     return text if len(text) <= _MAX_RENDERED else text[:_MAX_RENDERED] + "\u2026"
 
 
-# Rule logic never goes in the journal. It is the neighbour's, not this
-# detection's; it already lives in that neighbour's catalog record, keyed by an
-# ID the journal does record; and journals are the BM25 corpus, so echoing it
-# here scores the same pair higher on the next similarity run for no new
-# evidence. The journal keeps the shortlist and the verdict; `adef detection
-# show <id>` keeps the logic. Callers still receive both fields in the payload.
+# `snippet` is dropped from the journal render for one reason only: it is
+# title + MITRE + platform + format + query concatenated, every part of which
+# is already on the same line under its own label. It is noise in a log.
 #
-# `snippet` belongs here as much as `query` does: `MemoryIndex._snippet` builds
-# it from the journal body PLUS `record_search_text(record)`, which ends in the
-# record's query — so omitting `query` alone left the neighbour's verbatim logic
-# in the journal under a different key. Verified end-to-end, not by inspection.
-# This shrinks the feedback surface to low-entropy metadata (title, technique
-# ID, platform); closing it entirely means not indexing the machine-generated
-# `### Refine /` blocks at all, which is a MemoryIndex change — see 10188.
-_JOURNAL_OMIT_KEYS = frozenset({"query", "snippet"})
+# It is NOT dropped to protect the retrieval index. That was the old
+# justification and it was wrong twice over — a key-name denylist cannot make
+# a claim about content, because the same text arrives under other keys. The
+# index is protected by provenance now: `Journal.append_block(generated=True)`
+# marks these blocks and `narrative_text` excludes them. See the corpus
+# unification design doc.
+_JOURNAL_OMIT_KEYS = frozenset({"snippet"})
 
 
 def _format_payload(payload: Any, indent: str = "") -> str:
@@ -141,13 +138,14 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
         cls = getattr(wrappers_pkg, step.wrapper_attr, None)
         if cls is None:
             body = f"_Wrapper `{step.wrapper_attr}` not available — skipping._"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": "wrapper-missing"}
             continue
         try:
             result = cls().run(detection_id=detection_id, **context)
             journal.append_block(
-                detection_id, step.heading, _format_payload(_prune_for_journal(result))
+                detection_id, step.heading, _format_payload(_prune_for_journal(result)),
+                generated=True,
             )
             summary[step.name] = {"ok": True, "result": result, "error": None}
         except NoCatalogRecordError as exc:
@@ -159,7 +157,7 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
                 f"_Not run — no catalog record for {detection_id} yet "
                 f"(still journal-only). {exc}_"
             )
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": "no-catalog-record"}
         except WrapperUnavailable as exc:
             # Expected, not exceptional: an explicitly-set `ADEF_WRAPPER_*`
@@ -169,13 +167,13 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
             # traceback in a "readable memory" artifact undermines it. The
             # exception message already names the exact env var to set.
             body = f"_Not run — {step.name} agent isn't configured. {exc}_"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": "not-configured"}
         except Exception as exc:  # noqa: BLE001 — chain must not abort
             # A genuine failure of a configured agent — keep the traceback.
             tb = traceback.format_exc(limit=2)
             body = f"**Failed:** {exc}\n\n```\n{tb}\n```"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": str(exc)}
     return summary
 

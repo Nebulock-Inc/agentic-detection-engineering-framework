@@ -2,13 +2,15 @@
 already exist?
 
 Ranks with the same BM25 index `adef detection search` ships
-(`adef.core.memory.MemoryIndex`) and takes the top-K. Note the corpus is
-**journal-keyed**: the index is built from journal entries, with each
-record's catalog text attached as extra text, so a catalogued rule whose
-journal file is missing cannot be shortlisted at all. `RuleOverlapAgent`
-iterates the catalog directly and does not share that blind spot — the two
-can disagree about what the catalog holds within a single Refine run.
-`adef sync` re-creates missing journals, which hides this in the happy path.
+(`adef.core.memory.MemoryIndex`), built over `adef.core.corpus.build_corpus` —
+a detection is a member of the corpus if it has a catalog record OR a
+journal, so a catalogued rule with no journal is still shortlisted (by its
+record's title/mitre/platform/query), and a journal-only draft (a fresh
+`detection new`, before it has a catalog record) is still shortlisted too —
+at minimum by its title, which `CorpusEntry.index_text` always includes,
+even when the journal itself is still template-only. `RuleOverlapAgent`
+resolves membership through the same `build_corpus` call, so the two agents
+agree on what the catalog holds.
 What happens to the shortlist depends on `similarity_mode`:
 - `bm25`: return the BM25 ranking as-is. No network call.
 - `agent`: return the shortlist enriched with the target's *and* each
@@ -31,9 +33,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from adef.core.catalog import Catalog, NoCatalogRecordError
+from adef.core.catalog import Catalog, catalog_dir, NoCatalogRecordError
+from adef.core.corpus import build_corpus
 from adef.core.corpus_text import record_search_text
-from adef.core.journal import Journal, workspace_journals_dir
+from adef.core.journal import workspace_journals_dir
 from adef.core.memory import MemoryIndex
 
 DEFAULT_LLM_MODEL = "claude-haiku-4-5-20251001"
@@ -166,22 +169,24 @@ class RuleSimilarityAgent:
 
         journals_dir = workspace_journals_dir(workspace, create=False)
         ws = journals_dir.parent
-        catalog = Catalog(ws)
 
+        # Mirror `adef.core.catalog.known_detection_ids`: constructing
+        # `Catalog(ws)` unconditionally mkdirs `catalog/`, which this read
+        # path must not do on a bare workspace.
         records: dict[str, dict] = {}
-        record_text: dict[str, str] = {}
-        for det_id, _path, data in catalog.iter_records():
-            records[det_id] = data
-            record_text[det_id] = record_search_text(data)
-        target_text = record_text.get(detection_id)
-        if target_text is None:
+        if catalog_dir(ws).is_dir():
+            for det_id, _path, data in Catalog(ws).iter_records():
+                # First one wins, matching `build_corpus` (corpus.py) — a
+                # duplicate id under two platform dirs must resolve to the
+                # same record the shared BM25 index scored.
+                records.setdefault(det_id, data)
+        target_record = records.get(detection_id)
+        if target_record is None:
             raise NoCatalogRecordError(f"No catalog record found for {detection_id}")
+        target_text = record_search_text(target_record)
 
-        index = MemoryIndex(journals_dir=journals_dir)
-        index.build(
-            entries=list(Journal(journals_dir).iter_entries()),
-            extra_text_for=lambda e: record_text.get(e.detection_id, ""),
-        )
+        index = MemoryIndex()
+        index.build(build_corpus(ws))
         hits = [
             h for h in index.search(target_text, limit=top_k + 1)
             if h.detection_id != detection_id

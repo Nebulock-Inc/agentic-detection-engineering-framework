@@ -118,6 +118,51 @@ def test_sync_orphans_deleted_rule(tmp_path, monkeypatch):
     # The record (and its "why") is kept, never deleted.
 
 
+def test_sync_orphaned_note_is_not_findable(tmp_path, monkeypatch):
+    # 10188 follow-up item 2: the orphaned-housekeeping note `adef sync`
+    # writes is derived restatement — `orphaned: true` is already on the
+    # record — so it is marked generated and must not feed back into search.
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (repo / "r.yml").unlink()
+    assert CliRunner().invoke(sync, [str(repo)]).exit_code == 0
+
+    from adef.core.journal import narrative_text
+
+    entry = Journal(ws / "journals").read("D-0001")
+    assert "orphaned by" not in narrative_text(entry.body)
+    # Sanity: the note really is in the raw file — this is index exclusion
+    # only, never a change to what's written (r1 caution).
+    assert "orphaned by" in entry.body
+
+
+def test_sync_modified_note_is_not_findable(tmp_path, monkeypatch):
+    # Same principle for the other sync-generated note: the source hash is
+    # already stored on the record, and this note repeats on every sync.
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    (repo / "r.yml").write_text(
+        _sigma("03cc0c25-389f-4bf8-b48d-11878079f1ca", title="Rundll32 v2"),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(sync, [str(repo)]).exit_code == 0
+
+    from adef.core.journal import narrative_text
+
+    entry = Journal(ws / "journals").read("D-0001")
+    out = narrative_text(entry.body)
+    assert "derived fields refreshed" not in out
+    assert "derived fields refreshed" in entry.body
+
+
 def test_sync_check_exits_nonzero_when_behind(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     (ws / "journals").mkdir(parents=True)
@@ -161,6 +206,31 @@ def test_sync_recreates_missing_journal(tmp_path, monkeypatch):
     assert entry.frontmatter["rule_uuid"] == "03cc0c25-389f-4bf8-b48d-11878079f1ca"
     assert entry.frontmatter["current_stage"] == "find"
     assert "re-created by `adef sync`" in entry.body
+
+
+def test_sync_repaired_journal_note_is_not_findable(tmp_path, monkeypatch):
+    # Coordinator catch: `sync.py`'s repair-pass `journal.create()` call is a
+    # third, separate note-writing site — not routed through `_journal_note`,
+    # so that helper's `generated=True` default never reached it. Same
+    # derived-restatement class as the other two sync notes: the fact a
+    # journal was missing has no search value.
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = _make_repo(tmp_path)
+
+    CliRunner().invoke(catalog, [str(repo)])
+    jpath = ws / "journals" / "D-0001.md"
+    jpath.unlink()
+
+    assert CliRunner().invoke(sync, [str(repo)]).exit_code == 0
+
+    from adef.core.journal import narrative_text
+
+    entry = Journal(ws / "journals").read("D-0001")
+    assert "re-created by" not in narrative_text(entry.body)
+    # Sanity: the note really is in the raw file — index exclusion only.
+    assert "re-created by" in entry.body
 
 
 def test_sync_dry_run_does_not_recreate_journal(tmp_path, monkeypatch):

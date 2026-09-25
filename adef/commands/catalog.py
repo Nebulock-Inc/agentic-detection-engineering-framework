@@ -445,6 +445,7 @@ def catalog(
                 owner=rec.owner,
                 rule_uuid="",
                 note=f"Catalogued from {rec.rule_ref} by `adef catalog`.",
+                generated=True,
             )
 
     index_path = cat.rebuild_index()

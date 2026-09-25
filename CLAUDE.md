@@ -314,6 +314,7 @@ adef/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
 │   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
 │   ├── memory.py               # BM25 search over journals + catalog records
+│   ├── corpus.py               # CorpusEntry + build_corpus — the one membership answer
 │   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share
 │   ├── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
 │   ├── health_docs.py          # capture document model, lint, load
@@ -509,10 +510,14 @@ content = journal.read(detection_id="D-0042")
 ### Memory Search
 
 ```python
+from pathlib import Path
+
+from adef.core.corpus import build_corpus
 from adef.core.memory import MemoryIndex
 
-index = MemoryIndex(workspace_path="/path/to/workspace", rule_root="/path/to/rules")
-results = index.search("mshta.exe public directory")  # BM25 over journals + YAML
+index = MemoryIndex()
+index.build(build_corpus(Path("/path/to/workspace")))
+results = index.search("mshta.exe public directory")  # BM25 over CorpusEntry.index_text
 ```
 
 ## Common Patterns

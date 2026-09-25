@@ -22,7 +22,7 @@ This guide is for that case.
 
 Your authored detections are the only copy, so treat the workspace like the
 important data it is. The workspace is plain markdown + YAML — no ADEF-specific
-tooling needed, just native git:
+tooling needed, just native git.
 
 ```bash
 adef init ~/detections            # scaffold the workspace
@@ -56,6 +56,14 @@ journal for the *why*. The `detection-author` skill (Claude plugin) interviews
 you for intent, threat model, and known false positives, and fills in the query
 against real fields. Tag ATT&CK with `adef detection tag-mitre`; see coverage
 with `adef coverage`.
+
+**A note on hand-editing the journal:** this caveat applies only to the
+template **preamble** (the fields before the first `## [<timestamp>] Stage:`
+heading): if you hand-edit one of those fields yourself, keep new reasoning in
+the template's `- **Field:** value` bullet grammar (or a wrapped continuation
+of one), since a free-text paragraph there won't turn up in `adef detection
+search`. Text inside a stage block (after the first `## Stage:` heading) has
+no such restriction — it is indexed as written.
 
 ## 3. Sync is safe here
 

@@ -124,6 +124,13 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
                 owner=rdata.get("owner") or "",
                 rule_uuid=rdata.get("rule_uuid") or "",
                 note="Journal missing for this record — re-created by `adef sync`.",
+                # Derived restatement, same class as the other sync housekeeping
+                # notes below: the fact that a journal was missing is recoverable
+                # from nothing (the file now exists), and repeats on every sync
+                # that runs the repair pass. Direct `journal.create()` call, not
+                # `_journal_note` — its default doesn't reach here (10188
+                # follow-up, coordinator catch).
+                generated=True,
             )
             repaired += 1
     if repaired:
@@ -167,6 +174,7 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
                 journal.create(
                     detection_id=rec.id, title=rec.title, owner=rec.owner, rule_uuid="",
                     note=f"Catalogued from {rec.rule_ref} by `adef sync`.",
+                    generated=True,
                 )
         else:  # MODIFIED — record the out-of-band change in the journal
             _journal_note(
@@ -179,7 +187,7 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
     console.print(f"\n[green]Synced[/green] {applied} change(s); INDEX → {index_path}")
 
 
-def _journal_note(journal: Journal, detection_id: str, note: str) -> None:
+def _journal_note(journal: Journal, detection_id: str, note: str, generated: bool = True) -> None:
     """Append a note to a detection's journal (create if missing). Best-effort.
 
     Re-advance to the journal's *current* stage, not a hardcoded one — sync
@@ -187,13 +195,23 @@ def _journal_note(journal: Journal, detection_id: str, note: str) -> None:
     FORGE (advancing to a fixed stage would corrupt the lifecycle state, which
     is the journal's whole point). Re-advancing to the same stage is idempotent:
     it appends the note only, no duplicate stage block (CodeRabbit #97).
+
+    ``generated=True`` by default: every call site of this helper writes sync
+    housekeeping — derived restatement of state already on the record (the
+    orphaned flag, the refreshed hashes) — not a fact recorded nowhere else,
+    so it is marked generated and excluded from search (10188 follow-up
+    item 2).
     """
     try:
         if (journal.directory / f"{detection_id}.md").exists():
             stage = journal.read(detection_id).current_stage
-            journal.advance_stage(detection_id=detection_id, stage=stage, note=note)
+            journal.advance_stage(
+                detection_id=detection_id, stage=stage, note=note, generated=generated
+            )
         else:
-            journal.create(detection_id=detection_id, title=detection_id, note=note)
+            journal.create(
+                detection_id=detection_id, title=detection_id, note=note, generated=generated
+            )
     except Exception as exc:  # journaling is enrichment, never fatal to sync
         console.print(f"[yellow]note: could not journal {detection_id}: {exc}[/yellow]")
 

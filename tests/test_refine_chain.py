@@ -236,13 +236,12 @@ def test_format_payload_keeps_lines_readable_for_many_overlaps():
     assert "condition: selection" in query_line
 
 
-def test_rule_logic_never_reaches_the_journal(tmp_path):
-    # END TO END, deliberately. The unit-level version of this test passed while
-    # the real chain wrote the neighbour's verbatim query into the journal: it
-    # fed `_format_payload` a synthetic payload with no `snippet` key, and
-    # `snippet` is exactly where the logic travels — `MemoryIndex._snippet`
-    # builds it from the journal body PLUS `record_search_text(record)`, which
-    # ends in the record's query. Only a real run can catch that.
+def test_the_journal_records_what_was_compared(tmp_path):
+    # Inverted deliberately. The predecessor of this test asserted the query
+    # was ABSENT — correct while the journal fed the index, wrong now that
+    # Refine blocks are excluded by provenance. A log that records *that*
+    # D-0002 was shortlisted but not what either rule looked for is a worse
+    # log, and it stripped the target's own query from its own journal.
     from adef.core.catalog import Catalog, CatalogRecord
     from adef.orchestration.refine_chain import run_refine_chain
 
@@ -259,9 +258,8 @@ def test_rule_logic_never_reaches_the_journal(tmp_path):
         )
 
     for rec in (
-        _rec("D-0001", "mshta child process", "process.name = 'mshta.exe'"),
-        _rec("D-0002", "mshta spawning child",
-             "NEIGHBOUR_LOGIC_MARKER process.name = 'mshta.exe' and parent = 'excel.exe'"),
+        _rec("D-0001", "mshta child process", "TARGETLOGIC process.name = 'mshta.exe'"),
+        _rec("D-0002", "mshta spawning child", "NEIGHBOURLOGIC parent.name = 'excel.exe'"),
     ):
         cat.write_raw(ws / "catalog" / f"{rec.id}.yml", rec.to_yaml_dict())
         journal.create(detection_id=rec.id, title=rec.title)
@@ -271,23 +269,27 @@ def test_rule_logic_never_reaches_the_journal(tmp_path):
                      similarity_mode="agent")
     body = (ws / "journals" / "D-0001.md").read_text()
 
-    assert "NEIGHBOUR_LOGIC_MARKER" not in body
-    # The block is still worth having: the shortlist and the verdict survive.
-    assert "D-0002" in body
+    assert "TARGETLOGIC" in body          # what was being refined
+    assert "NEIGHBOURLOGIC" in body       # what it was compared against
+    assert "snippet" not in body          # redundant with the fields beside it
+    from adef.core.journal import GENERATED_MARKER
+    assert GENERATED_MARKER in body       # and none of it will be indexed
 
 
 def test_omitted_keys_are_pruned_at_every_depth():
     # Filtering at each render site left holes — a dict nested inside a list
     # entry reached `_inline` whole and stringified the omitted key back in.
+    # `snippet` is the one remaining omitted key (see `_JOURNAL_OMIT_KEYS`) —
+    # `query` now reaches the journal deliberately.
     payload = {
         "candidates": [
-            {"detection_id": "D-0002", "nested": {"query": "LOGIC_MARKER"}},
+            {"detection_id": "D-0002", "nested": {"snippet": "SNIPPET_MARKER"}},
         ],
-        "target": {"inner": {"snippet": "LOGIC_MARKER"}},
-        "bare_list": [{"query": "LOGIC_MARKER"}],
+        "target": {"inner": {"snippet": "SNIPPET_MARKER"}},
+        "bare_list": [{"snippet": "SNIPPET_MARKER"}],
     }
     body = _format_payload(_prune_for_journal(payload))
-    assert "LOGIC_MARKER" not in body
+    assert "SNIPPET_MARKER" not in body
     assert "D-0002" in body
 
 
