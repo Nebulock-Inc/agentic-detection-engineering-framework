@@ -148,6 +148,38 @@ def test_malformed_journal_warns_once_per_process(tmp_path: Path, capsys):
     assert err.count("malformed frontmatter") == 1
 
 
+def test_non_mapping_frontmatter_is_skipped_not_fatal(ws: Path, capsys):
+    # Final pre-PR follow-up item 1, variant 1: frontmatter that parses as a
+    # YAML list, not a mapping (`yaml.safe_load` happily returns a list — no
+    # `yaml.YAMLError`). `iter_entries`'s old guard caught only `YAMLError`,
+    # so `entry.detection_id` (`self.frontmatter.get(...)`), evaluated inside
+    # `iter_entries` itself via `journals.setdefault(entry.detection_id, ...)`,
+    # raised `AttributeError: 'list' object has no attribute 'get'` straight
+    # out of `build_corpus` and aborted the whole scan.
+    (ws / "journals" / "D-0012.md").write_text(
+        "---\n- a\n- b\n---\n\nnot a mapping\n", encoding="utf-8"
+    )
+    ids = sorted(e.detection_id for e in build_corpus(ws))
+    assert "D-0001" in ids and "D-0002" in ids and "D-0003" in ids
+    assert "D-0012" not in ids
+    assert capsys.readouterr().err.count("malformed frontmatter") == 1
+
+
+def test_non_utf8_journal_is_skipped_not_fatal(ws: Path, capsys):
+    # Final pre-PR follow-up item 1, variant 2: a journal file that is not
+    # valid UTF-8. The old guard wrapped only `_split_frontmatter`, but
+    # `child.read_text(encoding="utf-8")` sat *outside* the `try`, so a
+    # bad-encoding file raised `UnicodeDecodeError` straight out of
+    # `iter_entries` and aborted the whole corpus build.
+    (ws / "journals" / "D-0013.md").write_bytes(
+        b"---\ntitle: bad\n---\n\n\xff\xfe not utf-8\n"
+    )
+    ids = sorted(e.detection_id for e in build_corpus(ws))
+    assert "D-0001" in ids and "D-0002" in ids and "D-0003" in ids
+    assert "D-0013" not in ids
+    assert capsys.readouterr().err.count("malformed frontmatter") == 1
+
+
 def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):
     # Review Focus 3.
     dup_dir = ws / "catalog" / "linux"

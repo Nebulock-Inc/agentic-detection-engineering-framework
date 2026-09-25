@@ -244,6 +244,17 @@ def narrative_text(body: str) -> str:
     return "\n".join(lines)
 ```
 
+> **As shipped, this changed:** splitting on `### ` alone let a generated
+> sub-block "extend" past the next `## [ts] Stage:` transition and swallow a
+> human's note appended under it, so the split is on both boundaries, and
+> both are ignored when they fall inside a fenced code block (a pasted
+> traceback can itself contain a `### `-looking line). The preamble/stage-area
+> filtering and the generated-note handling also grew beyond this sketch
+> (content-based filters like `"Catalogued from"` were removed per the spec's
+> provenance-only rule). The live contract is `narrative_text` in
+> `adef/core/journal.py` and the spec's "Indexed text" section; this plan is
+> kept as the historical record of what was planned.
+
 Then extend `append_block` (currently at `adef/core/journal.py:296`):
 
 ```python
@@ -427,6 +438,17 @@ def test_same_id_in_two_platform_dirs_yields_one_entry(ws: Path):
     assert len(entries) == 1
 ```
 
+> **As shipped, this changed:** the two unresolved-path assertions above
+> (`entry.path == ws / "catalog" / "D-0002.yml"` and
+> `entry.path == ws / "journals" / "D-0003.md"`) were rewritten to resolve
+> both sides (`entry.path.resolve() == (ws / ...).resolve()`). `catalog_dir()`
+> and `Journal.__init__` both call `.expanduser().resolve()`, so every path
+> `build_corpus` returns is fully resolved, while a `tmp_path`-derived
+> expectation may not be — on macOS `/tmp` is a symlink to `/private/tmp`, so
+> the assertion as planned failed for a reason unrelated to the code under
+> test. See `tests/test_corpus.py` for the live assertions; this plan is kept
+> as the historical record of what was planned.
+
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pytest tests/test_corpus.py -v`
@@ -548,6 +570,16 @@ def build_corpus(workspace: Path) -> list[CorpusEntry]:
 
 __all__ = ["CorpusEntry", "build_corpus"]
 ```
+
+> **As shipped, this changed:** `index_text` gained an `else: parts.append(self.title)`
+> branch — a journal-only entry (a fresh `detection new` draft) has no
+> `record_search_text` to carry a title and can have no narrative yet either,
+> so without its frontmatter title it scored 0.0 against every query and could
+> never be shortlisted (r1 review, Critical). A record-backed entry does not
+> also get the title added, since `record_search_text` already puts it first;
+> doing both double-weighted it in BM25. The live contract is `index_text` in
+> `adef/core/corpus.py` and the spec's "Indexed text" section; this plan is
+> kept as the historical record of what was planned.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

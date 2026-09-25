@@ -595,17 +595,23 @@ class Journal:
     def iter_entries(self) -> Iterable[JournalEntry]:
         """Yield every journal in the directory.
 
-        A journal with malformed YAML frontmatter is skipped (reported to
-        stderr once per resolved path per process — see `_WARNED_MALFORMED`
-        below), not raised — a corpus-wide reader (`build_corpus`) must not
-        let one bad file take down every other detection. Mirrors
+        A journal this process cannot read as a valid entry is skipped
+        (reported to stderr once per resolved path per process — see
+        `_WARNED_MALFORMED` below), not raised — a corpus-wide reader
+        (`build_corpus`) must not let one bad file take down every other
+        detection. This is a class of failure, not one exception: bad YAML
+        (`yaml.YAMLError`), a non-UTF-8 file (`UnicodeDecodeError`), an
+        unreadable file (`OSError`), and frontmatter that parses to something
+        other than a mapping — e.g. a YAML list — all count. Mirrors
         `Catalog.iter_records`' tolerance of a bad catalog YAML.
         """
         for child in sorted(self._dir.glob("D-*.md")):
-            text = child.read_text(encoding="utf-8")
             try:
+                text = child.read_text(encoding="utf-8")
                 fm, body = _split_frontmatter(text)
-            except yaml.YAMLError as exc:
+                if not isinstance(fm, dict):
+                    raise ValueError(f"frontmatter is a {type(fm).__name__}, not a mapping")
+            except (yaml.YAMLError, UnicodeDecodeError, OSError, ValueError) as exc:
                 resolved = child.resolve()
                 if resolved not in _WARNED_MALFORMED:
                     _WARNED_MALFORMED.add(resolved)

@@ -141,6 +141,8 @@ path.
 ```
 index_text = record_search_text(record)          # title, mitre, platform,
                                                  # data_source, format, query
+           OR title                              # journal-only: no record
+                                                 # projection to carry it
            + journal narrative                   # human-authored blocks only
 ```
 
@@ -152,6 +154,16 @@ line. Either half may be empty: a journal-only draft contributes narrative
 only, a record-only detection contributes the record projection only, and
 `index_text` must handle `record is None` and `journal is None` without a
 guard at every call site.
+
+**The standalone title is conditional, not additive.** A journal-only entry
+(a fresh `detection new` draft with no catalog record yet) has no
+`record_search_text` to carry a title, and a sparse, unadvanced journal has no
+narrative either — without its frontmatter title such an entry scores 0.0
+against every query and can never be shortlisted. `index_text` therefore adds
+the journal's frontmatter title only when there is no record. A record-backed
+entry does **not** get the standalone title added on top: `record_search_text`
+already puts the record's title first, and adding it again would double-weight
+it in BM25 relative to every other field.
 
 Both artifacts, working together. A human's Observe note ("mshta-from-Office
 baseline ~3/day, FP source: admin GPO scripts") is legitimate evidence for
@@ -185,6 +197,18 @@ The exact marker string is `<!-- adef:generated -->`, defined once in
 The indexer drops any block carrying the marker. For journals that already
 exist it falls back to matching the `### Refine / ` heading prefix — a
 permanent fallback, not a transition.
+
+**Splitting the stage area into blocks.** The indexer splits on every `### `
+sub-block heading — where Refine results land — but *also* on every
+`## [ts] Stage: ...` transition: a `### ` boundary alone would let a generated
+block "extend" past the next stage transition and swallow it, dropping
+whatever a human wrote under the next stage along with the machine output it
+was appended to. Both kinds of boundary are ignored when they fall inside a
+fenced code block (`` ``` `` or `~~~`): a traceback or a pasted log wrapped in
+a fence can itself contain a line starting with `### ` or `## [ts]`, and
+splitting on that would carve the generated block into pieces that carry
+neither the marker nor the legacy heading prefix, leaking the tail into the
+index.
 
 **Exclusion is index-only.** Refine blocks stay in the journal file, stay in
 `adef detection show`, and stay visible to any agent reading the journal. They
