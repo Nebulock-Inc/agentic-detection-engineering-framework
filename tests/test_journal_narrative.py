@@ -295,3 +295,74 @@ def test_append_block_is_unmarked_by_default(tmp_path):
     j.append_block("D-0001", "Deployment decision", "approved")
     text = (tmp_path / "journals" / "D-0001.md").read_text()
     assert GENERATED_MARKER not in text
+
+
+def test_narrative_drops_an_unfenced_heading_shaped_line_in_a_generated_body(tmp_path: Path):
+    # 10188 follow-up item 1 (controller repro): a generated block whose body
+    # contains an unfenced `### `-shaped line (e.g. an exception message with
+    # a newline, via `run_refine_chain`'s generic-failure `**Failed:** {exc}`
+    # path, which is not passed through `_inline`) used to split the piece at
+    # that fake heading — the tail then carried neither the marker nor the
+    # legacy prefix, and got indexed. The explicit close marker states the
+    # generated block's extent instead of inferring it from structure, so
+    # nothing inside it — heading-shaped or not — can end it early.
+    j = _journal(tmp_path)
+    j.create(detection_id="D-0001", title="t")
+    j.append_block(
+        "D-0001",
+        "Refine / Verification",
+        "**Failed:** boom\n\n### Details\nAFTERHEADING leaked",
+        generated=True,
+    )
+    j.append_block("D-0001", "Deployment decision", "HUMANBLOCK approved by lead")
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "AFTERHEADING" not in out
+    assert "boom" not in out
+    assert "HUMANBLOCK" in out
+
+
+def test_narrative_does_not_pair_an_old_unclosed_marker_with_a_later_close():
+    # CodeRabbit review, 10188 follow-up: this is the ordinary shape of a
+    # journal that already has an old (unclosed) generated block on disk and
+    # then gets a new, properly-closed one appended after this fix ships. A
+    # naive "pair each open with the nearest close anywhere later in the
+    # text" implementation pairs the OLD open with the NEW block's close and
+    # elides everything between them — including the human GOVERNNOTE. Only
+    # the new, actually-closed block may be elided; the old unclosed one is
+    # left to the unclosed-marker fallback, and human content between the two
+    # must survive untouched.
+    body = (
+        "## [2026-09-24T10:00:00-04:00] Stage: refine\n\n"
+        f"### Refine / Similarity (2026-09-24T10:01:00-04:00)\n{GENERATED_MARKER}\n\n"
+        "- **candidates:** OLDUNCLOSED D-0002\n"
+        "## [2026-09-24T11:00:00-04:00] Stage: govern\n\n"
+        "GOVERNNOTE human text here\n"
+        f"### Refine / Verification (2026-09-24T12:00:00-04:00)\n{GENERATED_MARKER}\n\n"
+        "MACHINETOKEN new closed block\n"
+        "<!-- /adef:generated -->\n"
+    )
+    out = narrative_text(body)
+    assert "GOVERNNOTE" in out
+    assert "OLDUNCLOSED" not in out
+    assert "MACHINETOKEN" not in out
+
+
+def test_narrative_drops_every_paragraph_of_a_multi_paragraph_generated_note(tmp_path: Path):
+    # 10188 follow-up item 2 (controller repro): a generated note's exclusion
+    # used to end at the first blank line, so a two-paragraph generated note
+    # (e.g. `sync`'s repair-pass housekeeping) leaked its second paragraph.
+    # The explicit close marker scopes the exclusion to the whole note,
+    # blank lines and all, while a human note in the same stage block after
+    # it is untouched.
+    j = _journal(tmp_path)
+    j.create(detection_id="D-0001", title="t")
+    j.advance_stage(
+        "D-0001", "observe", note="PARA1 first\n\nPARA2 second", generated=True
+    )
+    j.advance_stage("D-0001", "observe", note="HUMANNOTE follow-up")
+    entry = j.read("D-0001")
+    out = narrative_text(entry.body)
+    assert "PARA1" not in out
+    assert "PARA2" not in out
+    assert "HUMANNOTE" in out

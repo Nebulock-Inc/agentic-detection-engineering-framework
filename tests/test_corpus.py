@@ -127,6 +127,13 @@ def test_unparseable_artifacts_are_skipped_not_fatal(ws: Path):
     ids = sorted(e.detection_id for e in build_corpus(ws))
     assert "D-0001" in ids and "D-0002" in ids and "D-0003" in ids
     assert "D-0011" not in ids
+    # 10188 follow-up item 3: D-0010 has no frontmatter at all, so
+    # `JournalEntry.detection_id` used to fall back to `path.stem` and the
+    # file entered the corpus as "D-0010" — a malformed file, not a
+    # detection. This assertion is the whole point of the test; without it,
+    # the fixture above never actually exercised the code this test claims to
+    # cover (it only checked the good ids were present).
+    assert "D-0010" not in ids
 
 
 def test_malformed_journal_warns_once_per_process(tmp_path: Path, capsys):

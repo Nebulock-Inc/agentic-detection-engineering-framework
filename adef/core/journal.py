@@ -35,6 +35,15 @@ _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
 GENERATED_MARKER = "<!-- adef:generated -->"
 
+# Closes a span opened by GENERATED_MARKER (10188 follow-up items 1 and 2).
+# Marking where a generated block *starts* and inferring where it *ends* from
+# surrounding structure (the next `### ` heading, the next stage transition, a
+# blank line) is wrong whenever the content between the two contains something
+# that looks structural — content controls that structure. The close marker
+# states the extent instead of inferring it, so nothing between the two
+# markers can perturb it, no matter what it looks like.
+GENERATED_END_MARKER = "<!-- /adef:generated -->"
+
 # The first timestamped stage block ends the static template preamble.
 # `narrative_text` filters the preamble and the stage area by different
 # rules — see `_preamble_narrative_lines` for why fill-state alone isn't
@@ -50,17 +59,84 @@ _STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
 # into the same piece, which `_is_generated_block` would then drop whole
 # (Major finding, 10188 follow-up). This only changes where a piece ends —
 # `_is_generated_block` still decides which pieces are generated.
+#
+# This inference is still exactly as fallible as ever — it is exercised only
+# on text `_strip_closed_generated_spans` left alone, i.e. an opening marker
+# with no matching close (a journal already on disk from before
+# GENERATED_END_MARKER existed). A closed span never reaches this regex at
+# all: it is removed wholesale, structure and all, before this runs.
 _SUB_BLOCK_RE = re.compile(r"^(?:### |## \[.+?\] Stage:)", re.MULTILINE)
 
 # A fence marker line (opening or closing, ``` or ~~~). Toggled pairwise by
 # `_fenced_spans` below — no nesting, no info-string awareness, just enough to
 # know when a `### `/`## [ts] Stage:` match is text *inside* a fence rather
-# than a real sub-block boundary (10188 follow-up item 1: a traceback written
-# inside a fence by `run_refine_chain`'s generic-failure branch can contain a
-# line starting with `### `, which used to split the generated block it
-# belonged to — the tail then carried neither the marker nor the legacy
-# prefix, and got indexed).
+# than a real sub-block boundary (10188 follow-up item 1, original mitigation:
+# a traceback written inside a fence by `run_refine_chain`'s generic-failure
+# branch can contain a line starting with `### `, which used to split the
+# generated block it belonged to — the tail then carried neither the marker
+# nor the legacy prefix, and got indexed). Superseded as the real fix by
+# GENERATED_END_MARKER above; kept as the unclosed-marker fallback path only.
 _FENCE_MARK_RE = re.compile(r"^(?:```|~~~)", re.MULTILINE)
+
+
+# Either marker, as a whole line. Walked in document order below so an open
+# can only ever be paired with the *next* marker line — a close pairs it, but
+# another open supersedes it (leaves it behind, unpaired) rather than letting
+# a `.*?` scan leapfrog an intervening unclosed open straight to some later
+# close that was never its match (CodeRabbit review, 10188 follow-up: a
+# journal with an old unclosed marker followed later by a properly-closed new
+# block — the ordinary shape of an existing journal right after this fix
+# ships — must not have the closed block's close marker pair with the old
+# open and elide everything between, human content included).
+_GENERATED_MARKER_LINE_RE = re.compile(
+    r"^(?:(?P<open>" + re.escape(GENERATED_MARKER) + r")|(?P<close>"
+    + re.escape(GENERATED_END_MARKER) + r"))\n?",
+    re.MULTILINE,
+)
+
+
+def _strip_closed_generated_spans(text: str) -> str:
+    """Remove every explicitly-closed generated span from ``text`` wholesale,
+    before any structure-inferring rule below ever sees it (10188 follow-up
+    items 1 and 2).
+
+    Everything from an opening ``GENERATED_MARKER`` line to its matching
+    ``GENERATED_END_MARKER`` line is opaque here — a heading-shaped line, a
+    blank line, a fake stage transition, a fence, anything the content
+    happens to contain is removed along with it, because the extent is
+    stated by the markers, not inferred from what sits between them. The
+    heading line a `### `-block marker follows (e.g. `### Refine / X (ts)`)
+    is deliberately left standing: it carries no content of its own and is
+    already dropped by `narrative_text`'s own heading-line rule.
+
+    Pairing is a single left-to-right walk, not "nearest close anywhere
+    later": an open is tracked until either a close pairs it (span removed)
+    or another open is seen first, which replaces it as the tracked
+    (unpaired) open — so a close can only ever match the open immediately
+    before it, never one separated by an intervening open.
+
+    An opening marker with **no** matching close anywhere later in the text
+    is left untouched — that is a journal already on disk from before this
+    marker existed, and the older structure-inferring rules elsewhere in this
+    module (the fenced-aware piece split feeding `_is_generated_block`, and
+    the blank-line/heading-scoped generated-note handling in
+    `narrative_text`) still apply to it unchanged, so it keeps excluding
+    exactly as it does today.
+    """
+    out: list[str] = []
+    last = 0
+    open_start: Optional[int] = None
+    for m in _GENERATED_MARKER_LINE_RE.finditer(text):
+        if m.group("open") is not None:
+            open_start = m.start()
+        elif open_start is not None:
+            out.append(text[last:open_start])
+            last = m.end()
+            open_start = None
+        # else: a close with no open currently tracked — writers never emit
+        # one, ignore defensively rather than error on a hand-edited file.
+    out.append(text[last:])
+    return "".join(out)
 
 
 def _fenced_spans(text: str) -> list[tuple[int, int]]:
@@ -232,6 +308,7 @@ def narrative_text(body: str) -> str:
     content-only way to tell the two apart — filtering by structure is the
     honest resolution, not a documentation gap to code around.
     """
+    body = _strip_closed_generated_spans(body)
     m = _STAGE_BLOCK_RE.search(body)
     preamble = body[: m.start()] if m else body
     stage_area = body[m.start():] if m else ""
@@ -266,11 +343,15 @@ def narrative_text(body: str) -> str:
             in_generated_note = False
             continue
         if stripped == GENERATED_MARKER:
-            # Scopes to just the note that follows, not the whole stage
-            # block — a `## [ts] Stage:` piece can hold both a generated note
-            # (sync/catalog housekeeping) and human content appended by a
-            # later `advance_stage` call (10188 follow-up item 2). Ends at
-            # the next blank line or heading.
+            # A marker seen here has no matching GENERATED_END_MARKER —
+            # `_strip_closed_generated_spans` already removed every closed
+            # span, markers and all, before this loop ever ran. This is the
+            # unclosed-marker fallback for a journal already on disk from
+            # before the close marker existed: scopes to just the note that
+            # follows, not the whole stage block — a `## [ts] Stage:` piece
+            # can hold both a generated note (sync/catalog housekeeping) and
+            # human content appended by a later `advance_stage` call — ending
+            # at the next blank line or heading, same as it always has.
             in_generated_note = True
             continue
         if in_generated_note:
@@ -496,10 +577,11 @@ class Journal:
         # Lean Find block, consistent with the other stages — the Find guidance
         # lives in the template's `## Find` fill-in section, not re-printed here.
         marker = f"{GENERATED_MARKER}\n" if (generated and note) else ""
+        closer = f"{GENERATED_END_MARKER}\n" if (generated and note) else ""
         find_block = (
             f"\n## [{ts}] Stage: find\n\n"
             f"**Title:** {title}\n\n"
-            + (f"{marker}{note}\n" if note else "")
+            + (f"{marker}{note}\n{closer}" if note else "")
         )
         text = _join_frontmatter(fm, body_template.rstrip() + "\n" + find_block)
         _atomic_write(path, text)
@@ -541,6 +623,7 @@ class Journal:
         ts = _now_iso()
         was_idempotent = entry.current_stage == stage
         marker = f"{GENERATED_MARKER}\n" if (generated and note) else ""
+        closer = f"{GENERATED_END_MARKER}\n" if (generated and note) else ""
 
         if was_idempotent:
             print(
@@ -550,7 +633,7 @@ class Journal:
             )
             new_body = entry.body
             if note:
-                new_body = entry.body.rstrip() + f"\n\n{marker}_Note ({ts}):_ {note}\n"
+                new_body = entry.body.rstrip() + f"\n\n{marker}_Note ({ts}):_ {note}\n{closer}"
         else:
             # A lean transition record: timestamp + note. The FORGE guidance
             # (what to capture at each stage) lives once in the template's
@@ -558,7 +641,7 @@ class Journal:
             # duplicated it and buried the actual notes (ISA 2026-07-22).
             block = (
                 f"\n## [{ts}] Stage: {stage}\n\n"
-                + (f"{marker}{note}\n" if note else "_(no note)_\n")
+                + (f"{marker}{note}\n{closer}" if note else "_(no note)_\n")
             )
             new_body = entry.body.rstrip() + "\n" + block
 
@@ -588,7 +671,8 @@ class Journal:
         entry = self.read(detection_id)
         ts = _now_iso()
         marker = f"{GENERATED_MARKER}\n" if generated else ""
-        block = f"\n### {heading} ({ts})\n{marker}\n{body.strip()}\n"
+        closer = f"\n{GENERATED_END_MARKER}\n" if generated else ""
+        block = f"\n### {heading} ({ts})\n{marker}\n{body.strip()}\n{closer}"
         new_fm = {**entry.frontmatter, "updated": ts}
         _atomic_write(entry.path, _join_frontmatter(new_fm, entry.body.rstrip() + "\n" + block))
 
@@ -604,6 +688,14 @@ class Journal:
         unreadable file (`OSError`), and frontmatter that parses to something
         other than a mapping — e.g. a YAML list — all count. Mirrors
         `Catalog.iter_records`' tolerance of a bad catalog YAML.
+
+        Frontmatter with no usable ``id`` also counts (10188 follow-up item
+        3): every journal ADEF itself ever writes gets one from `create`, so a
+        file without one — e.g. a stray file with no frontmatter at all — is
+        malformed, not a detection, and must not enter the corpus under its
+        filename via `JournalEntry.detection_id`'s `path.stem` fallback. That
+        fallback itself is untouched — other callers may rely on it — this
+        only decides corpus membership.
         """
         for child in sorted(self._dir.glob("D-*.md")):
             try:
@@ -611,6 +703,8 @@ class Journal:
                 fm, body = _split_frontmatter(text)
                 if not isinstance(fm, dict):
                     raise ValueError(f"frontmatter is a {type(fm).__name__}, not a mapping")
+                if not fm.get("id"):
+                    raise ValueError("frontmatter has no 'id'")
             except (yaml.YAMLError, UnicodeDecodeError, OSError, ValueError) as exc:
                 resolved = child.resolve()
                 if resolved not in _WARNED_MALFORMED:
@@ -644,6 +738,7 @@ class Journal:
 __all__ = [
     "FORGE_STAGES",
     "GENERATED_MARKER",
+    "GENERATED_END_MARKER",
     "Journal",
     "JournalEntry",
     "JournalError",
