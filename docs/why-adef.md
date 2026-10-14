@@ -50,7 +50,7 @@ You should NOT adopt ADEF if:
 
 - You don't have a place where production rules live yet — fix that first.
 - You're looking for a SIEM replacement, a log shipper, or a vendor connector. ADEF ships none of those and never will (see [anti-goals](./roadmap.md#anti-goals)).
-- You want web-UI-driven detection authoring. v0.1.0 is CLI + MCP only.
+- You want web-UI-driven detection authoring. ADEF is CLI + MCP only.
 
 ## Adoption path
 
@@ -80,7 +80,7 @@ By the end of a quarter, the team is at L1 (Documented) → L2 (Searchable) on t
 
 ## What ADEF deliberately is not
 
-A framework's anti-goals say more than its goals. ADEF v0.1.0 is **not**:
+A framework's anti-goals say more than its goals. ADEF is **not**:
 
 - A new YAML format. The four engine types (`sigma`, `sql`, `sch_sql`, `composite`) are taken as given. No new engines.
 - A vendor connector layer. No CrowdStrike, Splunk, SentinelOne, etc. ADEF reads upstream YAML metadata; nothing more.
@@ -92,5 +92,5 @@ A framework's anti-goals say more than its goals. ADEF v0.1.0 is **not**:
 
 - [methodology.md](./methodology.md) — what FORGE actually is, stage by stage.
 - [maturity-model.md](./maturity-model.md) — five levels, where to start, what to skip.
-- [roadmap.md](./roadmap.md) — what's coming after v0.1.0; what's on the anti-goal list.
+- [roadmap.md](./roadmap.md) — what's shipped, what's coming, and what's on the anti-goal list.
 - [north-star.md](./north-star.md) — the v1 demo flow ADEF is converging toward.

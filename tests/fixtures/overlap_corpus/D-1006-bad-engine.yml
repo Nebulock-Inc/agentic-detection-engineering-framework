@@ -1,0 +1,13 @@
+id: D-1006
+title: "Invalid engine value for the four-engine constraint test"
+rule_ref: fixtures/D-1006.yml
+original_path: /fixtures/D-1006.yml
+platform: windows
+kind: atomic
+engine: custom_sql
+format: sql
+query: "`endpoint.os.type` ILIKE 'win'"
+mitre: [T1055]
+data_source: edr
+status: draft
+stage: refine

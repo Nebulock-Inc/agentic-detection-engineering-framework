@@ -1,7 +1,7 @@
 # Creating Extraction Profiles
 
 `adef catalog` recognizes Sigma, Splunk ESCU, Splunk `savedsearches.conf`,
-Panther, Nebulock JSON exports, and raw `.sql`/`.kql`/`.cql` out of the box.
+Panther, and raw `.sql`/`.kql`/`.cql` out of the box.
 Everything else — your
 in-house YAML wrapper, a vendor export we haven't met — shows up as
 **unclaimed**. An *extraction profile* teaches ADEF the format: a small YAML
@@ -33,7 +33,7 @@ Open two or three sample files from one cluster and fill in the map:
 
 ```yaml
 # one file per format; name it after the format
-name: nebulock-scheduled-sql          # kebab-case, unique
+name: acme-scheduled-sql          # kebab-case, unique
 version: 1
 signature:                            # how ADEF recognizes the format
   container: yaml                     # yaml | json | toml (toml needs Python 3.11+)
@@ -59,6 +59,54 @@ type shares those keys (a suppression list, a pack), exclude it with
 `none_keys`. Profiles are checked **before** built-in recognizers, so a
 profile can also override how ADEF reads a format it thinks it knows.
 
+### Bulk exports — many rules per file
+
+Vendor and API exports usually hold many rules per file, and often store the
+query under a different key per rule type. Three optional keys cover that:
+
+```yaml
+name: acme-rules-export
+version: 1
+signature:
+  container: json
+  records: data[]                     # fan the envelope out: one rule per element
+  all_keys: [rule_id, rule_type, content]   # matched against each RECORD
+query_language: sql
+map:
+  title: title
+  query: [content.sql_query, content.query]  # fallbacks, tried in order
+  uuid: rule_id
+  mitre: tags[]
+platform:
+  path: tags[]
+  prefix: "os."                       # first tag starting `os.` → `windows`
+```
+
+- `signature.records` — a dot-path ending in `[]`. A file where the path
+  doesn't resolve is treated as a single record, so one profile claims an
+  API envelope (`{"data": [...]}`), a bare top-level array, and a
+  single-rule file alike. The signature keys are checked against each record,
+  not the envelope; records that don't match are skipped.
+  Every record in the file shares its path, so each is tracked by its own
+  content hash — **map `uuid` for any multi-record format.** Without it, an
+  edited record can't be matched to its old self and `adef sync` catalogs it
+  as new (the old one is orphaned, never silently overwritten).
+- Any `map` field may be a **list of dot-paths**: the first that yields a
+  value wins. Use it when rule types or format versions keep the same field
+  under different keys.
+- A single-value field (`title`, `data_source`, …) mapped to a list
+  (`data_source: log_sources[]`) takes the list's **first non-empty item**.
+  `query` is the exception: a list never fills it, since a query split into
+  parts is not its first part. `mitre` takes the whole list.
+- Editing a profile takes effect on the next `adef sync`, even for rule files
+  that haven't changed: sync compares what discovery derives now with the
+  stored record, not just the file hash. If an edit leaves a rule with no title
+  or platform, sync applies the same defaults as a fresh catalog: the file name
+  as the title, and `multi-platform` with a review flag.
+- `platform.prefix` (with `path`) picks the first value starting with the
+  prefix and keeps the rest, lowercased — for formats that carry platform as
+  a tag (`os.windows`, `platform:linux`).
+
 Notes on optional fields: `data_source` can usually be omitted for SQL/SPL/KQL
 formats — ADEF falls back to extracting the table/index literal from the query
 itself. If the format has no MITRE field, technique IDs mentioned in the
@@ -67,15 +115,15 @@ title/description/query text are picked up automatically.
 ## 3. Validate — the engine is the scoreboard
 
 ```bash
-adef profile lint nebulock-scheduled-sql.yml       # schema errors
-adef catalog /path/to/rules --dry-run --profile nebulock-scheduled-sql.yml
+adef profile lint acme-scheduled-sql.yml       # schema errors
+adef catalog /path/to/rules --dry-run --profile acme-scheduled-sql.yml
 ```
 
 The dry-run reports how many files the profile claimed and per-field
 extraction rates:
 
 ```
-Profile nebulock-scheduled-sql claimed 61 rules; title 100%, query 100%, mitre 3%, uuid 100%, ...
+Profile acme-scheduled-sql claimed 61 rules; title 100%, query 100%, mitre 3%, uuid 100%, ...
 ```
 
 Targets: `query` ≥ 95%, `title` ≥ 90%. A low rate means a wrong dot-path or
@@ -87,7 +135,7 @@ that's the enrichment queue, not a profile bug.
 
 ```bash
 mkdir -p $ADEF_WORKSPACE/config/profiles   # or ~/work/adef-workspace/config/profiles
-cp nebulock-scheduled-sql.yml $ADEF_WORKSPACE/config/profiles/
+cp acme-scheduled-sql.yml $ADEF_WORKSPACE/config/profiles/
 adef catalog /path/to/rules                # picks up all installed profiles
 ```
 
@@ -105,7 +153,7 @@ before installing. Same artifact, no hand-authoring.
 
 ## Worked examples
 
-- `examples/profiles/nebulock-hunt.yml` — a YAML in-house format.
+- `examples/profiles/acme-hunt.yml` — a YAML in-house format.
 - `examples/profiles/elastic-detection-rules.yml` — a **TOML** format
   (`elastic/detection-rules`). Shows a non-YAML container + nested-table/array
   paths (`rule.threat[].technique[].id`); validated at 2015/2015 rules claimed.

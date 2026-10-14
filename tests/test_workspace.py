@@ -1,4 +1,4 @@
-"""Tests for the canonical workspace resolver (ISA 2026-07-22 guardrail audit).
+"""Tests for the canonical workspace resolver.
 
 The bug: three divergent resolvers meant `adef catalog .` then `adef coverage`
 in the same dir could read *different* workspaces, and read commands silently

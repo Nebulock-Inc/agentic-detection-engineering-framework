@@ -1,4 +1,4 @@
-"""Tests for the needs_review rework (ISA 2026-07-21): review_reasons,
+"""Tests for the needs_review rework: review_reasons,
 declaration-based platform inheritance, no_mitre demotion, and the tier-2
 MITRE text-sweep for profile-claimed rules."""
 
@@ -20,9 +20,16 @@ from adef.core.rule_discovery import discover_rules, structural_reasons
 
 @pytest.fixture
 def ws(tmp_path, monkeypatch):
+    import adef.commands.detection as det
+
     ws = tmp_path / "ws"
     (ws / "journals").mkdir(parents=True)
     monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    # `detection list` fits the title into whatever the columns and the review
+    # flag leave over, and Rich's off-terminal default of 80 leaves almost
+    # nothing — these are reason-filter tests, not layout tests, so give them
+    # room (layout is covered in tests/test_detection_browse.py).
+    monkeypatch.setattr(det.console, "width", 120)
     return ws
 
 
@@ -82,6 +89,14 @@ def test_structural_reasons_exclude_no_mitre():
     assert structural_reasons(["no_mitre"]) == ()
 
 
+def test_a_gates_verdict_with_work_outstanding_surfaces_unprompted():
+    """`gates_conditional`/`gates_time_box` were only reachable by naming them, so a
+    bare `--needs-review` — the "what needs me?" question — missed a rule deployed
+    on an unmet prerequisite or past its expiry. They are warnings, not a queue."""
+    assert structural_reasons(["gates_conditional"]) == ("gates_conditional",)
+    assert structural_reasons(["gates_time_box"]) == ("gates_time_box",)
+
+
 # --------------------------------------------------------------------------- #
 # Platform inheritance from declared schemas
 # --------------------------------------------------------------------------- #
@@ -111,6 +126,33 @@ def test_platform_inherited_from_declarations(ws, tmp_path):
     assert "no_platform" in broad["review_reasons"]
 
 
+def test_a_declaration_platform_that_isnt_a_path_segment_doesnt_kill_the_run(ws, tmp_path):
+    """`platform: Windows` is free text the user wrote; the bucket is a directory.
+
+    Capitalized or spaced, it reached `record_path` verbatim and refused the
+    *entire* repo — `--dry-run` included, since the path pre-flight runs before
+    the report. One unusable declaration value took out every unrelated rule in
+    the catalog with it. Unusable now means the inheritance simply doesn't happen.
+    """
+    decl = tmp_path / "decl.yml"
+    raw = yaml.safe_load(yaml.safe_dump(DECL))
+    raw["sources"][0]["platform"] = "Windows Server"
+    decl.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    assert CliRunner().invoke(schema_cli, ["ingest", str(decl)]).exit_code == 0
+
+    result = CliRunner().invoke(catalog_cli, [str(_repo(tmp_path))])
+    assert result.exit_code == 0, result.output
+
+    pinned = next(
+        d
+        for d in (yaml.safe_load(p.read_text()) for p in (ws / "catalog").rglob("D-*.yml"))
+        if d["title"] == "Pinned rule"
+    )
+    # Back where it was before the inheritance pass ran: unresolved, not mis-filed.
+    assert pinned["platform"] == "multi-platform"
+    assert "no_platform" in pinned["review_reasons"]
+
+
 # --------------------------------------------------------------------------- #
 # list: structural headline + reason filters
 # --------------------------------------------------------------------------- #
@@ -134,6 +176,29 @@ def test_list_headline_and_reason_filters(ws, tmp_path):
         CliRunner().invoke(detection_cli, ["list", "--report", "json"]).output
     )
     assert all("review_reasons" in d for d in data)
+
+
+def test_a_hand_edited_scalar_reason_still_surfaces_in_the_queue(ws, tmp_path):
+    """The queue is read off a field humans edit, so the dash-less typo hid rules.
+
+    `review_reasons: invalid_mitre` read as 13 one-character reasons: bare
+    `--needs-review` matched no structural reason and `--needs-review
+    invalid_mitre` — the query that would have found it — matched nothing either.
+    A rule mapped to a technique that doesn't exist, silently out of every triage
+    view. Coerced in `Catalog.iter_records`, which every reader goes through.
+    """
+    from adef.core.catalog import Catalog
+
+    assert CliRunner().invoke(catalog_cli, [str(_repo(tmp_path))]).exit_code == 0
+    path, data = Catalog(ws).find_record("D-0001")
+    Catalog(ws).write_raw(path, {**data, "review_reasons": "invalid_mitre",
+                                 "needs_review": True})
+
+    out = CliRunner().invoke(
+        detection_cli, ["list", "--needs-review", "invalid_mitre"]
+    ).output
+    assert "D-0001" in out
+    assert "D-0001" in CliRunner().invoke(detection_cli, ["list", "--needs-review"]).output
 
 
 # --------------------------------------------------------------------------- #

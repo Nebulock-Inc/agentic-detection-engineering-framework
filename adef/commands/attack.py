@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from adef.core.attack import SNAPSHOT_NAME, attack_reference
 
@@ -29,7 +30,7 @@ def info() -> None:
     """Show the active snapshot's ATT&CK version and counts."""
     ref = attack_reference()
     console.print(
-        f"ATT&CK [bold]{ref.attack_version or '?'}[/bold] — "
+        f"ATT&CK [bold]{escape(str(ref.attack_version or '?'))}[/bold] — "
         f"{len(ref.techniques)} techniques, {len(ref.tactics)} tactics."
     )
 
@@ -41,21 +42,21 @@ def show(technique_id: str) -> None:
     ref = attack_reference()
     res = ref.resolve(technique_id)
     if not res.valid:
-        console.print(f"[red]{res.id} is not a valid ATT&CK technique ID.[/red]")
+        console.print(f"[red]{escape(str(res.id))} is not a valid ATT&CK technique ID.[/red]")
         raise SystemExit(1)
     entry = ref.technique(res.id)
     assert entry is not None  # valid ⇒ present
-    console.print(f"[bold]{res.id}[/bold]  {entry.get('name', '')}")
+    console.print(f"[bold]{escape(str(res.id))}[/bold]  {escape(str(entry.get('name', '')))}")
     tactics = ref.tactics_for(res.id)
     if tactics:
-        console.print(f"  tactics: {', '.join(tactics)}")
+        console.print(f"  tactics: {escape(', '.join(tactics))}")
     if entry.get("parent"):
-        console.print(f"  parent:  {entry['parent']}")
+        console.print(f"  parent:  {escape(str(entry['parent']))}")
     if res.deprecated:
         console.print("  [yellow]deprecated[/yellow]")
     if res.revoked:
         repl = f" → {res.superseded_by}" if res.superseded_by else ""
-        console.print(f"  [yellow]revoked[/yellow]{repl}")
+        console.print(f"  [yellow]revoked[/yellow]{escape(str(repl))}")
 
 
 @attack.command()
@@ -85,7 +86,7 @@ def refresh(workspace: Path | None) -> None:
     try:
         bundle = _generate.fetch_bundle()
     except Exception as exc:  # network/parse — report, don't crash the CLI
-        console.print(f"[red]Refresh failed:[/red] {exc}")
+        console.print(f"[red]Refresh failed:[/red] {escape(str(exc))}")
         console.print("The shipped snapshot is still in use.")
         raise SystemExit(1) from exc
 
@@ -94,7 +95,7 @@ def refresh(workspace: Path | None) -> None:
 
     out.write_text(json.dumps(snapshot, indent=1) + "\n", encoding="utf-8")
     console.print(
-        f"[green]Wrote[/green] {out} — ATT&CK {snapshot['attack_version']}, "
+        f"[green]Wrote[/green] {escape(str(out))} — ATT&CK {escape(str(snapshot['attack_version']))}, "
         f"{len(snapshot['techniques'])} techniques."
     )
 

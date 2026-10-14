@@ -1,7 +1,7 @@
 """Data-source declarations — the user-provided document schemas are built from.
 
 The declaration format (v1) is a YAML inventory of data sources and their
-fields (see ISA 2026-07-20). Users produce it from artifacts they already
+fields. Users produce it from artifacts they already
 have (Splunk ``| fieldsummary``, KQL ``| getschema``, Elastic mappings, vendor
 data dictionaries) — by hand, recipe, or agent. ADEF ingests it into one
 ``schema/<source>.yml`` (``schema_version: 2``) per source.
@@ -72,7 +72,7 @@ class DeclaredSource:
     platform: str = ""
     query_language: str = ""
     description: str = ""
-    # Free-form addressing literals (ISA 2026-07-21): every way a query might
+    # Free-form addressing literals: every way a query might
     # reach this source besides its name — e.g. for Splunk
     # ``{index: wineventlog, sourcetype: XmlWinEventLog:...}``, for Panther
     # ``{log_type: AWS.CloudTrail, table: panther_logs.public.aws_cloudtrail}``.
@@ -268,7 +268,7 @@ class Drift:
 def ingest_source(source: DeclaredSource, schema_dir: Path) -> tuple[Path, Drift]:
     """Write ``schema/<source>.yml`` (v2) for one declared source.
 
-    Merge semantics (ISA 2026-07-20): the ``declared`` field set is replaced by
+    Merge semantics: the ``declared`` field set is replaced by
     the declaration; ``corrected`` fields in the existing file are preserved
     and shadow same-named incoming fields; drift is reported against the
     previous ``declared`` set.
@@ -335,7 +335,7 @@ def address_literals(schema_data: dict) -> set[str]:
     """Every literal a query might use to address this source: name + scope values.
 
     ``name`` is what the schema *is*; ``scope`` is every way a query might
-    *address* it (ISA 2026-07-21). Keys are never interpreted.
+    *address* it. Keys are never interpreted.
     """
     literals = {str(schema_data.get("source", ""))}
     for v in (schema_data.get("scope") or {}).values():
@@ -344,12 +344,24 @@ def address_literals(schema_data: dict) -> set[str]:
     return literals
 
 
+def declared_aliases(fld: dict) -> list[str]:
+    """A declared field's non-empty aliases.
+
+    A hand-edited ``aliases: Image`` scalar is one alias, not five
+    one-character ones (iterating the string would yield ``I``, ``m``, ...).
+    """
+    raw = fld.get("aliases") or []
+    if isinstance(raw, str):
+        return [raw]
+    return [str(a) for a in raw if str(a)]
+
+
 def known_field_names(schema_data: dict) -> set[str]:
     """Every name a rule may legitimately reference: field names + aliases."""
     names: set[str] = set()
     for fld in schema_data.get("fields", []):
         names.add(str(fld.get("name", "")))
-        names.update(str(a) for a in fld.get("aliases", []))
+        names.update(declared_aliases(fld))
     names.discard("")
     return names
 
@@ -365,6 +377,7 @@ __all__ = [
     "DeclaredSource",
     "Drift",
     "address_literals",
+    "declared_aliases",
     "ingest_source",
     "known_field_names",
     "lint_declaration_dict",

@@ -1,4 +1,4 @@
-"""Lint the bundled Claude skills (`claude-plugin/skills/*/SKILL.md`).
+"""Lint the bundled Claude skills (`adef/data/claude-plugin/skills/*/SKILL.md`).
 
 Not a behavioral test — skills are model instructions, not code — but it pins the
 structural invariants a skill must hold to load and perform well:
@@ -18,10 +18,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from adef.commands.install_skills import _bundled_plugin_dir
+
 import pytest
 import yaml
 
-SKILLS_DIR = Path(__file__).resolve().parents[1] / "claude-plugin" / "skills"
+# Resolved through the same helper the command uses, not a path literal: that
+# way this lint runs against whatever `adef install-skills` would actually copy,
+# and it breaks if the bundled dir moves again.
+SKILLS_DIR = _bundled_plugin_dir() / "skills"
 
 DESCRIPTION_MAX_CHARS = 1024  # Anthropic frontmatter ceiling
 BODY_MAX_LINES = 500          # Anthropic body ceiling for optimal performance
@@ -65,3 +70,53 @@ def test_skill_is_well_formed(skill: Path) -> None:
     assert body_lines <= BODY_MAX_LINES, (
         f"{skill}: body is {body_lines} lines (max {BODY_MAX_LINES})"
     )
+
+
+@pytest.mark.parametrize("stage", ["observe", "refine", "govern", "evolve"])
+def test_forge_stage_names_the_command_for_every_stage_it_claims(stage: str) -> None:
+    """A skill that claims a stage and never names its command is a doc, not a
+    driver.
+
+    `forge-stage`'s description promises all four stages after Find. Its body
+    named `adef detection observe` and `refine` and — for over two months —
+    neither `govern` nor `evolve`: the Govern section described what to think
+    about with no transition to record it on, and Evolve said "with evidence"
+    without naming the command that reads the evidence. Generic on purpose, so
+    a fifth stage or a renamed one re-flags this instead of needing a new
+    assertion.
+    """
+    text = (SKILLS_DIR / "forge-stage" / "SKILL.md").read_text(encoding="utf-8")
+    assert f"adef detection {stage}" in text
+
+
+def test_forge_stage_points_evolve_at_the_health_it_reads() -> None:
+    """Evolve's recommendations are derived from ingested counts, and the chain
+    reports `insufficient-data` when there are none. A skill that drives Evolve
+    without naming `adef ingest` leaves the agent re-running the stage, or
+    worse, proposing a threshold from an impression of the volume."""
+    text = (SKILLS_DIR / "forge-stage" / "SKILL.md").read_text(encoding="utf-8")
+    assert "adef ingest" in text
+    assert "adef health show" in text
+    assert "insufficient-data" in text
+
+
+def test_forge_stage_documents_current_refine_flags() -> None:
+    """`forge-stage` is the skill that drives `adef detection refine` — it
+    went stale on the actual CLI flags/behavior once. Pin the specific
+    things that were wrong so a future refine change re-flags this skill
+    instead of drifting silently again."""
+    text = (SKILLS_DIR / "forge-stage" / "SKILL.md").read_text(encoding="utf-8")
+
+    # The mode to recommend for agent-driven use, and the flag that forces a
+    # re-run once already at refine.
+    assert "--similarity-mode agent" in text
+    assert "--chain" in text
+
+    # Native-by-default is the current behavior; `WrapperUnavailable` is now
+    # the *exceptional* path (an explicit broken override), not the norm.
+    assert "native by default" in text
+
+    # `adef detection refine` prints the agent-mode
+    # shortlist itself — the skill must no longer send the reader back
+    # through `detection show` once per candidate to read its query.
+    assert "for each candidate you are about to judge" not in text

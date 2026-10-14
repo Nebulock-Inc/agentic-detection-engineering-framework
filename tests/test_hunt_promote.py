@@ -65,6 +65,80 @@ def test_promote_id_clears_catalog_records(tmp_path, monkeypatch):
     assert result.detection_id == "D-0008"
 
 
+def test_promoted_note_is_findable_by_hunt_id(tmp_path, monkeypatch):
+    # the hunt
+    # link is deliberately left unmarked/indexed — it is a fact recorded
+    # nowhere else, and "which detections came from H-0042?" is a real search
+    # question. Confirms the opposite of sync's housekeeping notes.
+    #
+    # Searching the bare hunt id would false-pass here even with a broken
+    # `generated=True` marking: the stub's title ("Promoted H-0042") and the
+    # unmarked fallback title both already carry the hunt id independently of
+    # the note. "upstream" appears ONLY in the note text, not in either title
+    # form, so it can only be found if the *note* itself is indexed.
+    _stub_generator(monkeypatch)
+    agent, ws = _agent(tmp_path)
+
+    result = agent.run("H-0042")
+    from adef.core.journal import Journal
+    text = Journal(ws / "journals").read(result.detection_id).body
+    assert "upstream hunt H-0042" in text  # sanity: the note we're about to search for
+
+    from adef.core.corpus import build_corpus
+    from adef.core.memory import MemoryIndex
+
+    index = MemoryIndex()
+    index.build(build_corpus(ws))
+    hits = index.search("upstream")
+    assert any(h.detection_id == result.detection_id for h in hits)
+
+
+def test_dry_run_without_gates_is_refused_not_ignored(tmp_path, monkeypatch):
+    """The generator path has no dry run. Accepting the flag there meant
+    `hunt-promote H-0042 --dry-run` wrote a staging YAML and a journal while the
+    user believed they had asked for a preview."""
+    from click.testing import CliRunner
+
+    from adef.commands.hunt_promote import hunt_promote
+
+    _stub_generator(monkeypatch)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(tmp_path / "ws"))
+    result = CliRunner().invoke(hunt_promote, ["H-0042", "--dry-run"])
+
+    assert result.exit_code == 2
+    assert "--dry-run is only supported with --gates" in result.output
+    assert not list((tmp_path / "ws" / "journals").glob("D-*.md"))
+
+
+def test_a_hunt_id_alongside_gates_is_refused_not_ignored(tmp_path, monkeypatch):
+    """The two modes take their hunt from different places — `--gates` reads it out
+    of the document. Accepting a positional too meant a mismatched pair imported the
+    document's hunt and reported success, which is the one case worth catching."""
+    from click.testing import CliRunner
+
+    from adef.commands.hunt_promote import hunt_promote
+
+    ws = tmp_path / "ws"
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    doc = tmp_path / "H-0041_GATES.yaml"
+    doc.write_text(
+        "hunt_metadata: {hunt_id: H-0041, platforms: [windows]}\n"
+        "gates_validation: {verdict: PROMOTE}\n"
+        "detections:\n"
+        "- candidate_id: a\n"
+        "  gates_assessment: {verdict: PROMOTE, base_score: 4.5}\n"
+        "  deployment: {engine: sql, detection_logic: {query: 'SELECT 1'}}\n",
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(hunt_promote, ["H-0099", "--gates", str(doc)])
+
+    assert result.exit_code == 2
+    # Rich soft-wraps the line, so match fragments rather than the whole sentence.
+    assert "--gates takes the hunt ID from the document" in result.output
+    assert "(H-0099)" in result.output
+    assert not list(ws.glob("journals/D-*.md"))  # nothing imported under either ID
+
+
 def test_missing_generator_is_a_clean_error(tmp_path, monkeypatch):
     monkeypatch.delenv("ADEF_HUNT_RULE_GENERATOR", raising=False)
     agent, _ws = _agent(tmp_path)

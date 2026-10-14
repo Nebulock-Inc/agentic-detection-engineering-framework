@@ -1,13 +1,18 @@
-"""``MemoryIndex`` — read-only BM25 index over journal markdown.
+"""``MemoryIndex`` — read-only BM25 index over the workspace corpus.
 
-Builds a small in-memory inverted index across every ``D-XXXX.md`` file in a
-journals directory. Search returns ranked entries with the matched stage block
-truncated to a snippet so the caller (CLI, MCP, agent) can reason about prior
-detection work without re-reading every journal.
+Builds a small in-memory inverted index over ``CorpusEntry`` objects (see
+``adef.core.corpus``) and scores each entry's ``index_text``. Search returns
+ranked entries with a snippet so the caller (CLI, MCP, agent) can reason about
+prior detection work without re-reading every journal or catalog record.
 
 The implementation is deliberately self-contained: no external BM25 dependency
 (``rank_bm25`` etc.). v0.1.0 prefers zero added install surface; we can swap
 later if corpora grow large enough to matter.
+
+This module no longer reads the filesystem or knows what a journal block is:
+membership (which detections exist, and from which artifacts) belongs to
+``adef.core.corpus``, and block/provenance structure belongs to
+``adef.core.journal``.
 """
 
 from __future__ import annotations
@@ -17,9 +22,10 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import TYPE_CHECKING, Iterable
 
-from adef.core.journal import Journal, JournalEntry
+if TYPE_CHECKING:
+    from adef.core.corpus import CorpusEntry
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
@@ -29,34 +35,6 @@ _BM25_B = 0.75
 
 def _tokenize(text: str) -> list[str]:
     return [t.lower() for t in _TOKEN_RE.findall(text)]
-
-
-# The first timestamped stage block marks the end of the static template
-# preamble — everything before it is fill-in scaffolding, not reasoning.
-_STAGE_BLOCK_RE = re.compile(r"^## \[.+?\] Stage:", re.MULTILINE)
-
-
-def _clean_for_snippet(text: str) -> str:
-    """Drop journal chrome so a snippet shows matched reasoning, not scaffolding:
-    the static-template preamble (up to the first ``## [ts] Stage:`` block), stage
-    headings, blockquotes, the echoed title, and 'Catalogued from…' housekeeping.
-    """
-    m = _STAGE_BLOCK_RE.search(text)
-    if m:
-        text = text[m.start():]  # keep only the real stage blocks (+ appended record text)
-    keep: list[str] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        if line.startswith("#") or line.startswith(">"):  # stage headings / blockquote
-            continue
-        if line.startswith("**Title:**"):                 # the echoed title
-            continue
-        if "Catalogued from" in line and "adef" in line:   # housekeeping note
-            continue
-        keep.append(line)
-    return "\n".join(keep)
 
 
 @dataclass
@@ -73,55 +51,35 @@ class SearchHit:
 
 @dataclass
 class _Doc:
-    entry: JournalEntry
+    entry: "CorpusEntry"
     tokens: list[str]
-    text: str = ""  # the searchable text (journal body + any extra record text)
+    text: str = ""
     tf: Counter = field(default_factory=Counter)
     length: int = 0
 
 
 class MemoryIndex:
-    """BM25 index over journal markdown bodies.
+    """BM25 index over the workspace corpus.
 
-    The index is built lazily on first ``search``; callers can pass an explicit
-    iterable of entries to skip filesystem traversal (used by tests).
+    Takes ``CorpusEntry`` objects and scores ``entry.index_text``. It no longer
+    reads the filesystem or knows what a journal block is: membership belongs to
+    ``adef.core.corpus`` and block structure to ``adef.core.journal``.
     """
 
-    def __init__(self, journals_dir: Optional[Path] = None) -> None:
-        self._journals_dir = journals_dir
+    def __init__(self) -> None:
         self._docs: list[_Doc] = []
         self._df: Counter[str] = Counter()
         self._avgdl: float = 0.0
+        self._n: int = 0
         self._built = False
 
-    def _iter_source_entries(self) -> Iterable[JournalEntry]:
-        if self._journals_dir is None:
-            return iter(())
-        return Journal(self._journals_dir).iter_entries()
-
-    def build(
-        self,
-        entries: Optional[Iterable[JournalEntry]] = None,
-        extra_text_for: Optional["Callable[[JournalEntry], str]"] = None,
-    ) -> None:
-        """Build the index over journal bodies.
-
-        ``extra_text_for(entry) -> str`` (optional) supplies extra searchable
-        text per detection — the catalog record's title/mitre/platform/query —
-        so a detection is findable by *what it detects*, not only what its
-        journal says. The command layer fills this from the catalog (keeping
-        this module decoupled from ``Catalog``).
-        """
-        source = list(entries) if entries is not None else list(self._iter_source_entries())
+    def build(self, entries: Iterable["CorpusEntry"]) -> None:
+        """Build the index over a corpus."""
         self._docs = []
         self._df = Counter()
         total_len = 0
-        for entry in source:
-            text = entry.body
-            if extra_text_for is not None:
-                extra = extra_text_for(entry)
-                if extra:
-                    text = f"{text}\n{extra}"
+        for entry in entries:
+            text = entry.index_text
             tokens = _tokenize(text)
             tf = Counter(tokens)
             doc = _Doc(entry=entry, tokens=tokens, text=text, tf=tf, length=len(tokens))
@@ -129,11 +87,27 @@ class MemoryIndex:
                 self._df[term] += 1
             total_len += doc.length
             self._docs.append(doc)
-        self._avgdl = (total_len / len(self._docs)) if self._docs else 0.0
+        # Average only over non-empty documents. This is not a divide-by-zero
+        # guard — `_score` already returns 0.0 whenever `doc.length == 0 or
+        # self._avgdl == 0`, a guard that predates this change. It's about
+        # what `avgdl` means: folding in zero-length documents (a
+        # template-only journal with no record) would pull `avgdl` down,
+        # which *deflates* every other document's score (BM25's length-norm
+        # term grows, not shrinks, when a doc is long relative to `avgdl`),
+        # not inflate it. Averaging over documents that actually have content
+        # keeps `avgdl` representative of the corpus being scored.
+        scored = [d for d in self._docs if d.length > 0]
+        self._avgdl = (total_len / len(scored)) if scored else 0.0
+        # `n` in the idf formula must match `avgdl`'s population: a
+        # zero-length doc (an un-noted draft) can never score (`_score`
+        # returns 0.0 for it), so counting it in `n` inflates the document
+        # count without adding anything scorable, compressing idf's relative
+        # weighting between rare and common terms.
+        self._n = len(scored)
         self._built = True
 
     def _idf(self, term: str) -> float:
-        n = len(self._docs)
+        n = self._n
         df = self._df.get(term, 0)
         if df == 0:
             return 0.0
@@ -152,12 +126,10 @@ class MemoryIndex:
             score += idf * (f * (_BM25_K1 + 1)) / denom
         return score
 
-    def _snippet(self, body: str, query_terms: list[str], width: int = 240) -> str:
-        # Snippet from a *cleaned* view: drop the empty template scaffolding
-        # (unfilled `- **Field:**` lines, the `## Stage` headers, the blockquote
-        # header) and housekeeping ("Catalogued from…") so the snippet shows the
-        # actual matched reasoning, not boilerplate. (ISA 2026-07-22.)
-        text = _clean_for_snippet(body)
+    def _snippet(self, text: str, query_terms: list[str], width: int = 240) -> str:
+        # `text` is already `CorpusEntry.index_text`: template scaffolding,
+        # machine-generated blocks, and housekeeping are gone before it gets
+        # here, so no second cleaning pass is needed.
         if not query_terms:
             return text[:width].strip().replace("\n", " ")
         lowered = text.lower()
@@ -173,7 +145,7 @@ class MemoryIndex:
     def search(self, query: str, limit: int = 10) -> list[SearchHit]:
         """Return up to ``limit`` ranked hits for ``query``."""
         if not self._built:
-            self.build()
+            self.build([])
         query_terms = _tokenize(query)
         if not query_terms or not self._docs:
             return []
@@ -190,9 +162,9 @@ class MemoryIndex:
                 SearchHit(
                     detection_id=entry.detection_id,
                     score=round(score, 4),
-                    title=entry.frontmatter.get("title", ""),
+                    title=entry.title,
                     current_stage=entry.current_stage,
-                    snippet=self._snippet(doc.text or entry.body, query_terms),
+                    snippet=self._snippet(doc.text, query_terms),
                     path=entry.path,
                 )
             )

@@ -89,11 +89,15 @@ def test_interactive_journey_fresh_routes_to_schema_flow(tmp_path, monkeypatch):
 
 def test_interactive_reports_capabilities_and_env_hint(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    # Force the not-installed branch: whether the dev env has `[mcp]` must not
+    # decide which half of this test runs.
+    monkeypatch.setattr("adef.commands.init._mcp_installed", lambda: False)
+    monkeypatch.setattr("adef.core.doctor.editable_install", lambda: False)
     result, ws = _run_interactive(tmp_path, "1\n\n\nn\n")
     assert result.exit_code == 0, result.output
     assert "MCP server" in result.output  # detected either way, never silent
-    if "not installed" in result.output:
-        assert '".[mcp]"' in result.output  # the extra must render, not be eaten as markup
+    # the extra must render, not be eaten as markup
+    assert "agentic-detection-engineering-framework[mcp]" in result.output
     assert "adef install-skills" in result.output
     assert "inactive until installed" in result.output
     # non-default workspace path → resolver hint

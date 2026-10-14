@@ -120,7 +120,7 @@ names (not aliases, macros, or calculated fields).
 
 Real repos almost always contain a format ADEF doesn't know — the first thing
 you'll hit outside the demo. `examples/inhouse-rules/` is a made-up
-"Nebulock hunt" format so you can experience the loop:
+"Acme hunt" format so you can experience the loop:
 
 ```bash
 adef catalog examples/inhouse-rules
@@ -132,15 +132,15 @@ adef catalog examples/inhouse-rules --dry-run --report json | grep top_level_key
 
 # A ready-made profile for this format ships in examples/profiles/.
 # Validate it — the engine reports per-field extraction rates (the scoreboard):
-adef profile lint examples/profiles/nebulock-hunt.yml
-adef catalog examples/inhouse-rules --dry-run --profile examples/profiles/nebulock-hunt.yml
+adef profile lint examples/profiles/acme-hunt.yml
+adef catalog examples/inhouse-rules --dry-run --profile examples/profiles/acme-hunt.yml
 # → claimed 3; title 100%, query 100%, uuid 100%, mitre 100% ...
 
 # Install it and catalog for real:
 mkdir -p $ADEF_WORKSPACE/config/profiles
-cp examples/profiles/nebulock-hunt.yml $ADEF_WORKSPACE/config/profiles/
+cp examples/profiles/acme-hunt.yml $ADEF_WORKSPACE/config/profiles/
 adef catalog examples/inhouse-rules
-adef detection list --rule-format nebulock-hunt
+adef detection list --rule-format acme-hunt
 ```
 
 For your own formats, the profile is ~15 lines of YAML you write once —

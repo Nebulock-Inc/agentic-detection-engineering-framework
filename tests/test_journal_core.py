@@ -93,7 +93,7 @@ def test_append_block_records_under_current_stage(journal):
 def test_refine_chain_not_rerun_on_idempotent_note(tmp_path, monkeypatch):
     """`refine --note` on a detection already at refine appends the note only —
     re-running the chain spammed duplicate Similarity/Overlap/Verification
-    blocks into the journal (live: D-1470, two triplets a minute apart).
+    blocks into the journal (two triplets a minute apart).
     `--chain` forces a re-run explicitly."""
     from click.testing import CliRunner
 
@@ -121,3 +121,25 @@ def test_refine_chain_not_rerun_on_idempotent_note(tmp_path, monkeypatch):
     assert r.exit_code == 0, r.output
     journal_text = (ws / "journals" / "D-0001.md").read_text(encoding="utf-8")
     assert journal_text.count("### Refine / Similarity") == 2  # explicit re-run
+
+
+def test_backward_stage_move_is_refused_unless_allowed(tmp_path):
+    # `detection observe` on a refined rule rewound it silently.
+    j = Journal(tmp_path)
+    j.create(detection_id="D-0001", title="t")
+    j.advance_stage("D-0001", "refine")
+    with pytest.raises(JournalError, match="back to observe"):
+        j.advance_stage("D-0001", "observe", note="late note")
+    entry = j.read("D-0001")
+    assert entry.current_stage == "refine"
+    assert "late note" not in entry.body
+    result = j.advance_stage("D-0001", "observe", allow_backward=True)
+    assert result.was_idempotent is False
+    assert j.read("D-0001").current_stage == "observe"
+
+
+def test_forward_and_same_stage_moves_need_no_flag(tmp_path):
+    j = Journal(tmp_path)
+    j.create(detection_id="D-0001", title="t")
+    j.advance_stage("D-0001", "govern")  # skipping ahead is fine
+    assert j.advance_stage("D-0001", "govern", note="n").was_idempotent

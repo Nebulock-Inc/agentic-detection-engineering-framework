@@ -1,10 +1,16 @@
 name: Tests
 
+# Every long-lived branch a PR can target must be listed here. A PR into a
+# branch this list omits runs no checks at all, and does so silently: there is
+# no skipped-check marker on the PR and nothing in `gh run list`, so the only
+# signal is the absence of one. Adding an integration branch without adding it
+# here leaves that whole line of work resting on whatever gate each author
+# happens to run locally.
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
 
 # Least-privilege default token: this workflow only reads the repo.
 permissions:

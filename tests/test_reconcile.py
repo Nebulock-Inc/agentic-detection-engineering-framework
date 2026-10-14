@@ -8,13 +8,16 @@ from adef.core.rule_discovery import DiscoveredRule
 from adef.core.reconcile import Action, reconcile
 
 
-def _existing(id, *, uuid="", source_hash="", rule_ref="", title="", query="",
+def _existing(id, *, uuid="", source_hash="", rule_ref="", title="T", query="q",
               mitre=None, status="draft", owner="", origin="catalogued"):
-    """A minimal existing-record dict as read from the catalog."""
+    """An existing-record dict as read from the catalog, its derived fields
+    matching what ``_disc`` yields by default (as a synced record's would)."""
     return {
         "id": id, "rule_uuid": uuid, "source_hash": source_hash,
         "rule_ref": rule_ref, "title": title, "query": query,
         "mitre": mitre or [], "status": status, "owner": owner, "origin": origin,
+        "platform": "multi-platform", "kind": "atomic", "format": "sigma",
+        "query_language": "sigma", "data_source": "", "support": "supported",
     }
 
 
@@ -54,7 +57,7 @@ def test_uuid_match_survives_rename(tmp_path):
 def test_duplicate_uuid_binds_each_file_by_path(tmp_path):
     """Two files sharing one UUID (a real repo data-quality bug) must each bind
     to the record with its own path — never collapse to one and orphan the
-    other (E2E 2026-07-27; ISA: wrong merge worse than duplicate)."""
+    other — a wrong identity merge is worse than a duplicate."""
     (tmp_path / "a.yml").write_text("x")
     (tmp_path / "b.yml").write_text("y")
     existing = [
@@ -99,7 +102,7 @@ def test_new_id_respects_journal_floor():
     """A NEW rule must not reuse an ID a journal-only detection already holds.
     The catalog max is D-0005, but a journal D-0009 exists (its catalog record
     was removed) — the new rule must clear both, not clobber D-0006.
-    CodeRabbit finding #96 / same shared-ID footgun as `detection new`."""
+    CodeRabbit finding / same shared-ID footgun as `detection new`."""
     existing = [_existing("D-0005", uuid="x", source_hash="h", rule_ref="repo/x.yml")]
     disc = _disc(uuid="brand-new", path="repo/z.yml")
     # No floor → old behavior, allocates just above the catalog max.
@@ -118,7 +121,7 @@ def test_missing_source_is_orphaned():
 
 def test_authored_record_never_orphaned():
     """A rule authored in ADEF has no upstream — sync must leave it untouched,
-    not orphan it (ISA 2026-07-22, "ADEF as a detection home")."""
+    not orphan it — see docs/detection-home.md."""
     existing = [_existing("D-0008", origin="authored", title="Authored in ADEF")]
     plan = reconcile(existing, [])  # no source repo match — would orphan a catalogued rule
     # No plan entry at all for the authored record → nothing written, still alive.
@@ -159,3 +162,91 @@ def test_counts_summary():
     assert counts[Action.MODIFIED] == 1
     assert counts[Action.NEW] == 1
     assert counts[Action.ORPHANED] == 0
+
+
+def _disc_mitre(mitre, **kw):
+    d = _disc(**kw)
+    d.mitre = tuple(mitre)
+    return d
+
+
+def test_empty_mitre_is_backfilled_from_source_even_when_unchanged():
+    # A record catalogued before discovery could read its mapping (ESCU
+    # `tags.mitre_attack_id`) must not stay unmapped until the file changes.
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1", mitre=[])]
+    plan = reconcile(existing, [_disc_mitre(["T1219"], uuid="abc", source_hash="h1")])
+    assert plan[0].action is Action.MODIFIED
+    assert plan[0].merged["mitre"] == ["T1219"]
+
+
+def test_existing_mitre_still_wins_over_source():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1", mitre=["T1003"])]
+    plan = reconcile(existing, [_disc_mitre(["T1219"], uuid="abc", source_hash="h2")])
+    assert plan[0].merged["mitre"] == ["T1003"]
+    plan = reconcile(existing, [_disc_mitre(["T1219"], uuid="abc", source_hash="h1")])
+    assert plan[0].action is Action.UNCHANGED
+
+
+def test_unchanged_file_with_rederived_fields_is_modified():
+    # a profile fix changed what discovery derives from the
+    # same bytes, but sync keyed "unchanged" on the file hash and kept the
+    # stale record until the file itself changed.
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1")]
+    existing[0]["data_source"] = ""
+    disc = _disc(uuid="abc", source_hash="h1")
+    disc.data_source = "Endpoint"
+    plan = reconcile(existing, [disc])
+    assert plan[0].action is Action.MODIFIED
+    assert plan[0].merged["data_source"] == "Endpoint"
+
+
+def test_unchanged_file_with_same_derivation_stays_unchanged():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1")]
+    plan = reconcile(existing, [_disc(uuid="abc", source_hash="h1")])
+    assert plan[0].action is Action.UNCHANGED
+
+
+def test_rederivation_that_loses_platform_or_title_is_modified():
+    # CodeRabbit: `_merge` falls back to the stored value when discovery
+    # yields none, which hid a profile edit that dropped the mapping.
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1", rule_ref="repo/r.yml")]
+    existing[0].update(platform="windows", title="Old title")
+    disc = _disc(uuid="abc", source_hash="h1", title="")  # no platform, no title now
+    plan = reconcile(existing, [disc])
+    assert plan[0].action is Action.MODIFIED
+
+
+def test_platform_fallback_matching_the_stored_default_stays_unchanged():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1")]
+    existing[0].update(platform="multi-platform", title="r")
+    plan = reconcile(existing, [_disc(uuid="abc", source_hash="h1", title="")])
+    assert plan[0].action is Action.UNCHANGED
+
+
+def test_a_derived_key_the_record_lacks_is_filled_once():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1")]
+    del existing[0]["query_language"]  # catalogued before the field existed
+    plan = reconcile(existing, [_disc(uuid="abc", source_hash="h1")])
+    assert plan[0].action is Action.MODIFIED
+    assert plan[0].merged["query_language"] == "sigma"
+
+
+def test_merged_record_carries_the_defaults_sync_writes():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1", rule_ref="repo/r.yml")]
+    existing[0].update(platform="windows", title="Old title")
+    plan = reconcile(existing, [_disc(uuid="abc", source_hash="h1", title="")])
+    assert (plan[0].merged["title"], plan[0].merged["platform"]) == ("r", "multi-platform")
+
+
+def test_a_lost_rule_uuid_is_rederivation():
+    existing = [_existing("D-0001", uuid="abc", source_hash="h1")]
+    plan = reconcile(existing, [_disc(uuid="", source_hash="h1")])  # hash still binds it
+    assert plan[0].action is Action.MODIFIED
+    assert plan[0].merged["rule_uuid"] == ""
+
+
+def test_a_stored_null_equals_an_empty_discovery():
+    existing = [_existing("D-0001", source_hash="h1", rule_ref="repo/r.yml")]
+    existing[0]["rule_uuid"] = None  # hand-edited / older shape
+    plan = reconcile(existing, [_disc(uuid="", source_hash="h1", path="repo/r.yml")])
+    assert plan[0].action is Action.UNCHANGED

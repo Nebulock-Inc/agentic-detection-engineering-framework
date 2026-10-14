@@ -10,6 +10,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ADEF wraps existing detection rules (YAML) with sibling markdown journals (`journals/D-XXXX.md`) that capture *why*, *how*, and *when next* for every detection. Rules stay in their upstream repositories; ADEF never modifies upstream YAML.
 
+## Direction of Integration (read before designing anything)
+
+**ADEF is built standalone and open-source first. Adopters integrate ADEF into their
+own stacks later — never the reverse.**
+
+Any private or in-house codebase — including the maintainers' own — is a *future
+adopter* of ADEF, not an input to it. When designing or implementing any feature:
+
+- A private codebase is **not a reference corpus**. Do not measure against it, sample
+  from it, or query its production data to settle an ADEF design question.
+- A private codebase is **not a justification**. "Our pipeline does X" is not a reason
+  for ADEF to support X. Justify from language semantics, published practitioner
+  standards, or a demonstrated ADEF user need.
+- A private dialect is **not an interface shape**. Never fit a public format to one
+  in-house implementation's quirks.
+
+If a proposed capability is only explicable by pointing at in-house tooling, it does
+not belong in ADEF yet.
+
+This is broader than the "no vendor connectors" CI guard, which only catches SDK
+imports. This one governs **design inputs**, which no test can enforce — it is on you.
+
 **Key concepts:**
 - **Journals**: Per-detection markdown files (`D-XXXX.md`) with YAML frontmatter + timestamped stage-transition blocks
 - **Workspace**: `~/work/adef-workspace/` with `journals/`, `templates/`, `config/`
@@ -39,6 +61,44 @@ adef init --interactive             # + prompt for SIEM/platform (drives schema 
 Using ADEF as your detection home (no repo)? Version the workspace with native
 git — it's plain markdown + YAML. See `docs/detection-home.md`.
 
+### Workspace Self-Check
+```bash
+adef doctor                         # every piece of workspace state + the next command for each
+adef doctor --report json           # machine-readable (checks + problem/warning counts)
+```
+Ten checks over one workspace — workspace scaffold, catalog records, INDEX
+freshness, journal pairing, declared schemas, ATT&CK snapshot, enrichment
+queue, ingested health, the `[mcp]` extra, installed skills — each carrying the
+literal next command to run — the fix where one command fixes it, the triage
+entry point (`enrichment`) where the work is a human's, and none where no
+command would help (`catalog`'s unreadable YAML, `index` when the expected
+INDEX can't even be built — `adef reindex` dies on the same cause). It exists because every other command is silent
+about the state it doesn't use: `adef detection list` says nothing about a
+stale INDEX, `adef coverage` nothing about an un-ingested schema, and
+`adef detection evolve` says `insufficient-data` whether you never ingested
+health or ingested it under an ID the catalog doesn't have. Each gives a
+plausible empty answer separately, with no way to see the common cause.
+
+**Two severities, and only one gates the exit code.** `warn` is an optional
+capability nobody has set up (no schemas, no health, no skills) — the normal
+state of a day-one workspace, so warnings **exit 0** and `adef doctor` stays
+safe in a CI job. `problem` is state that makes another command *lie*: a
+missing workspace, a record whose YAML no command can parse, a stale INDEX.
+Those **exit 1**.
+
+The INDEX check is an exact comparison of the stored `INDEX.yml` against the
+one the records imply (`Catalog.build_index()`, split out of `rebuild_index`
+for exactly this). An ID-set or mtime comparison would miss the case that
+matters most: edit a record's `mitre` — which `adef detection tag-mitre` and a
+human both do — and every filename stays identical while `by_technique` and
+`by_tactic` go wrong, which is what `adef coverage` and `--tactic` read.
+
+Read-only, including on the directory it's pointed at. `Catalog.__init__`
+mkdirs, so it is constructed only *after* the workspace-scaffold check has
+passed; otherwise `adef doctor` in an unrelated repo would leave a workspace
+skeleton behind. Core: `adef/core/doctor.py` (pure `Check` model) +
+`adef/commands/doctor.py` (rendering + exit code).
+
 ### Detection Lifecycle (FORGE)
 ```bash
 # Create a new detection at Find stage
@@ -56,14 +116,15 @@ adef detection new "Suspicious mshta child" --source wineventlog_xml
 adef detection observe D-0001       # Stage 2: characterize telemetry
 adef detection refine  D-0001       # Stage 3: runs Similarity → Overlap → Verification chain
 adef detection govern  D-0001       # Stage 4: deployment gates, ownership
-adef detection evolve  D-0001       # Stage 5: tuning, deprecation
+adef detection evolve  D-0001       # Stage 5: runs Health → Tuning → Deprecation chain
+adef detection evolve  D-0001 --chain   # re-run it after a fresh `adef ingest`
 
 # Add notes to any stage transition (--note is repeatable → renders as a bullet list)
 adef detection observe D-0001 --note "Baseline: mshta-from-office ~3/day" \
                               --note "FP source: legit admin GPO scripts"
 
 # Enrich a catalog record with ATT&CK technique IDs (drains the no_mitre queue)
-adef detection tag-mitre D-0007 T1547.001 T1055   # validated vs the shipped reference
+adef detection tag-mitre D-0007 T1547.001 T1055   # validated vs the workspace's reference
 adef detection tag-mitre D-0007 T1055 --remove    # untag (retag seam); emptying re-queues no_mitre
 ```
 `tag-mitre` validates each ID against the ATT&CK reference (invalid ID aborts,
@@ -92,11 +153,16 @@ Core: `adef/core/reconcile.py` (pure cascade) + `adef/commands/sync.py`. Fuzzy
 rename-match (UUID-less renamed+edited rules) is deferred → such a rule shows as
 `new` for a human to merge, never a silent mis-attribution.
 
-Records carry `origin: authored | catalogued` (`detection new --source` →
+Records carry `origin: authored | catalogued | promoted` (`detection new --source` →
 authored; `catalog`/`sync` → catalogued). **`sync` never touches `authored`
 records** — they were created in ADEF and have no upstream to reconcile, so a
 repo-less team using ADEF as its detection home keeps its own rules through a
-sync. Filter with `adef detection list --origin authored`.
+sync. `hunt-promote --gates` → `promoted`, which sync also skips: its `rule_ref`
+points at a GATES document in the *ATHF* workspace, not a rule repo ADEF walks.
+Filter with `adef detection list --origin authored`, or with `catalogued` or
+`promoted` — all three are values the records carry, not just `authored`. (One
+value per invocation: written `{a,b,c}` this line looked like a usage synopsis
+but is shell brace expansion, so pasting it passes all three and Click refuses.)
 
 ### Cataloging Existing Rules
 ```bash
@@ -131,6 +197,50 @@ Users provide a declaration document (sources + fields, produced from
 preserves human corrections and reports drift. Rules are a schema *consumer*
 (via `check`), never a schema *source*.
 
+### Detection Health Capture
+```bash
+adef ingest health-metrics.yml           # ingest a capture document (routes on its own `kind`)
+adef ingest health-metrics.yml --dry-run # validate and report, write nothing
+adef health show                         # everything stored: detections, then sources
+adef health show D-0001                  # one detection in full + the derived metrics
+adef health show --source wineventlog    # one telemetry source (the source-keyed kinds)
+```
+Five self-describing document kinds — `metrics`, `performance`,
+`deployment_drift`, `field_observations`, `source_health` — bulk. The first
+three are keyed by `D-XXXX`; `source_health` and `field_observations` are keyed
+by a **free-form telemetry source name** and land in `health/sources/`, which
+is why `show` reaches them with `--source NAME` rather than positionally (a
+free-form name has no shape to dispatch on). Stored under `<workspace>/health/`:
+the three detection-keyed kinds as a latest snapshot (newest `captured_at`
+wins, so a backfill never replaces newer data) **plus** an append-only `.jsonl`
+history (identical rows are not re-appended), the two source-keyed ones
+latest-only. ADEF never
+queries the environment the numbers came from; the producer hands over a file.
+
+`health show` is the readback half: ingest wrote to `health/` and nothing read
+it, so `adef detection evolve` reported `insufficient-data` on numbers the user
+had just ingested. `adef/core/health_store.py`'s `tuning_metrics()` is the
+counts→ratios adapter (documents carry **counts**
+because a ratio can't be re-aggregated across windows). Three rules it
+enforces, each with its own test:
+- `fp_ratio`'s denominator is what was **adjudicated** (FP + TP), never
+  `signal_count` — unlabeled signals aren't known false positives. It needs
+  **both** counts present: FPs with no TP count is a valid document (rows
+  aren't whitelisted at ingest), and defaulting the absent TP to zero reported
+  `fp_ratio: 1.0` about a number nobody supplied.
+- `weekly_signal_volume` is normalized by the document's declared window, and
+  emitted with `window_days` (the measured span): both recommenders' silence
+  arms require ≥ 7 days (`MIN_SILENCE_WINDOW_DAYS`), since zero signals in a
+  day says nothing about the week.
+- A key is **omitted** when its counts are absent, never emitted as `0.0`:
+  both recommenders decide "insufficient data" on key *presence*, so a
+  fabricated zero would read as a measured zero. Junk and **negative** values
+  count as absent — nothing happens a negative number of times, and the
+  derived values are read straight into thresholds.
+
+A `health report` subcommand (a coverage-peer view) is why
+`health` is a group, not a bare command with flags.
+
 ### ATT&CK Reference Layer
 ```bash
 adef attack info                    # Active snapshot's ATT&CK version + counts
@@ -163,9 +273,11 @@ ATT&CK tactics, a `support` line for recognized-but-unsupported formats, and the
 tail of the paired journal. `search` ranks detections by a BM25 index over the
 **journal reasoning (the *why*) AND the catalog record** (title, MITRE, platform,
 data_source, query — the *what*), so a detection is findable by what it detects
-even when its journal is sparse; snippets strip template scaffolding to show the
-matched content. All read-only over the workspace. (Also exposed as the
-`memory_search` MCP tool.)
+even when its journal is sparse. For a Sigma rule the query part is its
+`description`, `tags`, and `logsource`/`detection` blocks, not the whole file
+(no references, author, dates, false positives, level or status); snippets
+strip template scaffolding to show the matched content. All read-only over the
+workspace. (Also exposed as the `memory_search` MCP tool.)
 
 ### Coverage Report
 ```bash
@@ -188,6 +300,21 @@ same tiers (solid=100, fragile=50) with the why in each comment. Core model:
 ```bash
 adef-mcp                            # Start FastMCP server for Claude Code/Cursor/Copilot
 ```
+`refine_chain` defaults to `similarity_mode="agent"` — it returns the shortlist
+enriched for *you* to rank rather than ranking internally, since an MCP caller is
+an agent by definition. This deliberately differs from the CLI default (`bm25`):
+the split is by entry point, not by detecting which environment you are in.
+
+Tools include `health_ingest` — the MCP twin of `adef ingest`, over the same
+core. An assistant session with its own environment tooling connected can fetch
+the numbers, write a capture document, and ingest it without shelling out — the
+tool takes the document's *path*, like the CLI, and returns the ingest result as
+structured data. Its readback twin is `health_show`, and `evolve_chain` mirrors
+`adef detection evolve` (Health → Tuning → Deprecation; no mode switch — the
+heuristics are deterministic over whatever was ingested). `tune_recommend` and
+`deprecation_recommend` both take an optional `workspace` and read the stored
+health when their metrics argument is omitted, so an MCP caller doesn't have to
+hand-assemble what the CLI's chain derives for it.
 
 ### Skills
 ```bash
@@ -205,6 +332,14 @@ and `chatgpt` are the same target (`.agents/skills/`); `codex` is the menu label
 location differs). Refuses to
 clobber edited local skills without `--force`.
 
+The skills live at `adef/data/claude-plugin/` and ship as `adef.data`
+package-data, so this is **not** a clone-only command — a pip install carries
+them. They sat at the repo root until 2026-10-09, outside any package, which is
+why the published 1.0.0 wheel has none and `install-skills` failed on it.
+`tests/test_skills_are_packaged.py` is what keeps the `package-data` globs and
+the directory from drifting apart: a glob that stops matching drops files from
+the wheel with no build error.
+
 Two ways to get the skills in:
 - **`adef install-skills` (primary — all agents, all teams):** copies the skills
   into a `.claude/`/`.agents/` tree so a team can **commit them into their own
@@ -213,7 +348,8 @@ Two ways to get the skills in:
   Claude, Cursor, Copilot, ChatGPT desktop). This is the path the README and
   quickstart lead with.
 - **Plugin marketplace (solo-Claude shortcut):** the repo doubles as a
-  marketplace (`.claude-plugin/marketplace.json` → `./claude-plugin`), so
+  marketplace (`.claude-plugin/marketplace.json` → `./adef/data/claude-plugin`,
+  the same single copy the wheel ships and `install-skills` reads), so
   `/plugin marketplace add Nebulock-Inc/…` then `/plugin install
   adef@adef-marketplace` bundles the skills **and** the `adef-mcp` wiring in one
   step. Still needs the `[mcp]` extra installed.
@@ -244,10 +380,19 @@ adef/
 ├── plugin_system.py            # Entry-point discovery (adef.commands, adef.agents, adef.mcp_tools)
 ├── agents/
 │   ├── hypothesis_from_intel.py      # ADEF-native: draft Find/Observe from CTI
-│   ├── tune_recommender.py           # ADEF-native: tuning suggestions
+│   ├── tune_recommender.py           # ADEF-native: tuning suggestions; reads ingested
+│   │                                 #   health via stored_metrics() when no metrics passed
 │   ├── deprecation_recommender.py    # ADEF-native: keep/tune/deprecate
 │   ├── hunt_promotion.py             # ADEF-native: ATHF hunt → ADEF detection
-│   └── wrappers/                     # Thin wrappers around the upstream rule agents ADEF orchestrates (4: similarity, overlap, verification, performance-metrics)
+│   ├── rule_similarity.py            # ADEF-native: BM25 + field-set + value shortlist (fused via RRF);
+│   │                                 #   agent returns it for the caller to rank, llm reranks itself
+│   ├── rule_overlap.py               # ADEF-native: duplicate/complementary/redundant/unassessed
+│   ├── verification.py               # ADEF-native: schema + four-engine constraint
+│   └── wrappers/                     # Dispatchers for the 4 rule agents the Refine chain and
+│                                     #   tune recommender orchestrate. Similarity/Overlap/
+│                                     #   Verification run the native agents above unless
+│                                     #   ADEF_WRAPPER_<KEY> is explicitly set; performance-
+│                                     #   metrics is the one remaining upstream-only wrapper.
 ├── commands/
 │   ├── detection.py            # FORGE lifecycle commands (new, observe, refine, govern, evolve)
 │   ├── init.py                 # Workspace scaffolding
@@ -257,11 +402,24 @@ adef/
 │   ├── schema.py               # Declaration-driven schemas (ingest/lint/check/recipe/reshape)
 │   ├── attack.py               # ATT&CK reference layer (info/show/refresh)
 │   ├── coverage.py             # Coverage-quality report + Navigator export
+│   ├── ingest.py               # `adef ingest` — detection-health capture documents
+│   ├── health.py               # `adef health show` — read back what ingest stored
+│   ├── doctor.py               # `adef doctor` — workspace self-check rendering + exit code
+│   ├── _render.py              # cell_width/fit/pad — the one table-cell renderer
 │   └── profile.py, reindex.py, install_skills.py
 ├── core/
 │   ├── journal.py              # Journal CRUD + stage advancement (NEVER writes to detections/)
-│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation
-│   └── memory.py               # BM25 search over journals + catalog records
+│   ├── catalog.py              # CatalogRecord, Catalog, INDEX generation, NoCatalogRecordError
+│   ├── memory.py               # BM25 search over journals + catalog records
+│   ├── corpus.py               # CorpusEntry + build_corpus — the one membership answer
+│   ├── corpus_text.py          # record_search_text() — the record projection search/similarity share; record_query_logic() — for Sigma, only logsource+detection
+│   ├── field_index.py          # field-set retrieval — the second, language-agnostic pass
+│   ├── value_index.py          # value retrieval — other-language rules testing the same rare literals
+│   ├── engines.py              # ALLOWED_ENGINES — the single canonical copy of the 4-engine set
+│   ├── health_docs.py          # capture document model, lint, load, isoify
+│   ├── health_store.py         # write: latest snapshot + append-only history;
+│   │                           #   read: read_latest / tuning_metrics (counts→ratios)
+│   └── doctor.py               # pure Check model — the ten workspace answers
 ├── data/
 │   ├── templates/DETECTION_FORGE.md    # Journal template
 │   └── prompts/                        # Stage-specific prompts (find.md, observe.md, etc.)
@@ -269,7 +427,9 @@ adef/
 │   ├── server.py               # FastMCP server + plugin tool discovery
 │   └── tools/                  # lifecycle_tools, memory_tools, agent_tools, init_tools
 └── orchestration/
-    └── refine_chain.py         # Similarity → Overlap → Verification orchestration
+    ├── refine_chain.py         # Similarity → Overlap → Verification orchestration
+    └── evolve_chain.py         # Health → Tuning → Deprecation; reuses refine_chain's
+                                #   `_format_payload` — both chains write one journal
 ```
 
 ### Plugin System (Entry Points)
@@ -301,11 +461,11 @@ ADEF uses Python entry points for extensibility (same as ATHF):
 ADEF never hardcodes upstream package names. Integration uses env vars:
 
 ```bash
-# Wrapper bindings (the upstream rule-engineering agents ADEF orchestrates)
+# Wrapper bindings (optional upstream overrides — native by default since v2)
 ADEF_WRAPPER_RULE_SIMILARITY=package.module:RuleSimilarityClass
 ADEF_WRAPPER_RULE_OVERLAP=package.module:RuleOverlapClass
 ADEF_WRAPPER_VERIFICATION=package.module:VerificationClass
-ADEF_WRAPPER_PERFORMANCE_METRICS=package.module:PerformanceMetricsClass
+ADEF_WRAPPER_METRICS=package.module:MetricsCollectorClass   # was ADEF_WRAPPER_PERFORMANCE_METRICS (still honoured, deprecated)
 
 # Hunt promotion
 ADEF_HUNT_RULE_GENERATOR=athf_package.module:HuntRuleGeneratorClass
@@ -316,19 +476,109 @@ ADEF_HUNT_ROOT=/path/to/upstream/hunts      # Read-only hunt artifacts directory
 ADEF_WORKSPACE=/path/to/adef-workspace      # Override default workspace location
 ```
 
-If a binding is missing or import fails, the wrapper raises `WrapperUnavailable` → orchestration logs error to journal and continues.
+For Similarity/Overlap/Verification, a missing binding now runs the native
+agent instead of raising `WrapperUnavailable` (PerformanceMetrics has no
+native implementation yet and is unaffected by this change). An explicitly
+set binding whose import fails still raises `WrapperUnavailable` as before.
 
 ### The Refine Chain
 
 When `adef detection refine D-XXXX` runs:
 1. Advances stage to `refine`
 2. Invokes `orchestration/refine_chain.py`
-3. Runs **three upstream agents in sequence**:
-   - **RuleSimilarity**: Does a rule like this already exist?
-   - **RuleOverlap**: Do triggers heavily overlap with another rule?
-   - **Verification**: Would the rule pass schema validation + four-engine constraint?
+3. Runs **three steps in sequence, native by default** (v2, 2026-09) — native
+   execution and vendor-free execution are not the same guarantee: only
+   RuleSimilarity's `bm25` and `agent` modes are vendor-free, and `bm25` is
+   the default:
+   - **RuleSimilarity** (`adef/agents/rule_similarity.py`): does a rule like
+     this already exist? Three retrieval passes, fused by reciprocal rank
+     fusion: BM25 nearest-neighbor search over the catalog, plus a
+     language-agnostic field-set pass (`adef/core/field_index.py`) that
+     matches rules on the telemetry fields their queries filter on (predicate
+     fields only — not BY/SELECT/project lists or routing) — canonicalized
+     through declared schema aliases so a Sigma rule and a SQL rule reading
+     the same field can find each other with zero shared tokens. A third
+     pass (`adef/core/value_index.py`) proposes rules in a *different* query
+     language that test the same rare values (`bitsadmin.exe`, `EnableLUA`),
+     with no schema needed; it never proposes a same-language candidate.
+     Only `RuleSimilarity` runs the field and value passes; `adef detection search` stays pure
+     BM25 (see `docs/cli-reference.md`). Each run reports a `field_matching`
+     state (`schema` / `declared_no_aliases` / `unmatched` / `unparseable`)
+     naming how well canonicalization worked; `adef detection refine` prints
+     it when the field pass was skipped. The fused shortlist is optionally
+     reranked by an LLM judge (`adef detection refine D-XXXX
+     --similarity-mode {bm25,agent,llm,auto}`). **`bm25` is the default** and
+     makes no network call. **`agent`** returns the shortlist with the
+     target's *and* each candidate's query, MITRE IDs, platform, and data source
+     for the *caller* to rank — also no network call, and the mode to use from an assistant session,
+     where the agent has context ADEF does not and its reasoning lands in the
+     transcript. `llm` reranks with an LLM judge; `auto` picks `llm` when
+     `ANTHROPIC_API_KEY` and the `llm` extra are both present, else `bm25`.
+     **Data egress in `llm`/`auto` mode:** the target's title (unbounded),
+     MITRE technique IDs (unbounded count), and query (truncated to 500
+     chars; for Sigma, its logsource and detection blocks) are sent to the
+     Anthropic API, plus — for each of at most `top_k` shortlisted
+     candidates — its detection ID, title (unbounded), and a snippet (up to
+     242 chars, built from both the journal body AND the catalog search
+     text: title, MITRE IDs, platform, data source, format, query —
+     see `record_search_text`; for Sigma rules the query part is the rule's
+     `description`, `tags`, and `logsource`/`detection` blocks, not the whole
+     file — so catalog and query content can be disclosed too, not just
+     journal prose). When a candidate matched via the field-set pass
+     (`shared_fields` non-empty), the prompt additionally
+     carries that candidate's full `shared_fields` list plus a bounded slice
+     (≤200 chars; for Sigma, its logsource and detection blocks) of its own
+     query — a field-only candidate has no BM25 snippet, so without this the
+     judge would see an entry with no evidence attached at all. A candidate
+     found only by the value pass (another query language, no
+     `shared_fields`) likewise carries a ≤200-char slice of its query, but
+     not its `shared_values` — also **newly disclosed** in `llm` mode. Two things
+     worth stating plainly rather than leaving to be discovered:
+     `shared_fields` names are drawn from the rule's OWN literal field names
+     AND, wherever canonicalization through a declared
+     schema applied, their canonical form too (I-1 fix, final whole-branch
+     review: canonicalization adds to a rule's literal fields, it never
+     replaces them) — so the list can mix a raw name straight from the query
+     (`Image`) with a canonical one drawn from the user's own declared schema
+     (`process.name`), and either or both may appear depending on what each
+     side of the match declared. This still discloses schema vocabulary about
+     the environment whenever a canonical name is present, not merely rule
+     content; and a field-only candidate could not reach the shortlist at all
+     before `field_index.py` existed, so its query slice is **newly disclosed
+     data**, not a reshaping of egress that already happened. This same
+     mixed-vocabulary `shared_fields` list is also what `agent` mode hands
+     back to the caller (unbounded, no truncation — `agent` makes no network
+     call, so the ≤200-char query bound above is specific to the `llm` prompt
+     and does not apply there). `bm25` and `agent` make no network call,
+     unless an `ADEF_WRAPPER_*` override is configured, in which case the
+     configured upstream class runs instead and this guarantee no longer
+     applies.
+   - **RuleOverlap** (`adef/agents/rule_overlap.py`): deterministic
+     duplicate/complementary/redundant classification within the target's MITRE
+     technique cluster (`catalog/INDEX.yml`'s `by_technique` map): a
+     sub-technique and its parent technique are compared; sibling
+     sub-techniques are not. A pair in two different query languages is
+     `unassessed` — no path compares logic across languages yet
+   - **Verification** (`adef/agents/verification.py`): schema field-usage +
+     four-engine-constraint check, via `adef.commands.schema.run_schema_check`
+     scoped to one detection. Reports `status` (`passed` / `failed` /
+     `partial` when the field check couldn't run), per-check `checks`, and
+     `fields_not_run_reason`. Grouping/projection columns missing from the
+     schema are `missing_grouping_fields` and don't fail it
 4. Each result is appended to the detection's journal under `### Refine / <step>` heading
 5. Chain does NOT abort on failure; partial results are valuable
+6. Each step still honors its `ADEF_WRAPPER_<KEY>` env var as an opt-in override
+   — if set, the step delegates to the configured upstream class exactly as
+   before v2. Unset (the default) now runs the native implementation instead of
+   raising `WrapperUnavailable`. `detection_id` plus any other caller context is
+   forwarded to an override — except the chain's native-only kwargs
+   (`workspace`, `similarity_mode`), which are filtered out so a
+   strict-signature upstream class keeps working.
+7. A detection with no catalog record yet (still journal-only) raises
+   `NoCatalogRecordError` from the native agent; the chain renders that as
+   *"Not run — no catalog record for D-XXXX yet (still journal-only)"*. That's
+   a distinct case from `WrapperUnavailable`'s *"isn't configured"*, which now
+   only fires for a genuinely broken explicit `ADEF_WRAPPER_*` override.
 
 ## Hard Rules (CI-Enforced Anti-Goals)
 
@@ -337,7 +587,24 @@ These are tested and will fail CI if violated:
 1. **`tests/test_schema_parity.py`**: Never write inside any `detections/` tree. ADEF is read-only for upstream YAML.
 2. **`tests/test_no_new_engine_types.py`**: Only four engines allowed: `sigma`, `sql`, `sch_sql`, `composite`. No new engine types.
 3. **`tests/test_no_vendor_connectors.py`**: Never add vendor API connectors (CrowdStrike, Splunk, SentinelOne, etc.). Connectors live in adapter packages.
-4. **`tests/test_no_web_ui_deps.py`**: No web UI dependencies (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). v0.1.0 is CLI + MCP only.
+4. **`tests/test_no_web_ui_deps.py`**: No web UI dependencies (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). ADEF is CLI + MCP only.
+
+## Process Rules (`.claude/rules/`)
+
+Distinct from the CI-enforced anti-goals above: these bind how work is done, and
+no test can catch a violation.
+
+- **`pre-pr-review.md`** — the two review passes and their ordering. Only the
+  CodeRabbit CLI can run before a PR exists; `/code-review` reviews an *open*
+  PR, so it applies from the second push onward. **Maintainer-local, not in the
+  public tree**: it requires a paid authenticated CLI, so publishing it would
+  tell a contributor's agent to block on a tool it cannot install. The public
+  contract is `CONTRIBUTING.md`'s gate — `pytest`, `ruff check`, `mypy`.
+- **`verify-tests-fail.md`** — break the behaviour a test names and confirm it
+  goes red before trusting it. Twenty tests in ADEFv2 passed for the wrong
+  reason because their fixtures could not reach the code they covered; one let
+  a false claim ship into a design doc, a skill file and a PR description. The
+  file catalogues the shapes that recur here.
 
 ## Key Documentation
 
@@ -413,10 +680,14 @@ content = journal.read(detection_id="D-0042")
 ### Memory Search
 
 ```python
+from pathlib import Path
+
+from adef.core.corpus import build_corpus
 from adef.core.memory import MemoryIndex
 
-index = MemoryIndex(workspace_path="/path/to/workspace", rule_root="/path/to/rules")
-results = index.search("mshta.exe public directory")  # BM25 over journals + YAML
+index = MemoryIndex()
+index.build(build_corpus(Path("/path/to/workspace")))
+results = index.search("mshta.exe public directory")  # BM25 over CorpusEntry.index_text
 ```
 
 ## Common Patterns
@@ -444,9 +715,12 @@ prompt = resources.files("adef.data").joinpath("prompts/observe.md").read_text()
 
 ## Version
 
-Current version: **v0.1.0**
+Current version: **v2.0.0** — `adef/__init__.py` and `pyproject.toml` must
+agree; nothing derives one from the other, so
+`tests/test_version_agreement.py` is what catches drift. `publish.yml` also
+refuses a tag that doesn't match `pyproject.toml`, but that fires only at
+release time.
 
-Update version in `adef/__init__.py`:
 ```python
-__version__ = "0.1.0"
+__version__ = "2.0.0"
 ```

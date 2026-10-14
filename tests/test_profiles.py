@@ -1,8 +1,10 @@
 """Tests for declarative extraction profiles (adef/core/profiles.py) and their
-integration into rule discovery (ISA 2026-07-20)."""
+integration into rule discovery."""
 
 from __future__ import annotations
 
+import copy
+import json
 import textwrap
 
 import pytest
@@ -90,7 +92,7 @@ def test_lint_accepts_valid_profile():
 def test_lint_toml_profile_errors_without_tomllib(monkeypatch):
     """A TOML-container profile lints as an ERROR when the interpreter can't
     parse TOML (Python 3.10) — else it lints OK then silently claims nothing
-    (ISA 2026-07-22 guardrail audit)."""
+    """
     import adef.core.profiles as profiles_mod
 
     monkeypatch.setattr(profiles_mod, "_toml_available", lambda: False)
@@ -307,3 +309,231 @@ def test_sql_data_source_ignores_comments(tmp_path):
     }
     rules = list(discover_rules(root, [profile_from_dict(prof_dict)]))
     assert rules[0].data_source == "snowflake.account_usage.login_history"
+
+
+# --------------------------------------------------------------------------- #
+# Bulk exports: many rules per file, per-type query fields, tag-borne platform.
+# A made-up vendor export — the shapes are the ones real bulk exports take
+# (API envelopes, bare arrays, ARM-style resource lists).
+# --------------------------------------------------------------------------- #
+BULK_PROFILE = {
+    "name": "acme-bulk-export",
+    "version": 1,
+    "signature": {
+        "container": "json",
+        "records": "data[]",
+        "all_keys": ["rule_key", "kind", "body"],
+    },
+    "query_language": "sql",
+    "map": {
+        "title": "name",
+        "query": ["body.predicate", "body.statement"],
+        "mitre": "labels[]",
+        "uuid": "rule_key",
+    },
+    "platform": {"path": "labels[]", "prefix": "os."},
+}
+
+STREAMING = {"rule_key": "k-1", "kind": "streaming", "name": "Streaming rule",
+             "labels": ["attack.id.T1059.001", "os.windows"],
+             "body": {"predicate": "`process.name` = 'x.exe'"}}
+BATCH = {"rule_key": "k-2", "kind": "batch", "name": "Batch rule",
+         "labels": ["attack.id.T1195.002", "os.Linux"],
+         "body": {"statement": "SELECT * FROM t WHERE `a` = 1"}}
+BOTH = {"rule_key": "k-3", "kind": "streaming", "name": "Has both",
+        "labels": ["attack.id.T1003"],  # no os.* tag
+        "body": {"predicate": "`p` = 1", "statement": "SELECT 1"}}
+
+
+def _bulk(tmp_path, payload, name="export.json"):
+    root = tmp_path / f"rules-{name}"  # one repo per call: no cross-call leakage
+    root.mkdir()
+    (root / name).write_text(json.dumps(payload), encoding="utf-8")
+    return list(discover_rules(root, [profile_from_dict(BULK_PROFILE)]))
+
+
+def test_bulk_lint_accepts_records_fallbacks_and_prefix():
+    assert lint_profile_dict(BULK_PROFILE) == []
+
+
+@pytest.mark.parametrize("mutate, fragment", [
+    (lambda p: p["signature"].update(records="data"), "signature.records"),
+    (lambda p: p["map"].update(query=[]), "map.query"),
+    (lambda p: p["map"].update(query=["ok.path", "bad path"]), "map.query"),
+    (lambda p: p.update(platform={"const": "windows", "prefix": "os."}), "platform"),
+    (lambda p: p.update(platform={"path": "labels[]", "prefix": 3}), "platform.prefix"),
+])
+def test_bulk_lint_rejects_malformed_extensions(mutate, fragment):
+    p = copy.deepcopy(BULK_PROFILE)
+    mutate(p)
+    assert any(fragment in e for e in lint_profile_dict(p)), lint_profile_dict(p)
+
+
+@pytest.mark.parametrize("payload", [
+    {"data": [STREAMING, BATCH, BOTH]},   # API envelope
+    [STREAMING, BATCH, BOTH],             # bare array
+])
+def test_bulk_export_fans_out_one_rule_per_record(tmp_path, payload):
+    rules = {r.rule_uuid: r for r in _bulk(tmp_path, payload)}
+    assert set(rules) == {"k-1", "k-2", "k-3"}
+    assert all(r.format == "acme-bulk-export" for r in rules.values())
+
+
+def test_single_record_file_is_claimed_without_the_envelope(tmp_path):
+    rules = _bulk(tmp_path, STREAMING)
+    assert [r.rule_uuid for r in rules] == ["k-1"]
+
+
+def test_query_fallback_takes_the_first_non_empty_path_in_order(tmp_path):
+    rules = {r.rule_uuid: r for r in _bulk(tmp_path, {"data": [STREAMING, BATCH, BOTH]})}
+    assert rules["k-1"].query_text == "`process.name` = 'x.exe'"
+    assert rules["k-2"].query_text == "SELECT * FROM t WHERE `a` = 1"  # first path empty
+    assert rules["k-3"].query_text == "`p` = 1"  # both present: order wins
+
+
+def test_platform_prefix_reads_the_tag_convention(tmp_path):
+    rules = {r.rule_uuid: r for r in _bulk(tmp_path, {"data": [STREAMING, BATCH, BOTH]})}
+    assert rules["k-1"].platform == "windows"
+    assert rules["k-2"].platform == "linux"  # lowercased
+    assert rules["k-3"].platform is None and rules["k-3"].needs_review
+    assert rules["k-1"].mitre == ("T1059.001",) and not rules["k-1"].needs_review
+
+
+def test_records_not_matching_the_signature_are_not_rules(tmp_path):
+    rules = _bulk(tmp_path, {"data": [STREAMING, {"unrelated": True}], "meta": {"n": 2}})
+    assert [r.rule_uuid for r in rules] == ["k-1"]
+    assert _bulk(tmp_path, {"data": [{"x": 1}]}, name="other.json") == []
+
+
+def test_a_malformed_record_does_not_sink_the_export(tmp_path):
+    broken = {"rule_key": "k-bad", "kind": "streaming", "name": "Broken", "body": None}
+    rules = {r.rule_uuid: r for r in _bulk(tmp_path, {"data": [STREAMING, broken]})}
+    assert set(rules) == {"k-1", "k-bad"}
+    assert not rules["k-1"].needs_review
+    assert rules["k-bad"].needs_review
+
+
+def test_an_empty_records_container_means_no_rules_not_the_envelope(tmp_path):
+    # The envelope itself carries the signature keys; with `data: []` it must
+    # still yield nothing — the fallback to "document is the record" is for a
+    # document the records path doesn't exist in, not one where it is empty.
+    envelope = {"data": [], "rule_key": "env", "kind": "x", "body": {"predicate": "`a` = 1"}}
+    assert _bulk(tmp_path, envelope) == []
+    assert _bulk(tmp_path, {**envelope, "data": [1, "x"]}, name="scalars.json") == []
+
+
+def test_fallback_skips_a_path_that_yields_only_unusable_values(tmp_path):
+    prof = copy.deepcopy(BULK_PROFILE)
+    prof["map"]["query"] = ["body.parts[]", "body.statement"]   # a list is no query
+    prof["map"]["mitre"] = ["tags[]", "labels[]"]
+    rec = {"rule_key": "k-9", "kind": "batch", "name": "n", "tags": ["", "  "],
+           "labels": ["attack.id.T1003"], "body": {"parts": ["x"], "statement": "SELECT 1"}}
+    root = tmp_path / "r"
+    root.mkdir()
+    (root / "e.json").write_text(json.dumps({"data": [rec]}), encoding="utf-8")
+    [rule] = list(discover_rules(root, [profile_from_dict(prof)]))
+    assert rule.query_text == "SELECT 1"
+    assert rule.mitre == ("T1003",)
+
+
+
+def test_yaml_records_with_non_string_keys_do_not_crash_discovery(tmp_path):
+    prof = {"name": "y", "version": 1,
+            "signature": {"container": "yaml", "records": "rules[]", "all_keys": ["name", "q"]},
+            "query_language": "sql", "map": {"title": "name", "query": "q"}}
+    root = tmp_path / "r"
+    root.mkdir()
+    (root / "x.yml").write_text("rules:\n  - {name: a, q: x=1, 1: one}\n  - {name: b, q: y=2, 2024-01-01: rel}\n")
+    assert {r.title for r in discover_rules(root, [profile_from_dict(prof)])} == {"a", "b"}
+
+
+def test_a_non_list_field_under_the_records_key_is_still_a_single_record(tmp_path):
+    for value in ({"k": 1}, None, "x"):
+        rec = {**STREAMING, "data": value}
+        assert [r.rule_uuid for r in _bulk(tmp_path, rec, name=f"{type(value).__name__}.json")] == ["k-1"]
+
+
+def test_an_empty_prefix_remainder_does_not_hide_a_later_tag(tmp_path):
+    rec = {**STREAMING, "labels": ["os.", "attack.id.T1059.001", "os.windows"]}
+    [rule] = _bulk(tmp_path, {"data": [rec]})
+    assert rule.platform == "windows"
+
+
+def test_a_profile_built_directly_with_string_paths_still_extracts():
+    from adef.core.profiles import Profile, extract_fields
+
+    # multi-character keys: iterating the string "name" yields paths n/a/m/e
+    prof = Profile(name="direct", version=1, container="json", all_keys=("name",),
+                   query_language="sql", map={"title": "name", "query": "body"})
+    out = extract_fields(prof, {"name": "Title", "body": "x=1"})
+    assert (out["title"], out["query"]) == ("Title", "x=1")
+
+
+# --- Unclaimed bulk exports must be visible to onboarding (CodeRabbit).
+
+def _outcome(tmp_path, name, text):
+    root = tmp_path / name.replace(".", "-")
+    root.mkdir()
+    (root / name).write_text(text, encoding="utf-8")
+    [oc] = list(walk_outcomes(root, []))
+    return oc
+
+
+def test_an_unclaimed_json_envelope_is_reported_with_where_its_records_are(tmp_path):
+    oc = _outcome(tmp_path, "export.json", json.dumps(
+        {"data": [{"title": "a", "query": "x", "id": 1}, {"title": "b", "query": "y"}], "meta": {}}))
+    assert oc.outcome == UNCLAIMED
+    assert oc.top_level_keys == ("data", "meta")
+    assert oc.records_path == "data[]"
+    assert oc.record_keys == ("query", "title")
+
+
+@pytest.mark.parametrize("name, text", [
+    ("export.json", json.dumps([{"title": "a", "query": "x"}, {"title": "b", "query": "y", "z": 1}])),
+    ("export.yml", "- {title: a, query: x}\n- {title: b, query: y}\n"),
+])
+def test_an_unclaimed_top_level_array_is_reported(tmp_path, name, text):
+    oc = _outcome(tmp_path, name, text)
+    assert oc.outcome == UNCLAIMED
+    assert (oc.records_path, oc.record_keys) == ("[]", ("query", "title"))
+
+
+@pytest.mark.parametrize("name, text", [
+    ("numbers.json", "[1, 2, 3]"),
+    ("broken.json", "{not json"),
+    ("empty.json", "{}"),
+])
+def test_json_that_holds_no_mapping_is_still_not_a_rule(tmp_path, name, text):
+    assert _outcome(tmp_path, name, text).outcome == NOT_A_RULE
+
+
+def test_catalog_report_carries_the_records_hint(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from adef.commands.catalog import catalog
+
+    ws = tmp_path / "ws"
+    (ws / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    repo = tmp_path / "rules"
+    repo.mkdir()
+    (repo / "export.json").write_text(json.dumps({"data": [{"title": "a", "query": "x"}]}))
+    out = CliRunner().invoke(catalog, [str(repo), "--dry-run", "--report", "json"])
+    assert out.exit_code == 0, out.output
+    [entry] = [f for f in json.loads(out.stdout)["files"] if f["path"] == "export.json"]
+    assert entry["outcome"] == "unclaimed"
+    assert (entry["records_path"], entry["record_keys"]) == ("data[]", ["query", "title"])
+
+
+def test_scalar_field_takes_the_first_item_of_a_list(tmp_path):
+    # `data_source: log_sources[]` filled nothing, so CQL
+    # rules could never be scoped to a declared source.
+    prof = copy.deepcopy(BULK_PROFILE)
+    prof["map"]["data_source"] = "log_sources[]"
+    rec = {"rule_key": "k-1", "kind": "batch", "name": "n", "log_sources": ["", "Endpoint", "Identity"],
+           "body": {"statement": "SELECT 1"}}
+    root = tmp_path / "r"
+    root.mkdir()
+    (root / "e.json").write_text(json.dumps({"data": [rec]}), encoding="utf-8")
+    [rule] = list(discover_rules(root, [profile_from_dict(prof)]))
+    assert rule.data_source == "Endpoint"

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from typing import Any
 
 
@@ -22,22 +23,60 @@ class WrapperUnavailable(RuntimeError):
     """Raised when the underlying upstream agent cannot be imported."""
 
 
+#: Kwargs the Refine chain injects for the *native* agents that a
+#: pre-existing, strict-signature configured (``ADEF_WRAPPER_*``) upstream
+#: class was never written to accept. Each wrapper's configured-upstream
+#: branch strips these out of ``**ctx`` before forwarding — everything else
+#: the caller passed still reaches the configured class (found live via
+#: CodeRabbit review: an earlier fix dropped ALL of ``ctx``, not just
+#: these two keys).
+NATIVE_ONLY_CTX_KEYS = frozenset({"workspace", "similarity_mode"})
+
+
 class WrapperBase:
     """Common shape for all upstream rule-agent wrappers."""
 
     #: Suffix of the environment variable that holds the dotted target.
     binding_key: str = ""
+    #: Older suffixes still honoured, with a deprecation notice, when the
+    #: current one is unset — a renamed variable must not break a released
+    #: install that sets the old name.
+    deprecated_binding_keys: tuple[str, ...] = ()
 
     def _env_var(self) -> str:
         return f"ADEF_WRAPPER_{self.binding_key}"
+
+    def is_configured(self) -> bool:
+        """Is any binding set? Silent — ``_binding`` prints the deprecation
+        notice, and a probe followed by ``run()`` would print it twice."""
+        keys = (self.binding_key, *self.deprecated_binding_keys)
+        return any(os.environ.get(f"ADEF_WRAPPER_{k}", "").strip() for k in keys)
+
+    def _binding(self) -> tuple[str, str]:
+        """(variable name, value) — the current name, else the first set
+        deprecated name, which prints a one-line notice to stderr."""
+        current = self._env_var()
+        value = os.environ.get(current, "").strip()
+        if value:
+            return current, value
+        for old_key in self.deprecated_binding_keys:
+            old = f"ADEF_WRAPPER_{old_key}"
+            old_value = os.environ.get(old, "").strip()
+            if old_value:
+                print(
+                    f"[adef.wrappers] {old} is deprecated and will be removed in a "
+                    f"future major release; set {current} instead.",
+                    file=sys.stderr,
+                )
+                return old, old_value
+        return current, ""
 
     def _load_class(self) -> type:
         if not self.binding_key:
             raise NotImplementedError(
                 f"{type(self).__name__} must set ``binding_key``."
             )
-        env_var = self._env_var()
-        dotted = os.environ.get(env_var, "").strip()
+        env_var, dotted = self._binding()
         if not dotted:
             raise WrapperUnavailable(
                 f"{env_var} is not set. Configure it as 'module.path:ClassName' to "
@@ -71,4 +110,4 @@ class WrapperBase:
         return {"detection_id": detection_id, "result": result}
 
 
-__all__ = ["WrapperBase", "WrapperUnavailable"]
+__all__ = ["WrapperBase", "WrapperUnavailable", "NATIVE_ONLY_CTX_KEYS"]

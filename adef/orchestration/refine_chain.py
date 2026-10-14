@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from adef.agents.wrappers import WrapperUnavailable
+from adef.core.catalog import NoCatalogRecordError
 from adef.core.journal import Journal
 
 
@@ -37,16 +38,91 @@ REFINE_STEPS: tuple[ChainStep, ...] = (
 )
 
 
-def _format_payload(payload: Any) -> str:
-    """Render an agent's return value into a journal-friendly markdown body."""
+# Not sized against MemoryIndex's snippet length — that coupling was a
+# leftover from the discredited content-filtering mitigation. As `_inline`'s
+# docstring says, this cap exists for free text that legitimately belongs
+# here (an LLM judge's `reasoning`, a third-party step's prose) and can run
+# long; unrelated values just happen to pass through under it intact.
+_MAX_RENDERED = 300
+
+
+def _inline(value: Any) -> str:
+    """Collapse whitespace and cap length for one journal line.
+
+    The journal is markdown: a value containing newlines severs its bullet and
+    can turn indented text into a code block. Candidate queries are stored
+    verbatim and are routinely multi-line, so this is the common case, not an
+    edge one.
+
+    The cap is for free text that legitimately belongs here — an LLM judge's
+    `reasoning`, a third-party step's prose — which reaches the renderer
+    verbatim and can run long. Only the *rendered* form is collapsed and
+    capped; callers still receive the value unchanged.
+    """
+    text = " ".join(str(value).split())
+    return text if len(text) <= _MAX_RENDERED else text[:_MAX_RENDERED] + "\u2026"
+
+
+# `snippet` is dropped from the journal render for one reason only: it is
+# title + MITRE + platform + format + query concatenated, every part of which
+# is already on the same line under its own label. It is noise in a log.
+#
+# It is NOT dropped to protect the retrieval index. That was the old
+# justification and it was wrong twice over — a key-name denylist cannot make
+# a claim about content, because the same text arrives under other keys. The
+# index is protected by provenance now: `Journal.append_block(generated=True)`
+# marks these blocks and `narrative_text` excludes them.
+_JOURNAL_OMIT_KEYS = frozenset({"snippet"})
+
+
+def _format_payload(payload: Any, indent: str = "") -> str:
+    """Render an agent's return value into a journal-friendly markdown body.
+
+    Nested dicts and lists-of-dicts become indented sub-bullets. Interpolating
+    them as a raw Python repr instead put an entire result set on ONE journal
+    line — thousands of characters wide on any realistically-sized catalog.
+    Note the payload each step hands us is the *wrapper's* envelope
+    (``{"detection_id": ..., "result": {..., "overlaps": [...]}}``), so the
+    long value is a nested dict, not a top-level list — both need unpacking.
+    """
     if payload is None:
         return "_(no result)_"
     if isinstance(payload, dict):
-        lines = [f"- **{k}:** {v}" for k, v in payload.items()]
+        lines: list[str] = []
+        for key, value in payload.items():
+            if isinstance(value, dict) and value:
+                rendered = _format_payload(value, indent + "  ")
+                if rendered:
+                    lines.append(f"{indent}- **{key}:**")
+                    lines.append(rendered)
+            elif isinstance(value, list) and value and all(isinstance(i, dict) for i in value):
+                lines.append(f"{indent}- **{key}:**")
+                lines.extend(
+                    f"{indent}  - " + ", ".join(f"{k}: {_inline(v)}" for k, v in entry.items())
+                    for entry in value
+                )
+            else:
+                lines.append(f"{indent}- **{key}:** {_inline(value)}")
         return "\n".join(lines)
     if isinstance(payload, (list, tuple)):
-        return "\n".join(f"- {item}" for item in payload) or "_(empty)_"
-    return str(payload)
+        return "\n".join(f"{indent}- {_inline(item)}" for item in payload) or "_(empty)_"
+    return _inline(payload)
+
+
+def _prune_for_journal(value: Any) -> Any:
+    """Strip `_JOURNAL_OMIT_KEYS` at every depth, before anything is rendered.
+
+    Filtering at each render site instead left holes: a dict nested inside a
+    list entry, or a bare list payload, reached `_inline` whole and stringified
+    its omitted keys straight back in. Pruning the structure once is both
+    smaller and total — the renderer needs no knowledge of what is omitted.
+    """
+    if isinstance(value, dict):
+        return {k: _prune_for_journal(v) for k, v in value.items()
+                if k not in _JOURNAL_OMIT_KEYS}
+    if isinstance(value, (list, tuple)):
+        return [_prune_for_journal(v) for v in value]
+    return value
 
 
 def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dict[str, Any]:
@@ -61,26 +137,42 @@ def run_refine_chain(journal: Journal, detection_id: str, **context: Any) -> dic
         cls = getattr(wrappers_pkg, step.wrapper_attr, None)
         if cls is None:
             body = f"_Wrapper `{step.wrapper_attr}` not available — skipping._"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": "wrapper-missing"}
             continue
         try:
             result = cls().run(detection_id=detection_id, **context)
-            journal.append_block(detection_id, step.heading, _format_payload(result))
+            journal.append_block(
+                detection_id, step.heading, _format_payload(_prune_for_journal(result)),
+                generated=True,
+            )
             summary[step.name] = {"ok": True, "result": result, "error": None}
+        except NoCatalogRecordError as exc:
+            # The common, expected lifecycle gap: the detection is still
+            # journal-only (Find/Observe), so there is no rule to compare or
+            # verify yet. Distinct from `WrapperUnavailable` below — calling
+            # this "not configured" was simply false for a default install.
+            body = (
+                f"_Not run — no catalog record for {detection_id} yet "
+                f"(still journal-only). {exc}_"
+            )
+            journal.append_block(detection_id, step.heading, body, generated=True)
+            summary[step.name] = {"ok": False, "result": None, "error": "no-catalog-record"}
         except WrapperUnavailable as exc:
-            # Expected, not exceptional: the upstream agent simply isn't wired
-            # (the default state). A clean one-liner belongs in the journal — a
-            # Python traceback in a "readable memory" artifact undermines it.
-            # The exception message already names the exact env var to set.
+            # Expected, not exceptional: an explicitly-set `ADEF_WRAPPER_*`
+            # override that can't be imported (Similarity/Overlap/Verification
+            # are native when it's unset; PerformanceMetrics has no native
+            # path). A clean one-liner belongs in the journal — a Python
+            # traceback in a "readable memory" artifact undermines it. The
+            # exception message already names the exact env var to set.
             body = f"_Not run — {step.name} agent isn't configured. {exc}_"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": "not-configured"}
         except Exception as exc:  # noqa: BLE001 — chain must not abort
             # A genuine failure of a configured agent — keep the traceback.
             tb = traceback.format_exc(limit=2)
             body = f"**Failed:** {exc}\n\n```\n{tb}\n```"
-            journal.append_block(detection_id, step.heading, body)
+            journal.append_block(detection_id, step.heading, body, generated=True)
             summary[step.name] = {"ok": False, "result": None, "error": str(exc)}
     return summary
 

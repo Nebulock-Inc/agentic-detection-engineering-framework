@@ -1,5 +1,5 @@
 """Tests for the profile CLI seams: ``adef profile lint`` and
-``adef catalog --report json`` / ``--profile`` (ISA 2026-07-20)."""
+``adef catalog --report json`` / ``--profile``."""
 
 from __future__ import annotations
 

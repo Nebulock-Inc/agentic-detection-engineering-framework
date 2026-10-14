@@ -64,6 +64,21 @@ def test_draft_persists_and_is_browsable(tmp_path: Path) -> None:
     assert data["data_source"] == "zeek_dns"
 
 
+def test_a_schema_platform_that_isnt_a_path_segment_is_queued_not_fatal(tmp_path: Path) -> None:
+    """The schema's `platform` is free text the user wrote, and it becomes a
+    directory name. `platform: Windows` made `adef detection new --source` die at
+    write time on a `record_path` refusal the author cannot act on from the
+    command they ran — the schema is theirs, but the message is about path
+    segments. Unusable lands in the unknown bucket with `no_platform` queued.
+    """
+    _write_schema(tmp_path, "winlog", "Windows Server", "spl", {"index": "thrunt"})
+    rec = draft_record_from_schema(tmp_path, "D-0003", "mshta child", "winlog")
+    assert rec.platform == "multi-platform"
+    assert rec.review_reasons == ["no_platform"]
+    assert rec.needs_review is True
+    Catalog(tmp_path).write(rec)  # the refusal was here
+
+
 def test_kql_scope_uses_table_syntax(tmp_path: Path) -> None:
     # A KQL source's scope container should read as a KQL lead table, not index=.
     _write_schema(tmp_path, "SecurityEvent", "windows", "kql", {"table": "SecurityEvent"})

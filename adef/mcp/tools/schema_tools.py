@@ -25,7 +25,7 @@ from adef.core.recipes import get_recipe, list_platforms, render_recipe_markdown
 
 
 def _get_workspace_schema_dir(workspace: Optional[str]) -> Path:
-    """Workspace schema dir via the canonical resolver (ISA 2026-07-22)."""
+    """Workspace schema dir via the canonical resolver."""
     from adef.core.workspace import resolve_workspace
 
     return resolve_workspace(Path(workspace) if workspace else None) / "schema"
@@ -41,7 +41,7 @@ def _safe_source_name(source: str) -> str:
     The MCP server is a trust boundary — ``source`` comes from an agent/client
     and is joined into a filesystem path (``<schema>/<source>.yml``). Reject
     path separators, ``..`` traversal, and absolute/empty names so a request
-    can't read outside the schema dir (CodeRabbit #21). Windows ``\\`` too, so
+    can't read outside the schema dir (CodeRabbit). Windows ``\\`` too, so
     the guard holds regardless of the server's OS.
     """
     name = (source or "").strip()

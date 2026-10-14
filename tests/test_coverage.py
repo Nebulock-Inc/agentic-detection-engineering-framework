@@ -22,7 +22,7 @@ def _rec(tid_list, needs_review=False, data_source="src_a", status="draft"):
 
 def test_orphaned_records_excluded_from_coverage():
     """A record whose source rule is gone (sync marks orphaned) must not count
-    as coverage — else a deleted detection inflates the report (ISA 2026-07-22)."""
+    as coverage — else a deleted detection inflates the report."""
     live = _rec(["T1059.001"])
     orphan = {**_rec(["T1003.001"]), "orphaned": True, "status": "deprecated"}
     cov = build_coverage([live, orphan])
@@ -142,7 +142,7 @@ def test_navigator_layer_scores_by_tier():
 def test_metadata_gaps_do_not_disqualify_solid():
     """no_platform is a placement gap, not a correctness doubt — a technique
     with depth >=2 backed only by no_platform-flagged rules is SOLID (live
-    finding: ESCU endpoint read as 0/308 solid; ISA 2026-07-23)."""
+    finding: Splunk's public ESCU corpus read as 0/308 solid)."""
     from adef.core.coverage import Tier, build_coverage
 
     records = [
@@ -179,3 +179,55 @@ def test_legacy_boolean_flag_stays_conservative():
     ]
     cov = build_coverage(records)
     assert cov.techniques["T1059.001"].tier is Tier.FRAGILE
+
+
+def test_the_workspace_snapshot_is_what_gets_scored(tmp_path, monkeypatch):
+    """`--workspace X` must score against X's ATT&CK snapshot, not the shipped one.
+
+    Both functions took no workspace and called `attack_reference()` zero-arg,
+    which resolves from `$ADEF_WORKSPACE` or the package copy. So
+    `adef coverage --workspace X`, after `adef attack refresh` wrote a newer
+    snapshot into X, reported the *shipped* technique universe: a wrong
+    "N of M" denominator, a gap list naming techniques X doesn't have, and any
+    technique X knows about but the shipped copy doesn't counted as fictional
+    coverage.
+
+    `T9999` is the lever: fiction to the shipped snapshot, real to this one. The
+    env var is pointed somewhere else entirely so a passing result can only come
+    from the argument — with `$ADEF_WORKSPACE` set to the same path, the zero-arg
+    call would succeed too and the test would prove nothing.
+    """
+    import json
+
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "attack").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(elsewhere))
+
+    ws = tmp_path / "ws"
+    (ws / "attack").mkdir(parents=True)
+    (ws / "attack" / "enterprise.json").write_text(
+        json.dumps(
+            {
+                "attack_version": "99.9-local",
+                "tactics": {"execution": "Execution"},
+                "techniques": {
+                    "T9999": {"name": "Local Only", "tactics": ["execution"]},
+                    "T8888": {"name": "Uncovered Local", "tactics": ["execution"]},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cov = build_coverage([_rec(["T9999"])], ws)
+
+    # Covered, not fictional — the shipped snapshot would say the opposite.
+    assert "T9999" in cov.techniques, cov.invalid_mappings
+    assert cov.invalid_mappings == {}
+    # And the denominator is this snapshot's universe (2), not the shipped ~800.
+    assert cov.total_techniques == 2, cov.total_techniques
+    assert cov.tactic_totals == {"Execution": 2}
+
+    # The gap list enumerates the universe, so it needs the same snapshot.
+    gaps = uncovered_by_tactic(cov, ws)
+    assert gaps == {"Execution": [("T8888", "Uncovered Local")]}, gaps

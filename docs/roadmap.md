@@ -1,10 +1,10 @@
 # ADEF Roadmap
 
-> What's in v0.1.0, what's coming, and — just as important — what ADEF is deliberately *not* going to ship.
+> What has shipped, what's coming, and — just as important — what ADEF is deliberately *not* going to ship.
 
-## v0.1.0 — Foundations (this release)
+## v1.0 — Foundations (released 2026-07-28)
 
-The minimum viable framework: FORGE methodology, journal memory, twelve wrapped agents, four new agents, MCP surface.
+The minimum viable framework: FORGE methodology, journal memory, wrappers for upstream rule agents, four new agents, MCP surface.
 
 - FORGE lifecycle CLI: `adef detection {new, observe, refine, govern, evolve}`.
 - Journal memory: per-detection markdown at `journals/D-XXXX.md`, idempotent stage advance, atomic writes.
@@ -14,7 +14,60 @@ The minimum viable framework: FORGE methodology, journal memory, twelve wrapped 
 - MCP server (`adef-mcp`) exposing lifecycle, memory, and agent tools.
 - Public docs frame ADEF and ATHF as paired siblings.
 
-## v0.2.0 — Autonomy
+## v2 — native Refine, cross-language retrieval, health capture (in progress)
+
+**Shipped (merged, not yet released):**
+
+- **Refine chain runs natively by default.** RuleSimilarity, RuleOverlap and
+  Verification need no upstream binding; an `ADEF_WRAPPER_<KEY>` override
+  still works.
+  - **Similarity** fuses BM25, a field pass (through declared schema aliases)
+    and a value pass that finds rules in *other* query languages testing the
+    same rare values. `--similarity-mode`: `bm25` (CLI default, no network),
+    `agent` (MCP default; the calling assistant ranks), `llm`/`auto`.
+  - **Overlap** compares rules on the same ATT&CK technique, its parent and
+    its sub-techniques (not siblings):
+    `duplicate`, `redundant`, `complementary`, or `unassessed` for a pair in
+    two query languages, which ADEF doesn't compare yet.
+  - **Verification** reports `passed`, `failed`, or `partial` when the field
+    check couldn't run, and says why.
+- **Detection health ingestion.** `adef ingest` takes five self-describing
+  document kinds (`metrics`, `performance`, `deployment_drift`,
+  `field_observations`, `source_health`) from any producer. The three
+  detection-keyed kinds store a latest snapshot plus append-only history; the
+  two source-keyed ones store latest only. ADEF still never queries your
+  environment.
+- **Health readback into Evolve.** `adef health show` prints what was stored
+  plus the values the heuristics read (`fp_ratio`, `weekly_signal_volume`,
+  `days_since_true_positive`), and `adef detection evolve --chain` reasons from
+  them — so a keep/tune/deprecate verdict is dated, sourced, and written to the
+  journal. This is what closed the loop: Evolve used to report
+  `insufficient-data` on numbers that had just been ingested. The *fleet*
+  report (`adef health report`) is still to come.
+- **Workspace self-check.** `adef doctor` — ten checks over one workspace, each
+  carrying the next command to run. Warnings exit 0; state that would make
+  another command lie exits 1.
+- **ATHF GATES import.** `adef hunt-promote --gates` turns a hunt's validated
+  candidates into catalogued detections.
+- **Catalog and sync.** Extraction profiles cover YAML-wrapped queries (CQL
+  query hubs, Panther scheduled queries); `sync` picks up profile edits; a
+  backward FORGE stage move needs `--back` on the CLI (`allow_backward` in the
+  API and MCP).
+
+**Not started:**
+
+- **Fleet health report.** A `health report` view across every detection, the
+  coverage report's peer. Per-detection readback shipped; the aggregate didn't.
+- **Trend analysis over the health history.** `health/history/*.jsonl` is
+  append-only so this can be built; nothing reads more than the latest
+  snapshot yet.
+- **Composite rule builder.**
+- **Testing-platform support** (CrowdStrike, Splunk, maybe Defender), as
+  separate packages per the no-connectors anti-goal.
+- **MCP-driven tuning** against a user's own environment.
+- **Logic comparison across query languages**, beyond today's shortlist.
+
+## Next — Autonomy
 
 The first autonomous agent loops.
 
@@ -40,7 +93,7 @@ The first autonomous agent loops.
 - Agent-to-agent handoff workflows: `HypothesisFromIntel → DraftRule → RuleSimilarity → RuleOverlap → Verification → DeploymentGate` as a single orchestrated DAG.
 - Autonomous deprecation recommendations: the `DeprecationRecommender` can open PRs against the configured upstream rule repository when its verdict is `deprecate` and confidence exceeds a configured floor. Humans review and approve.
 
-## v0.3.0+ — Generative authoring
+## Later — Generative authoring
 
 The shape of L3-Generative as a first-class workflow.
 
@@ -48,19 +101,19 @@ The shape of L3-Generative as a first-class workflow.
 - Backtest-aware drafting: the agent does not propose a rule it can't backtest.
 - Cross-project memory: search journals + upstream hunt artifacts + upstream rule YAML in one query.
 
-## v1.0 — North star
+## North star
 
-See [north-star.md](./north-star.md). The v1 demo is `adef detection new --from-intel <url>` producing a backtested, MITRE-tagged, deduplicated, journaled detection in minutes — without short-circuiting any of FORGE.
+See [north-star.md](./north-star.md). The demo is `adef detection new --from-intel <url>` producing a backtested, MITRE-tagged, deduplicated, journaled detection in minutes — without short-circuiting any of FORGE.
 
 ---
 
 ## Anti-goals
 
-The framework's gravity well bends toward feature creep; the anti-goals push back. **None of the following will land in v0.1.0** — and several won't land *ever*:
+The framework's gravity well bends toward feature creep; the anti-goals push back. **None of the following will land in v2** — and several won't land *ever*:
 
 - **No new engine types.** `sigma`, `sql`, `sch_sql`, `composite` is the closed set. The CI guard `tests/test_no_new_engine_types.py` enforces it.
 - **No vendor connectors.** ADEF will not ship CrowdStrike, Splunk, SentinelOne, Microsoft Sentinel, etc. integrations inside the framework. They are policy-coupled, vendor-coupled, and a maintenance trap. Build them as separate plugins.
-- **No web UI.** v0.1.0 is CLI + MCP. Web frameworks (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`) will not appear in `pyproject.toml`. The CI guard `tests/test_no_web_ui_deps.py` enforces it.
+- **No web UI.** ADEF is CLI + MCP. Web frameworks (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`) will not appear in `pyproject.toml`. The CI guard `tests/test_no_web_ui_deps.py` enforces it.
 - **No upstream YAML mutation.** ADEF code paths never open or write any path under any rule `detections/` directory. Enforced at runtime by `_check_not_under_detections()` in `adef/core/journal.py` and at CI time by `tests/test_schema_parity.py`.
 - **No silent plugin failures.** Plugin entry-point loading is wrapped in defensive try/except so one broken plugin can't hide all the others — the failure is logged, not swallowed.
 

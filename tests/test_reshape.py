@@ -97,8 +97,8 @@ def test_enum_skipped_when_high_cardinality():
 
 
 def test_enum_harvested_at_eventcode_scale():
-    """Windows enum-ish fields sit in the 20–50 distinct band (live thrunt
-    export: EventCode=24) — the cap must not exclude them."""
+    """Windows enum-ish fields sit in the 20–50 distinct band — EventCode at
+    24 distinct must not be excluded by the cap."""
     values = [str(4600 + i) for i in range(24)]
     fields, _ = reshape_fields(
         [RawField("EventCode", total_count=100, numeric_count=100, distinct_count=24, values=values)]
@@ -499,7 +499,7 @@ def test_cli_reshape_platform_from_config(tmp_path, monkeypatch):
 
 def test_reshape_binary_file_is_clean_error(tmp_path):
     """A binary file (or wrong encoding) → ReshapeError, not a raw
-    UnicodeDecodeError traceback (ISA 2026-07-22 guardrail audit)."""
+    UnicodeDecodeError traceback."""
     binf = tmp_path / "export.bin"
     binf.write_bytes(b"\x00\x01\x02\xff\xfe garbage \x80\x81")
     with pytest.raises(ReshapeError, match="UTF-8"):

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
 from adef.core.coverage import Tier, build_coverage, navigator_layer, uncovered_by_tactic
 
@@ -61,7 +62,7 @@ def coverage(
     if not records:
         raise click.ClickException(f"No catalog records under {ws}. Run `adef catalog` first.")
 
-    cov = build_coverage(records)
+    cov = build_coverage(records, ws)
     tiers = cov.by_tier()
     n = len(cov.techniques)
 
@@ -83,7 +84,7 @@ def coverage(
         total_backed = sum(1 for tc in cov.techniques.values() if tc.sources)
         single = cov.single_source_techniques()
         console.print("\n[bold]Log-source risk[/bold]")
-        console.print(f"  Busiest feed: [cyan]{src}[/cyan] backs {cnt} detection mappings.")
+        console.print(f"  Busiest feed: [cyan]{escape(str(src))}[/cyan] backs {cnt} detection mappings.")
         if total_backed:
             console.print(
                 f"  {len(single)}/{total_backed} techniques ride a single source — "
@@ -96,7 +97,7 @@ def coverage(
         console.print(f"\n[bold]Single points of failure[/bold] — {len(spof)} techniques with one detection")
         for tid in spof[:10]:
             tc = cov.techniques[tid]
-            console.print(f"  [yellow]{tid}[/yellow] {tc.name}  ({tc.why()})")
+            console.print(f"  [yellow]{escape(str(tid))}[/yellow] {escape(str(tc.name))}  ({escape(str(tc.why()))})")
         if len(spof) > 10:
             console.print(f"  … and {len(spof) - 10} more")
 
@@ -104,7 +105,7 @@ def coverage(
     if cov.invalid_mappings:
         console.print(f"\n[bold red]Fictional coverage[/bold red] — {len(cov.invalid_mappings)} mapped IDs aren't in ATT&CK")
         for bad, dets in sorted(cov.invalid_mappings.items()):
-            console.print(f"  [red]{bad}[/red] used by {', '.join(sorted(set(dets)))}")
+            console.print(f"  [red]{escape(str(bad))}[/red] used by {escape(', '.join(sorted(set(dets))))}")
 
     # Tactic rollup.
     roll = cov.tactic_rollup()
@@ -141,16 +142,16 @@ def coverage(
                 )
 
     if list_gaps:
-        uncovered = uncovered_by_tactic(cov)
+        uncovered = uncovered_by_tactic(cov, ws)
         if uncovered:
             console.print("\n[bold]Uncovered techniques by tactic[/bold]")
             for tactic, _covd, _total in gaps:  # biggest-gap tactics first
                 techs = uncovered.get(tactic)
                 if not techs:
                     continue
-                console.print(f"\n  [bold]{tactic}[/bold] — {len(techs)} uncovered")
+                console.print(f"\n  [bold]{escape(str(tactic))}[/bold] — {len(techs)} uncovered")
                 for tid, tname in techs[:15]:
-                    console.print(f"    [dim]{tid}[/dim] {tname}")
+                    console.print(f"    [dim]{escape(str(tid))}[/dim] {escape(str(tname))}")
                 if len(techs) > 15:
                     console.print(f"    … and {len(techs) - 15} more")
 
@@ -158,7 +159,7 @@ def coverage(
         layer = navigator_layer(cov, name=name)
         navigator.write_text(json.dumps(layer, indent=2) + "\n", encoding="utf-8")
         console.print(
-            f"\n[green]Navigator layer[/green] → {navigator} "
+            f"\n[green]Navigator layer[/green] → {escape(str(navigator))} "
             f"({len(layer['techniques'])} techniques). Import at attack.navigator."
         )
 

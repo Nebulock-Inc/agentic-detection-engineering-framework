@@ -251,7 +251,7 @@ def test_discovered_rule_query_text_present(rule_repo):
 
 def test_walk_skips_git_dir(tmp_path):
     """.git internals are never walked — they're not rules and pollute the
-    report with packed objects (E2E 2026-07-27)."""
+    report with packed objects."""
     from adef.core.rule_discovery import walk_outcomes
 
     root = tmp_path / "repo"

@@ -43,22 +43,45 @@ What goes here:
 
 ### Refine — iterate the rule with structured feedback
 
-Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three upstream rule-engineering agents:
+Refine is where the rule is drafted, redrafted, and trimmed. ADEF's Refine stage automatically chains three steps, native by default (v2, 2026-09) — and deterministic by default: RuleSimilarity's default `bm25` mode makes no network call, as does its `agent` mode, which hands the shortlist to the calling assistant to rank. Only the opt-in `llm` and `auto` modes call the Anthropic API (see CLAUDE.md's "The Refine Chain" for the exact data egress).
 
-1. **RuleSimilarity** — does a rule like this already exist?
-2. **RuleOverlap** — do its triggers heavily overlap with another rule's findings?
-3. **Verification** — would the rule survive the four-engine constraint and pass schema validation?
+1. **RuleSimilarity** — BM25 nearest-neighbor search over the catalog, plus a field pass (with declared schemas) and a value pass that proposes rules in other query languages testing the same rare values — does a rule like this already exist?
+2. **RuleOverlap** — deterministic duplicate/complementary/redundant classification within the target's MITRE technique cluster, (a sub-technique and its parent technique are compared; sibling sub-techniques are not) — do its triggers heavily overlap with another rule's findings? A pair written in two different query languages is reported `unassessed`: ADEF doesn't compare logic across languages yet, so judge those pairs from Similarity's shortlist.
+3. **Verification** — schema field-usage + four-engine-constraint check — would the rule survive those constraints and pass validation?
 
-Each result is appended to the detection's journal under a `### Refine / <step>` heading. The chain does not abort on failure; partial results are valuable.
+Each result is appended to the detection's journal under a `### Refine / <step>` heading. The chain does not abort on failure; partial results are valuable. Each step honors an optional `ADEF_WRAPPER_<KEY>` env var override to delegate to a configured upstream agent (exactly as before v2, if explicitly set).
 
-**Example.** Refine appends *"RuleOverlap: 78% with `windows_lolbin_mshta_public.yml`. Recommendation: merge with that rule's filter logic rather than ship a near-duplicate."*
+**Example.** The Overlap step appends this to the journal — one sub-bullet per
+cluster-mate, most confident first:
+
+```markdown
+### Refine / Overlap (2026-09-18T14:32:06-04:00)
+
+- **detection_id:** D-0001
+- **result:**
+  - **detection_id:** D-0001
+  - **techniques:** ['T1218.005']
+  - **overlaps:**
+    - other_id: D-0042, overlap_type: duplicate, confidence: 0.91, reasoning: Near-identical query logic (91% similar)
+    - other_id: D-0117, overlap_type: redundant, confidence: 0.78, reasoning: D-0117's query is a strict superset of D-0001's predicate — D-0117 fires on a subset of what D-0001 already covers
+    - other_id: D-0203, overlap_type: complementary, confidence: 0.34, reasoning: Related technique, distinct detection logic — different coverage angle
+```
+
+Note what the classifier does and doesn't give you: `other_id` is always a
+`D-XXXX` (the catalog ID, never a filename), the `overlap_type` is one of
+`duplicate`, `redundant`, `complementary` or `unassessed` (a pair in two
+query languages, not compared), and there is no "recommendation" — deciding to merge,
+narrow, or keep both is the engineer's call, which is why the `reasoning`
+explains the relationship rather than prescribing an action. `duplicate`
+requires ≥0.85 similarity; the 0.78 pair above is classified on the substring
+relation, not the ratio.
 
 ### Govern — deploy with quality gates, ownership, review cadence
 
 A detection without ownership is a detection without a future. Govern names the engine, the human, and the calendar.
 
 What goes here:
-- **Engine type** — exactly one of `sigma | sql | sch_sql | composite` (no new engines in v0.1.0).
+- **Engine type** — exactly one of `sigma | sql | sch_sql | composite` (no new engines, ever — it's a CI-enforced anti-goal).
 - **Severity / risk score / RBA contribution** — calibrate against neighbors.
 - **Owner** — the human who carries the pager for this rule.
 - **On-call rotation** — which rotation responds when this fires.
@@ -99,4 +122,4 @@ Detection engineering is not exactly software development and not exactly huntin
 
 - [maturity-model.md](./maturity-model.md) — L0 Ad-hoc → L4 Agentic. Where on the curve does your team sit?
 - [why-adef.md](./why-adef.md) — adoption guide; the practical "why this, why now."
-- [Roadmap](./roadmap.md) — what comes after v0.1.0.
+- [Roadmap](./roadmap.md) — what's shipped, what's next, and what ADEF will never ship.

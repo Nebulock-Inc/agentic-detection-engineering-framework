@@ -1,5 +1,5 @@
 """Tests for data-source declarations (adef/core/declaration.py) and the
-schema ingest/lint/check CLI (ISA 2026-07-20)."""
+schema ingest/lint/check CLI."""
 
 from __future__ import annotations
 
@@ -230,7 +230,7 @@ def test_cli_check_reports_both_finding_types(ws, tmp_path):
 
 
 def test_old_model_commands_are_gone():
-    """The rules-derived schema model was removed pre-release (ISA 2026-07-20).
+    """The rules-derived schema model was removed pre-release.
 
     `recipe` (SIEM declaration-recipe generator) and `reshape` (export → draft
     declaration, 2026-07-21) are declaration-model commands, not a
@@ -242,7 +242,7 @@ def test_old_model_commands_are_gone():
 
 
 # --------------------------------------------------------------------------- #
-# Scope (ISA 2026-07-21): name is what a schema IS; scope is every way a
+# Scope: name is what a schema IS; scope is every way a
 # query might ADDRESS it. Most-specific match wins; ties = union.
 # --------------------------------------------------------------------------- #
 SCOPED_DECLARATION = {
@@ -494,3 +494,10 @@ def test_check_scoped_finds_that_rules_own_problems(ws, tmp_path):
     report = json.loads(result.output)
     all_missing = {f for fields in report["missing_from_schema"].values() for f in fields}
     assert "BogusField" in all_missing
+
+
+def test_known_field_names_keeps_a_scalar_alias_whole():
+    from adef.core.declaration import known_field_names
+
+    names = known_field_names({"fields": [{"name": "process.name", "aliases": "Image"}]})
+    assert names == {"process.name", "Image"}

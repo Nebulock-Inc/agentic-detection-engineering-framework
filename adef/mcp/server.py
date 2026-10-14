@@ -17,6 +17,20 @@ def _new_server():  # pragma: no cover — thin factory, exercised by integratio
     try:
         from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]
     except ImportError as exc:
+        import importlib.metadata
+
+        try:
+            found = importlib.metadata.version("mcp")
+        except importlib.metadata.PackageNotFoundError:
+            found = ""
+        if found and found.split(".", 1)[0].isdigit() and int(found.split(".", 1)[0]) >= 2:
+            # mcp 2.x renamed FastMCP (MCPServer) and changed its API.
+            raise SystemExit(
+                f"adef-mcp needs mcp<2, but mcp {found} is installed (2.x renamed "
+                "FastMCP). Install a compatible SDK with: pip install 'mcp[cli]>=1.0.0,<2'"
+            ) from exc
+        if found:
+            raise  # a compatible SDK that fails to import: the real error is the useful one
         raise SystemExit(
             "adef-mcp requires the optional 'mcp' extra. Install with: pip install 'agentic-detection-engineering-framework[mcp]'"
         ) from exc

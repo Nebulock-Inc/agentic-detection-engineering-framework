@@ -16,9 +16,8 @@ Implements the five reshape rules
    index) is refused with re-export guidance, never guessed at.
 
 Every transformation is recorded in a :class:`ReshapeReport` so the human
-approves the *transformations*, not a wall of YAML. This is the "results-in
-seam" from the ISA Schema Storage decision (2026-07-15): the user runs the
-export; ADEF never connects to a SIEM.
+approves the *transformations*, not a wall of YAML. This is ADEF's "results-in" seam for
+schema storage: the user runs the export; ADEF never connects to a SIEM.
 """
 
 from __future__ import annotations
@@ -29,9 +28,11 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# 50, not 20: the live thrunt export (2026-07-22) had EventCode at 24 distinct,
-# eventtype 26, tag 24 — Windows enum-ish fields routinely sit in the 20–50
-# band, and EventCode grounding is the whole point of harvesting.
+# 50, not 20: EventCode, eventtype and tag are open enums that routinely carry
+# more than 20 distinct values in one index, so a 20-value cap drops exactly the
+# fields harvesting exists to ground a rule in. Pinned by
+# tests/test_reshape.py::test_enum_harvested_at_eventcode_scale, which goes red
+# at 20.
 ENUM_MAX_DISTINCT = 50  # ponytail: fixed caps; make configurable if a real corpus demands it
 ENUM_MAX_VALUE_LEN = 64
 

@@ -2,8 +2,12 @@
 
 import textwrap
 
+import pytest
+import sqlglot
+
 from adef.core.rule_parser import (
     extract_sql_fields,
+    extract_sql_predicate_fields,
     extract_spl_fields,
     extract_cql_fields,
     extract_kql_fields,
@@ -54,22 +58,23 @@ def test_extract_sql_fields_invalid_query():
     assert fields == set()
 
 
-def test_extract_sql_fields_nebulock_clickhouse():
-    """Nebulock's dialect: a bare WHERE predicate over backtick-dotted
+def test_extract_sql_fields_bare_predicate_backtick_identifiers():
+    """A bare WHERE predicate (no SELECT) over backtick-quoted dotted
     identifiers. The default dialect must parse it — Postgres cannot, and would
     silently return an empty set (making `schema check` blind to every field).
     """
     query = (
-        "nebulock_im_source = 'im-process_create' "
+        "event_type = 'process_create' "
         "AND `process.name` = 'rundll32.exe' "
         "AND `process.command_line` LIKE '%javascript%'"
     )
 
     fields = extract_sql_fields(query)
 
-    assert fields == {"nebulock_im_source", "process.name", "process.command_line"}
-    # Guard the regression directly: Postgres drops it, so the default is what matters.
-    assert extract_sql_fields(query, dialect="postgres") == set()
+    assert fields == {"event_type", "process.name", "process.command_line"}
+    # Why the default matters: Postgres's grammar rejects it outright.
+    with pytest.raises(Exception):
+        sqlglot.parse_one(query, dialect="postgres")
 
 
 def test_extract_spl_fields():
@@ -142,7 +147,7 @@ def test_extract_kql_fields():
 
 def test_extract_spl_fields_excludes_aggregation_outputs():
     """`count` / `as total` are created by stats, not read from events —
-    they must not surface as schema-check findings (HANDOFF follow-up)."""
+    they must not surface as schema-check findings."""
     fields = extract_spl_fields(
         "index=thrunt action=denied | stats count by src_ip dest_port | where count > 20"
     )
@@ -211,3 +216,34 @@ def test_extract_sigma_fields_malformed_returns_empty():
     assert extract_sigma_fields("this: is: not: valid: yaml:") == set()
     assert extract_sigma_fields("title: no detection block here") == set()
     assert extract_sigma_fields("") == set()
+
+
+def test_snowflake_json_path_sql_falls_back_to_a_dialect_that_parses_it():
+    # 70 of 95 Panther scheduled queries yielded no fields
+    # because the ClickHouse grammar rejects Snowflake's `col:path` access.
+    query = (
+        "SELECT userIdentity:arn AS arn, count(DISTINCT eventName) AS n "
+        "FROM panther_logs.public.aws_cloudtrail "
+        "WHERE errorCode = 'AccessDenied' GROUP BY userIdentity:arn"
+    )
+    with pytest.raises(Exception):
+        sqlglot.parse_one(query, dialect="clickhouse")
+    assert "errorCode" in extract_sql_predicate_fields(query)
+    assert "errorCode" in extract_sql_fields(query)
+
+
+def test_field_extractor_key_resolves_a_source_format_to_its_language():
+    # CodeRabbit: an ESCU record without query_language read as its
+    # own language ("splunk-escu"), so Overlap called SPL pairs unassessed.
+    from adef.core.rule_parser import field_extractor_key
+    assert field_extractor_key({"format": "splunk-escu"}) == "spl"
+    assert field_extractor_key({"format": "splunk-escu", "query_language": "spl"}) == "spl"
+
+
+def test_cql_fields_exclude_names_the_query_creates():
+    q = ('#event_simpleName=ProcessRollup2 | x := lower(ImageFileName) '
+         '| replace("a", with="b", field=CommandLine, as="cmd") '
+         '| regex("(?<user>\\\\w+)@", field=UserName) | x=*cmd.exe | cmd=*enc* | user=admin')
+    fields = extract_cql_fields(q)
+    assert {"x", "cmd", "user"}.isdisjoint(fields), fields
+    assert {"#event_simpleName"} <= fields  # tags stay; consumers decide (routing)
