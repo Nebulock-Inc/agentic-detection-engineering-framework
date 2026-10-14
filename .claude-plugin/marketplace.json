@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "adef",
-      "source": "./claude-plugin",
+      "source": "./adef/data/claude-plugin",
       "description": "Agentic Detection Engineering Framework — catalog onboarding, extraction-profile authoring, and FORGE lifecycle tools via adef-mcp."
     }
   ]

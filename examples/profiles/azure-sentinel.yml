@@ -1,8 +1,8 @@
 # Extraction profile for Azure/Azure-Sentinel (analytics + hunting queries).
 #
-# A worked example of a **YAML profile for a format ADEF has no built-in for**
-# (unify-on-profiles P2). Sentinel rules are rule-shaped YAML the recognizers
-# don't match — so they land `unclaimed` until a profile claims them. No new
+# A worked example of a **YAML profile for a format ADEF has no built-in for**.
+# Sentinel rules are rule-shaped YAML the recognizers don't match — so they
+# land `unclaimed` until a profile claims them. No new
 # profile-format features were needed: the fields sit at clean top-level paths.
 #
 # Validated against the real repo: Detections/ 170 claimed (title/query/uuid

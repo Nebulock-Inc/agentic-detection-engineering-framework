@@ -54,7 +54,7 @@ The framework treats every level as a stable plateau a team can rest on. You don
 
 **Signs you're here.** Most tuning PRs are opened by an agent and approved (or rejected with rationale that feeds back into the agent's prompt). Detection deprecation is a regular, evidence-backed event, not a quarterly cleanup. The team can answer "what is the agent uncertain about right now?" because the agents surface their own uncertainty.
 
-**v0.1.0 honesty.** L4 is on the roadmap, not in this release. The Tune/Deprecation recommenders ship in v0.1.0 as *advisory* agents — they suggest, they don't act. v0.2+ adds the daemon and the autonomous PR loop. See [roadmap.md](./roadmap.md).
+**Honesty about L4.** L4 is on the roadmap, not in any shipped release. The Tune and Deprecation recommenders ship as *advisory* agents — they suggest, they don't act. The daemon and the autonomous PR loop come later. See [roadmap.md](./roadmap.md).
 
 ---
 
@@ -67,4 +67,4 @@ A few notes from the field:
 - **L3 is a culture shift, not a tooling shift.** You can install ADEF in an afternoon. Getting your team to *use* the agent-drafted journals takes longer.
 - **L4 is a governance problem.** It's also a year of trust-building. Plan accordingly.
 
-ADEF v0.1.0 ships everything you need to operate at L0–L3 today, and the foundation for L4 in v0.2+.
+ADEF ships everything you need to operate at L0–L3 today, and the foundation for L4 later.

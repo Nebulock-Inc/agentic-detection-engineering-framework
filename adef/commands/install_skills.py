@@ -13,7 +13,8 @@ Targets (same set as Cisco-Talos/EvidenceForge): ``claude`` →
 ``<base>/.claude/skills/`` (the tested path — also what the plugin installs);
 ``chatgpt`` / ``codex`` → ``<base>/.agents/skills/``. The skill files are the
 same markdown for every agent; only the destination convention differs. Source
-of truth is the repo's ``claude-plugin/``. Nothing writes outside the chosen dir.
+of truth is ``adef/data/claude-plugin/``, which ships in the wheel. Nothing
+writes outside the chosen dir.
 """
 
 from __future__ import annotations
@@ -53,14 +54,19 @@ class InstallResult:
 
 
 def _bundled_plugin_dir() -> Path:
-    """Locate the repo's ``claude-plugin/`` from the installed package.
+    """Locate the bundled ``claude-plugin/`` inside the installed package.
 
-    ADEF installs from source (not PyPI yet), so ``claude-plugin/`` sits at the
-    repo root, one level above the ``adef`` package.
+    Under ``adef/data/`` so it ships as ``adef.data`` package-data — at the repo
+    root, ``parent.parent`` landed in ``site-packages`` and a wheel user had no
+    skills at all.
+
+    A plain join, not ``importlib.resources``: `copy_skills` hands this to
+    ``shutil.copytree``, and ``as_file()`` accepts a *directory* only on 3.12+
+    while this package supports 3.10.
     """
     import adef
 
-    return Path(adef.__file__).resolve().parent.parent / "claude-plugin"
+    return Path(adef.__file__).resolve().parent / "data" / "claude-plugin"
 
 
 def copy_skills(source_plugin_dir: Path, dest_claude_dir: Path, force: bool = False) -> InstallResult:
@@ -73,8 +79,8 @@ def copy_skills(source_plugin_dir: Path, dest_claude_dir: Path, force: bool = Fa
     skills_src = source_plugin_dir / "skills"
     if not skills_src.is_dir():
         raise InstallSkillsError(
-            f"no bundled skills found at {skills_src} — run from an ADEF checkout "
-            "(the skills ship in the repo's claude-plugin/, not on PyPI yet)."
+            f"no bundled skills found at {skills_src} — this looks like an "
+            "incomplete ADEF install; reinstall it, or run from a checkout."
         )
 
     result = InstallResult()

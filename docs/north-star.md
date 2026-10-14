@@ -12,7 +12,7 @@ In v1, that single command produces a **backtested, MITRE-tagged, deduplicated, 
 
 ## What "without short-circuiting FORGE" means
 
-The agentic shortcut is real. It is also dangerous. The whole point of FORGE is that detections that skip stages produce signal nobody trusts and tuning decisions nobody can defend. The v1 demo doesn't compress FORGE — it accelerates it.
+The agentic shortcut is real. It is also dangerous. The whole point of FORGE is that detections that skip stages produce signal nobody trusts and tuning decisions nobody can defend. The flow below doesn't compress FORGE — it accelerates it.
 
 Here is what `--from-intel` actually does, expanded:
 
@@ -49,21 +49,21 @@ Here is what `--from-intel` actually does, expanded:
 - The Evolve stage is intentionally empty for a brand-new detection. There is nothing to evolve yet.
 - The journal carries forward as the rule operates and the Evolve block fills in over time.
 
-## Why this is a north star, not v0.1.0
+## Why this is a north star, not today's CLI
 
-v0.1.0 ships every individual piece:
+ADEF ships every individual piece today:
 
 - `HypothesisFromIntelAgent` — works today, network-free for non-URL inputs.
 - Refine chain — works today.
 - Journal scaffolding — works today.
 
-What v0.1.0 deliberately does **not** ship is the **single command that wires all of them into one orchestrated flow**. The reason is conviction, not capability: orchestrating an L3-Generative happy path before the journal corpus has been seeded produces confidently-wrong drafts. We earn the `--from-intel` happy path by getting teams to L1-Documented and L2-Searchable first.
+What ADEF deliberately does **not** ship is the **single command that wires all of them into one orchestrated flow**. The reason is conviction, not capability: orchestrating an L3-Generative happy path before the journal corpus has been seeded produces confidently-wrong drafts. We earn the `--from-intel` happy path by getting teams to L1-Documented and L2-Searchable first.
 
-The v0.2+ roadmap walks toward `--from-intel` deliberately:
+The [roadmap](roadmap.md) walks toward `--from-intel` deliberately:
 
-- v0.2: agent-to-agent handoff workflow available as a discrete chain.
-- v0.3: `adef detection new --from-intel <url>` shipped, behind a documented "experimental" flag.
-- v1: removed the experimental flag, shipped the demo flow as the default new-detection path.
+1. The agent-to-agent handoff available as a discrete chain.
+2. `adef detection new --from-intel <url>`, behind a documented "experimental" flag.
+3. The flag removed, and this flow the default new-detection path.
 
 ## What this demo proves when it works
 
@@ -72,4 +72,4 @@ The v0.2+ roadmap walks toward `--from-intel` deliberately:
 - **Agents draft; humans approve.** The system is L3-Generative, not L4-Agentic. Trust is earned proposal by proposal.
 - **The framework is small.** No new engines. No vendor connectors. No web UI. The demo is one command because the framework underneath is one shape.
 
-That is the bet. v0.1.0 ships the substrate. v1 ships the demo.
+That is the bet: ship the substrate first, and earn the demo.

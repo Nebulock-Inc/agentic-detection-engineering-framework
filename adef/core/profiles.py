@@ -5,7 +5,7 @@ A *profile* tells the discovery engine how to recognize a rule format
 dot-paths). Profiles are the only mechanism for supporting org-specific
 in-house formats: agent-drafted, engine-validated, human-approved.
 
-Design commitments (ISA 2026-07-20):
+Design commitments:
 
 - **Dot-paths + ``[]`` array iteration only.** No JSONPath — profiles must be
   reviewable by the human who approves them.
@@ -57,7 +57,7 @@ class ProfileError(ValueError):
 
 @dataclass(frozen=True)
 class Profile:
-    """One parsed extraction profile (see the design doc for the YAML shape)."""
+    """One parsed extraction profile (see docs/creating-extraction-profiles.md for the YAML shape)."""
 
     name: str
     version: int
@@ -66,10 +66,20 @@ class Profile:
     any_keys: tuple[str, ...] = ()
     none_keys: tuple[str, ...] = ()
     extensions: tuple[str, ...] = ()
+    records: str = ""
     query_language: str = "none"
-    map: dict[str, str] = dataclass_field(default_factory=dict)
+    # field -> one dot-path, or fallback paths tried in order (first non-empty wins)
+    map: dict[str, tuple[str, ...]] = dataclass_field(default_factory=dict)
     platform_const: str = ""
     platform_path: str = ""
+    platform_prefix: str = ""
+
+    def __post_init__(self) -> None:
+        # Direct construction may pass `field: "path"`; iterating a str would
+        # walk it one character at a time as separate paths.
+        object.__setattr__(self, "map", {
+            k: (v,) if isinstance(v, str) else tuple(v) for k, v in self.map.items()
+        })
     source_path: Optional[Path] = None
 
 
@@ -104,7 +114,7 @@ def lint_profile_dict(data: Any) -> list[str]:
     elif container == "toml" and not _toml_available():
         # toml is implemented but needs stdlib tomllib (Python 3.11+). Without
         # this check the profile lints OK and then silently claims nothing on
-        # 3.10 — the confusing footgun. Say so at lint time. (ISA 2026-07-22.)
+        # 3.10 — the confusing footgun. Say so at lint time.
         errors.append(
             "signature.container: 'toml' requires Python 3.11+ (stdlib tomllib); "
             "this interpreter can't parse TOML, so the profile would match nothing"
@@ -115,6 +125,11 @@ def lint_profile_dict(data: Any) -> list[str]:
             errors.append(f"signature.{key}: must be a list of strings")
     if not sig.get("all_keys") and not sig.get("any_keys"):
         errors.append("signature: at least one of all_keys / any_keys is required")
+    records = sig.get("records")
+    if records is not None and not (
+        isinstance(records, str) and _PATH_RE.match(records) and records.endswith("[]")
+    ):
+        errors.append("signature.records: a dot-path ending in [] (e.g. data[])")
 
     ql = data.get("query_language")
     if ql not in QUERY_LANGUAGES:
@@ -128,19 +143,29 @@ def lint_profile_dict(data: Any) -> list[str]:
         if required not in mapping:
             errors.append(f"map.{required}: required")
     for key, path in mapping.items():
+        paths = path if isinstance(path, list) else [path]
         if key not in MAP_FIELDS:
             errors.append(f"map.{key}: unknown field (allowed: {', '.join(MAP_FIELDS)})")
-        elif not (isinstance(path, str) and _PATH_RE.match(path)):
+        elif not paths:
+            errors.append(f"map.{key}: fallback list must name at least one path")
+        elif not all(isinstance(p, str) and _PATH_RE.match(p) for p in paths):
             errors.append(
-                f"map.{key}: invalid dot-path {path!r} (dot-paths + [] iteration only)"
+                f"map.{key}: invalid dot-path {path!r} (a dot-path, or a list of "
+                "fallback dot-paths; dot-paths + [] iteration only)"
             )
 
     platform = data.get("platform")
     if platform is not None:
-        if not isinstance(platform, dict) or set(platform) - {"const", "path"}:
-            errors.append("platform: mapping with 'const' or 'path' only")
+        if not isinstance(platform, dict) or set(platform) - {"const", "path", "prefix"}:
+            errors.append("platform: mapping with 'const', or 'path' (+ optional 'prefix')")
         elif "const" in platform and "path" in platform:
             errors.append("platform: 'const' and 'path' are mutually exclusive")
+        elif "prefix" in platform and "path" not in platform:
+            errors.append("platform: 'prefix' needs 'path' (it filters the path's values)")
+        elif "prefix" in platform and not (
+            isinstance(platform["prefix"], str) and platform["prefix"]
+        ):
+            errors.append("platform.prefix: a non-empty string (e.g. 'os.')")
         elif "path" in platform and not (
             isinstance(platform["path"], str) and _PATH_RE.match(platform["path"])
         ):
@@ -167,10 +192,12 @@ def profile_from_dict(data: dict, source_path: Optional[Path] = None) -> Profile
         any_keys=tuple(sig.get("any_keys", [])),
         none_keys=tuple(sig.get("none_keys", [])),
         extensions=tuple(sig.get("extension", [])),
+        records=str(sig.get("records") or ""),
         query_language=data["query_language"],
-        map=dict(data["map"]),
+        map={k: tuple(v) if isinstance(v, list) else (v,) for k, v in data["map"].items()},
         platform_const=str(platform.get("const", "")),
         platform_path=str(platform.get("path", "")),
+        platform_prefix=str(platform.get("prefix", "")),
         source_path=source_path,
     )
 
@@ -216,35 +243,66 @@ def load_user_profiles(workspace: Path) -> tuple[list[Profile], list[str]]:
 # Container parsing — returns a LIST of documents (multi-doc contract)
 # --------------------------------------------------------------------------- #
 def parse_container(container: str, text: str) -> list[dict]:
+    """The documents in ``text`` (see :func:`parse_container_shaped`)."""
+    return parse_container_shaped(container, text)[0]
+
+
+def parse_container_shaped(container: str, text: str) -> tuple[list[dict], bool]:
     """Parse ``text`` as ``container``; return the list of documents inside.
 
-    v1 implements single-document ``yaml``/``json`` (one mapping → one-element
-    list). Anything unparsable or non-mapping returns ``[]`` — the profile
-    simply doesn't claim the file.
+    A mapping is one document; a top-level array yields its mapping elements
+    (the bare-array shape bulk exports use). Anything unparsable, or holding
+    no mappings, returns ``[]`` — the profile simply doesn't claim the file.
+    Fanning a document out through an envelope key is ``records_of``'s job.
+    The flag says whether the top level was an array.
     """
     if container == "yaml":
         try:
             doc = yaml.safe_load(text)
         except yaml.YAMLError:
-            return []
-        return [doc] if isinstance(doc, dict) else []
+            return [], False
+        return _documents(doc), isinstance(doc, list)
     if container == "json":
         try:
             doc = json.loads(text)
         except (ValueError, TypeError):
-            return []
-        return [doc] if isinstance(doc, dict) else []
+            return [], False
+        return _documents(doc), isinstance(doc, list)
     if container == "toml":
         try:
             import tomllib  # stdlib on 3.11+; absent on 3.10 → skip gracefully
         except ImportError:
-            return []
+            return [], False
         try:
             doc = tomllib.loads(text)
         except tomllib.TOMLDecodeError:
-            return []
-        return [doc] if isinstance(doc, dict) else []
-    return []  # conf / raw / ndjson: later phases
+            return [], False
+        return ([doc] if isinstance(doc, dict) else []), False
+    return [], False  # conf / raw / ndjson: later phases
+
+
+def _documents(doc: Any) -> list[dict]:
+    if isinstance(doc, dict):
+        return [doc]
+    if isinstance(doc, list):
+        return [d for d in doc if isinstance(d, dict)]
+    return []
+
+
+def records_of(profile: Profile, doc: dict) -> list[dict]:
+    """The rule records inside one document.
+
+    With ``signature.records`` (e.g. ``data[]``) an envelope fans out into its
+    elements (an empty list means zero records); a document where the path
+    doesn't hold a list is itself the record, so
+    one profile claims an envelope, a bare array, and a single-rule file alike.
+    The signature is matched against each record, not the envelope.
+    """
+    if profile.records and isinstance(
+        extract_path(doc, profile.records.split("[]", 1)[0]), list
+    ):
+        return [r for r in extract_path(doc, profile.records) if isinstance(r, dict)]
+    return [doc]
 
 
 # --------------------------------------------------------------------------- #
@@ -302,12 +360,33 @@ def _walk(node: Any, tokens: list[str]) -> Any:
     return out
 
 
-def _as_str(value: Any) -> str:
-    if value is None:
+def _as_str(value: Any, first_of_list: bool = True) -> str:
+    """A scalar field's value. A list yields its first non-empty scalar, so
+    ``data_source: log_sources[]`` takes the first log source — without this a
+    list-valued key could never fill a scalar field.
+    ``first_of_list=False`` keeps a list empty: a query split into parts is not
+    its first part."""
+    if value is None or isinstance(value, dict):
         return ""
-    if isinstance(value, (list, dict)):
-        return ""
+    if isinstance(value, list):
+        if not first_of_list:
+            return ""
+        return next(
+            (s for v in value
+             if v is not None and not isinstance(v, (list, dict)) and (s := str(v).strip())),
+            "",
+        )
     return str(value).strip()
+
+
+def _usable(field_name: str, value: Any) -> bool:
+    """Would this value populate the field? ``mitre`` takes a list of tokens;
+    every other field is scalar and takes a list's first non-empty item —
+    except ``query``, which a list never fills."""
+    if field_name == "mitre":
+        items = value if isinstance(value, list) else [value]
+        return any(v is not None and str(v).strip() for v in items)
+    return bool(_as_str(value, first_of_list=field_name != "query"))
 
 
 def extract_fields(profile: Profile, doc: dict) -> dict[str, Any]:
@@ -318,17 +397,31 @@ def extract_fields(profile: Profile, doc: dict) -> dict[str, Any]:
     caller's job — same regex path as every other format).
     """
     out: dict[str, Any] = {}
-    for field_name, path in profile.map.items():
-        value = extract_path(doc, path)
+    for field_name, paths in profile.map.items():
+        value = None
+        for path in paths:  # first path that yields something wins
+            value = extract_path(doc, path)
+            if _usable(field_name, value):
+                break
         if field_name == "mitre":
             if isinstance(value, list):
                 out["mitre"] = [str(v) for v in value]
             else:
                 out["mitre"] = [str(value)] if value is not None else []
         else:
-            out[field_name] = _as_str(value)
+            out[field_name] = _as_str(value, first_of_list=field_name != "query")
     if profile.platform_const:
         out["platform"] = profile.platform_const
+    elif profile.platform_path and profile.platform_prefix:
+        raw = extract_path(doc, profile.platform_path)
+        prefix = profile.platform_prefix.lower()
+        out["platform"] = next(
+            (str(v).strip().lower()[len(prefix):]
+             for v in (raw if isinstance(raw, list) else [raw])
+             if v is not None and str(v).strip().lower().startswith(prefix)
+             and str(v).strip()[len(prefix):]),
+            "",
+        )
     elif profile.platform_path:
         out["platform"] = _as_str(extract_path(doc, profile.platform_path)).lower()
     else:
@@ -352,4 +445,5 @@ __all__ = [
     "parse_container",
     "profile_from_dict",
     "profiles_dir",
+    "records_of",
 ]

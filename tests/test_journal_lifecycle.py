@@ -2,7 +2,7 @@
 and assert the journal reads coherently — the durable-memory selling point.
 
 Covers the usability fixes from the 2026-07-22 journaling pass:
-- refine writes clean 'not configured' notes, NOT Python tracebacks;
+- refine writes clean "couldn't run, and why" notes, NOT Python tracebacks;
 - stage blocks are lean (no re-printed prompt prose duplicating the template);
 - repeatable --note renders as a bullet list;
 - `updated` advances; stages appear in order.
@@ -54,9 +54,12 @@ def test_full_forge_lifecycle_reads_coherently(ws):
     assert "prod ring 1" in text
 
     # THE regression that started the pass: no Python traceback in the journal
-    # when the refine agents aren't configured (the default).
+    # when a refine step can't run. Since the chain went native, the default
+    # reason is no longer "unconfigured wrapper" but "this detection is still
+    # journal-only" (`detection new` without `--source` mints no catalog
+    # record) — the clean one-liner must still say so in prose.
     assert "Traceback" not in text
-    assert "isn't configured" in text  # the clean one-liner instead
+    assert "no catalog record for D-0001 yet (still journal-only)" in text
 
     # Lean blocks: the stage-guidance prose is NOT re-printed per block (it lives
     # in the template's fill-in sections). "Capture, in order:" was the old
@@ -71,3 +74,14 @@ def test_updated_timestamp_advances(ws, monkeypatch):
     time.sleep(1.05)  # _now_iso is second-resolution
     _run("observe", "D-0001", "--note", "later")
     assert j.read("D-0001").frontmatter["updated"] > created
+
+
+def test_stage_command_refuses_a_backward_move_without_back(ws):
+    _run("new", "t")
+    _run("govern", "D-0001")
+    r = CliRunner().invoke(detection_cli, ["observe", "D-0001", "--note", "late"])
+    assert r.exit_code != 0
+    assert "--back" in r.output
+    assert Journal(workspace_journals_dir(ws)).read("D-0001").current_stage == "govern"
+    _run("observe", "D-0001", "--back", "--note", "re-baselining after a log change")
+    assert Journal(workspace_journals_dir(ws)).read("D-0001").current_stage == "observe"

@@ -21,15 +21,63 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape
 
-from adef.core.catalog import Catalog, git_head_sha, record_from_discovered
+from adef.core.catalog import (
+    Catalog,
+    git_head_sha,
+    record_from_discovered,
+    refresh_mitre_review,
+)
 from adef.core.journal import Journal
 from adef.core.profiles import load_user_profiles
-from adef.core.reconcile import Action, reconcile
+from adef.core.reconcile import (
+    _CARRIED_ENRICHMENT,
+    _ENRICHMENT_FIELDS,
+    _PRESERVED_IDENTITY,
+    Action,
+    reconcile,
+)
 from adef.core.rule_discovery import walk_outcomes
 from adef.core.workspace import resolve_workspace as _resolve_workspace
 
 console = Console()
+
+
+def _from_root(rule_root: Path):
+    """Did this record come from ``rule_root``? A workspace can hold several
+    repos; syncing one must only ever orphan that repo's rules.
+
+    A record is this repo's if it was catalogued from a path under the root. A
+    record catalogued elsewhere is NOT, while that other repo still exists —
+    even if both repos share a directory name (`rules/` vs `rules/`). Only when
+    its origin is gone does the ``<root-name>/`` ``rule_ref`` claim it: that is
+    a moved repo.
+    """
+    root = Path(rule_root).expanduser().resolve()
+    prefix = f"{root.name}/"
+
+    def belongs(rec: dict) -> bool:
+        original = str(rec.get("original_path") or "")
+        ref = str(rec.get("rule_ref") or "")
+        if original:
+            path = Path(original).expanduser().resolve()
+            try:
+                path.relative_to(root)
+                return True
+            except ValueError:
+                pass
+            # Catalogued from somewhere else. If that repo still exists, the
+            # record is its — even when both repos share a directory name.
+            inside = ref[len(prefix):] if ref.startswith(prefix) else ""
+            if inside and str(path).endswith(inside):
+                origin = Path(str(path)[: -len(inside)])
+                if origin.is_dir() and origin.resolve() != root:
+                    return False
+        # No live origin elsewhere: the <root-name>/ ref ties it here (a moved repo).
+        return ref.startswith(prefix)
+
+    return belongs
 
 
 @click.command()
@@ -59,15 +107,16 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
 
     user_profiles, profile_errors = load_user_profiles(ws)
     for err in profile_errors:
-        console.print(f"[yellow]Skipping broken profile:[/yellow] {err}", highlight=False)
-    discovered = [r for oc in walk_outcomes(rule_root, user_profiles) for r in oc.rules]
+        console.print(f"[yellow]Skipping broken profile:[/yellow] {escape(str(err))}", highlight=False)
+    discovered = [r for oc in walk_outcomes(rule_root, user_profiles, ws) for r in oc.rules]
 
     # Floor NEW ids above any journal-only detection id too (shared ID space) —
     # else a rule whose catalog record was removed but whose journal survives
-    # gets its id reused (CodeRabbit #96; same footgun `detection new` guards).
+    # gets its id reused (CodeRabbit; same footgun `detection new` guards).
     plan = reconcile(
         existing, discovered, rule_root=rule_root,
         floor_index=cat.journals_max_index(),
+        orphan_scope=_from_root(rule_root),
     )
     counts = {a: 0 for a in Action}
     for entry in plan:
@@ -77,7 +126,7 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
 
     # Report (always).
     console.print(
-        f"[bold]Sync plan[/bold] for {rule_root}:\n"
+        f"[bold]Sync plan[/bold] for {escape(str(rule_root))}:\n"
         f"  [dim]unchanged[/dim] {counts[Action.UNCHANGED]}   "
         f"[cyan]modified[/cyan] {counts[Action.MODIFIED]}   "
         f"[green]new[/green] {counts[Action.NEW]}   "
@@ -94,7 +143,7 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
         title = (entry.discovered.title if entry.discovered else "") or (
             (entry.existing or {}).get("title", "")
         )
-        console.print(f"  {label}  {entry.detection_id}  {title}")
+        console.print(f"  {label}  {entry.detection_id}  {escape(str(title))}")
 
     if check:
         if drift:
@@ -124,6 +173,12 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
                 owner=rdata.get("owner") or "",
                 rule_uuid=rdata.get("rule_uuid") or "",
                 note="Journal missing for this record — re-created by `adef sync`.",
+                # Derived restatement, same class as the other sync housekeeping
+                # notes below: the fact that a journal was missing is recoverable
+                # from nothing (the file now exists), and repeats on every sync
+                # that runs the repair pass. Direct `journal.create()` call, not
+                # `_journal_note` — its default doesn't reach here.
+                generated=True,
             )
             repaired += 1
     if repaired:
@@ -157,9 +212,24 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
             entry.detection_id, disc, workspace=ws, rule_root=rule_root, catalog_sha=catalog_sha
         )
         if entry.action is Action.MODIFIED and entry.merged is not None:
-            for f in ("mitre", "status", "stage", "owner", "created"):
+            # Every field `_merge` kept, not a hand-picked five. The re-derive
+            # above exists only to fix `rule_ref`/`original_path` (reconcile ran
+            # without the real root), but it also resets everything discovery
+            # can't see — so `description`, `references`, `entities` and the rest
+            # of the enrichment block were being destroyed by a sync of an edited
+            # rule, which is exactly the guarantee this command advertises.
+            for f in _ENRICHMENT_FIELDS + _PRESERVED_IDENTITY + _CARRIED_ENRICHMENT:
                 if f in entry.merged:
                     setattr(rec, f, entry.merged[f])
+            # `mitre` just came back from the existing record, but the re-derive
+            # above computed `review_reasons` from the *source rule*, which has no
+            # tags — so a hand-tagged detection was re-queued as `no_mitre` by
+            # every sync, undoing `adef detection tag-mitre` on a schedule. The
+            # helper subsumes `dev`'s inline drop of `no_mitre`: it also normalizes
+            # a scalar `mitre` and re-derives `invalid_mitre`, and `no_platform` is
+            # already a review reason, so `bool(review_reasons)` covers the
+            # `disc.platform is None` arm the inline version spelled out.
+            refresh_mitre_review(rec, ws)
         cat.write(rec)
 
         if entry.action is Action.NEW:
@@ -167,6 +237,7 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
                 journal.create(
                     detection_id=rec.id, title=rec.title, owner=rec.owner, rule_uuid="",
                     note=f"Catalogued from {rec.rule_ref} by `adef sync`.",
+                    generated=True,
                 )
         else:  # MODIFIED — record the out-of-band change in the journal
             _journal_note(
@@ -176,26 +247,35 @@ def sync(rule_root: Path, workspace: Path | None, dry_run: bool, check: bool) ->
         applied += 1
 
     index_path = cat.rebuild_index()
-    console.print(f"\n[green]Synced[/green] {applied} change(s); INDEX → {index_path}")
+    console.print(f"\n[green]Synced[/green] {applied} change(s); INDEX → {escape(str(index_path))}")
 
 
-def _journal_note(journal: Journal, detection_id: str, note: str) -> None:
+def _journal_note(journal: Journal, detection_id: str, note: str, generated: bool = True) -> None:
     """Append a note to a detection's journal (create if missing). Best-effort.
 
     Re-advance to the journal's *current* stage, not a hardcoded one — sync
     records an out-of-band source change without moving the detection through
     FORGE (advancing to a fixed stage would corrupt the lifecycle state, which
     is the journal's whole point). Re-advancing to the same stage is idempotent:
-    it appends the note only, no duplicate stage block (CodeRabbit #97).
+    it appends the note only, no duplicate stage block (CodeRabbit).
+
+    ``generated=True`` by default: every call site of this helper writes sync
+    housekeeping — derived restatement of state already on the record (the
+    orphaned flag, the refreshed hashes) — not a fact recorded nowhere else,
+    so it is marked generated and excluded from search.
     """
     try:
         if (journal.directory / f"{detection_id}.md").exists():
             stage = journal.read(detection_id).current_stage
-            journal.advance_stage(detection_id=detection_id, stage=stage, note=note)
+            journal.advance_stage(
+                detection_id=detection_id, stage=stage, note=note, generated=generated
+            )
         else:
-            journal.create(detection_id=detection_id, title=detection_id, note=note)
+            journal.create(
+                detection_id=detection_id, title=detection_id, note=note, generated=generated
+            )
     except Exception as exc:  # journaling is enrichment, never fatal to sync
-        console.print(f"[yellow]note: could not journal {detection_id}: {exc}[/yellow]")
+        console.print(f"[yellow]note: could not journal {detection_id}: {escape(str(exc))}[/yellow]")
 
 
 __all__ = ["sync"]

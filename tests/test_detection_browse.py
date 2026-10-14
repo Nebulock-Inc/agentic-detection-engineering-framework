@@ -1,4 +1,4 @@
-"""Tests for ``adef detection list`` / ``show`` (story 7393)."""
+"""Tests for ``adef detection list`` / ``show``."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 import textwrap
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from adef.commands.catalog import catalog as catalog_cli
@@ -14,9 +15,16 @@ from adef.commands.detection import detection as detection_cli
 
 @pytest.fixture
 def ws(tmp_path, monkeypatch):
+    import adef.commands.detection as det
+
     ws = tmp_path / "ws"
     (ws / "journals").mkdir(parents=True)
     monkeypatch.setenv("ADEF_WORKSPACE", str(ws))
+    # Rich defaults to 80 columns off a terminal, which is narrow enough that
+    # the title column is a few characters wide — so a filter test asserting a
+    # title is present would fail on layout, for no reason of its own. The
+    # layout tests below set their own width explicitly.
+    monkeypatch.setattr(det.console, "width", 120)
     return ws
 
 
@@ -87,7 +95,7 @@ def test_list_empty_workspace(ws):
 
 
 def test_list_truncates_long_title_to_one_line(ws, tmp_path, monkeypatch):
-    """A long title ellipsizes so each row stays on one line (E2E 2026-07-27)."""
+    """A long title ellipsizes so each row stays on one line."""
     import adef.commands.detection as det
 
     repo = tmp_path / "rules"
@@ -115,6 +123,316 @@ def test_list_truncates_long_title_to_one_line(ws, tmp_path, monkeypatch):
     row = next(ln for ln in result.output.splitlines() if "D-0001" in ln)
     assert len(row) <= 100
     assert row.rstrip().endswith("…")  # title was cut, not wrapped
+
+
+def test_list_columns_size_to_data_so_short_rows_keep_their_title(
+    ws, tmp_path, monkeypatch
+):
+    """Columns take their own widest value, not fixed constants.
+
+    The old layout padded `format` to 22 and `platform` to 15 regardless of
+    content, so the fixed columns ate 82 of 100 chars and a 40-char title was
+    ellipsized to ~18. With data-driven widths this corpus's columns are short
+    (`windows`, `sigma`), so the title must survive INTACT — asserting identity,
+    not merely that the row fits.
+    """
+    import adef.commands.detection as det
+
+    title = "Rundll32 execution without arguments"  # 36 chars: fits new, not old
+    repo = tmp_path / "rules"
+    (repo / "windows").mkdir(parents=True)
+    (repo / "windows" / "r.yml").write_text(
+        textwrap.dedent(
+            f"""\
+            title: {title}
+            id: 03cc0c25-389f-4bf8-b48d-11878079f1ca
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            tags: [attack.t1218.011]
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 100)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    row = next(ln for ln in result.output.splitlines() if "D-0001" in ln)
+    assert title in row, f"title was truncated by fixed-width columns: {row!r}"
+    assert "…" not in row
+    # A header row names the columns (previously there was none at all).
+    header = result.output.splitlines()[0]
+    assert "TITLE" in header and "ATT&CK" in header and "PLATFORM" in header
+
+
+def test_list_caps_one_outlier_column_so_it_cannot_starve_the_title(
+    ws, tmp_path, monkeypatch
+):
+    """A pathological value is capped at _MAX_COL_WIDTH, not given the whole row."""
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    (repo / "windows").mkdir(parents=True)
+    # 12 techniques -> an ATT&CK cell ~110 chars wide if left uncapped.
+    tags = ", ".join(f"attack.t10{n:02d}" for n in range(55, 67))
+    (repo / "windows" / "many.yml").write_text(
+        textwrap.dedent(
+            f"""\
+            title: Multi mapped rule
+            id: 13cc0c25-389f-4bf8-b48d-11878079f1cb
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            tags: [{tags}]
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 100)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    row = next(ln for ln in result.output.splitlines() if "D-0001" in ln)
+    assert len(row) <= 100, f"outlier column overflowed the terminal: {row!r}"
+    # The cap bit: the cell is ellipsized rather than printed in full.
+    assert "…" in row
+    assert "Multi mapped rule" in row, "the title lost its space to the ATT&CK column"
+
+
+def test_list_row_stays_one_line_when_the_title_budget_is_tiny(
+    ws, tmp_path, monkeypatch
+):
+    """A row with almost no title budget keeps its flag, on ONE line.
+
+    Two failures, one row. First, the title was printed in full once the budget
+    got small, and Rich soft-wrapped the overflow onto a second line, splitting
+    it mid-word and leaving a two-line row in the middle of the table (seen for
+    real on the bundled demo at an 80-col width):
+
+        D-0001  find  draft  multi-platform  spl  -  Broad thrunt hunt -
+        deliberate schema-check demo ⚠ no_platform
+
+    Second — and worse — whatever the row did spend its last characters on had
+    to be the flag, not the title: trimmed from the right (which is where Rich
+    trims, and where the flag sits) the row reads as a detection with nothing
+    wrong with it. The title is recoverable via `detection show`; a review flag
+    that silently vanished is not.
+    """
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    repo.mkdir(parents=True)
+    # Raw SPL .conf → platform can't be inferred, so the row carries a
+    # `⚠ no_platform` flag, which is what eats the title's budget.
+    title = "Broad thrunt hunt - deliberate schema-check demo"
+    (repo / "hunt.conf").write_text(
+        f"[{title}]\nsearch = index=thrunt CommandLine=* | stats count\n",
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    # 80 cols: the columns plus the flag leave single digits for the title, so
+    # the whole row depends on the flag being budgeted first and on `no_wrap`.
+    monkeypatch.setattr(det.console, "width", 80)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+
+    rows = [ln for ln in result.output.splitlines() if "D-0001" in ln]
+    assert len(rows) == 1, f"row was split across lines: {result.output!r}"
+    assert "no_platform" in rows[0], (
+        f"the review flag was trimmed to make room for the title: {rows[0]!r}"
+    )
+    assert "…" in rows[0], f"the title should be the thing that gave way: {rows[0]!r}"
+    # The continuation would have landed on the line after the row.
+    after = result.output.splitlines()
+    idx = after.index(rows[0])
+    assert "schema-check" not in after[idx + 1], (
+        f"title wrapped onto the next line: {after[idx + 1]!r}"
+    )
+
+
+def test_a_title_with_a_line_break_still_renders_as_one_row(ws, tmp_path, monkeypatch):
+    """A newline in the title is not soft wrapping, so `no_wrap` doesn't stop it.
+
+    YAML's `title: |` is ordinary authoring, and `cell_len` scores `\\n` as zero
+    cells — so the title never counts against the budget, Rich honours the break
+    regardless of `no_wrap`, and the review flag lands on a second line with
+    nothing beside it saying which detection it belongs to. That second line is
+    the defect: the flag is the part of the row asking you to act.
+
+    Width is deliberately generous (200) so nothing is near the trimming
+    budget — this is about the break, not about fitting.
+
+    A `logsource` with no product/service/category, so the record carries
+    `no_platform` — a *structural* review reason, which is what puts a flag on
+    the row at all. Two wrong fixtures on the way here, both worth naming:
+    `no_mitre` is not structural (it's a queue to drain, reported in the
+    summary line), so asserting on it tests a flag the product never prints;
+    and removing `logsource` outright makes the file unrecognizable as Sigma,
+    so nothing is catalogued and the row under test does not exist.
+    """
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    (repo / "windows").mkdir(parents=True)
+    (repo / "windows" / "multi.yml").write_text(
+        textwrap.dedent(
+            """\
+            title: |
+              Suspicious mshta
+              child process
+            logsource:
+                definition: 'inherited from the pipeline'
+            detection:
+                condition: selection
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 200)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+
+    rows = [ln for ln in result.output.splitlines() if "D-0001" in ln]
+    assert len(rows) == 1, f"row was split across lines: {result.output!r}"
+    # Both halves of the title on the row the ID is on — a trailing `child
+    # process` anywhere else means the break survived.
+    assert "Suspicious mshta child process" in rows[0], rows[0]
+    assert "no_platform" in rows[0], (
+        f"the review flag was pushed off the row: {rows[0]!r}"
+    )
+    assert "child process" not in result.output.replace(rows[0], ""), (
+        f"title continued onto another line: {result.output!r}"
+    )
+
+
+def test_list_columns_align_when_a_hand_edited_value_has_wide_glyphs(
+    ws, catalogued, monkeypatch
+):
+    """Column padding is measured in display cells, not characters.
+
+    Every value ADEF puts in a column is ASCII by construction, but `mitre` is
+    a list humans edit in the record YAML. One double-width glyph padded with
+    `str.ljust` leaves the column a cell short, and every column to its right —
+    including the title — shifts on that row alone.
+    """
+    import adef.commands.detection as det
+    from adef.commands._render import cell_width
+
+    record = next((ws / "catalog").rglob("D-*.yml"))
+    data = yaml.safe_load(record.read_text(encoding="utf-8"))
+    data["mitre"] = ["ロググ"]  # 3 glyphs, 6 cells — not 3
+    record.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+
+    monkeypatch.setattr(det.console, "width", 200)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+
+    rows = [ln for ln in result.output.splitlines() if ln.strip().startswith("D-")]
+    assert len(rows) == 2, result.output
+    # Both titles must begin at the same cell column — that's what "the columns
+    # line up" means, and it's the thing a character-counted pad breaks.
+    offsets = {
+        cell_width(ln[: ln.index(title)])
+        for ln in rows
+        for title in ("Sigma windows rule", "Broad hunt")
+        if title in ln
+    }
+    assert len(offsets) == 1, f"columns went ragged across rows: {rows!r}"
+
+
+def test_list_header_stays_on_one_line_too(ws, catalogued, monkeypatch):
+    """The header is built from the same data-driven widths as the rows.
+
+    So it overflows at exactly the widths the rows do — and left to Rich it
+    wrapped, putting a lone `TITLE` on its own line above a table whose rows
+    were all correctly fitted. Fixing the rows and not the header left the
+    output looking broken at the width the fix was for.
+    """
+    import adef.commands.detection as det
+
+    monkeypatch.setattr(det.console, "width", 50)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+
+    header = next(ln for ln in result.output.splitlines() if "STAGE" in ln)
+    after = result.output.splitlines()
+    nxt = after[after.index(header) + 1]
+    assert "TITLE" not in nxt, f"the header wrapped onto a second line: {nxt!r}"
+
+
+def test_list_keeps_the_flag_when_the_columns_alone_overflow_the_terminal(
+    ws, tmp_path, monkeypatch
+):
+    """Six columns at their ceiling are wider than a narrow terminal by themselves.
+
+    Reserving the flag out of the *title* budget isn't enough in that case: the
+    title is already cut to nothing and the row is still over width, so Rich
+    clips it — from the right, where the flag is. The columns have to be fitted
+    alongside the title, which is why both are passed to `fit` as one string.
+
+    A detection mapped to several techniques fills the ATT&CK column to its
+    20-char cap, which with a 40-column terminal is this exact case.
+    """
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    repo.mkdir(parents=True)
+    (repo / "hunt.conf").write_text(
+        "[Broad thrunt hunt]\nsearch = index=thrunt CommandLine=* | stats count\n",
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 40)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+
+    rows = [ln for ln in result.output.splitlines() if "D-0001" in ln]
+    assert len(rows) == 1, f"row was split across lines: {result.output!r}"
+    assert "no_platform" in rows[0], (
+        f"the review flag was clipped off a row that never fit: {rows[0]!r}"
+    )
+
+
+def test_fit_with_no_room_left_yields_a_cut_marker_not_a_negative_slice():
+    """A budget of zero or less must still mean "cut here", not a wrong answer.
+
+    The columns are capped but not free — on a terminal narrow enough that they
+    plus the flag exceed its width, the title budget goes *negative*, and
+    `value[:width - 1]` on a negative width silently slices from the END and
+    returns most of the title. The row then runs past the terminal. The clamp
+    is what makes the degenerate case render a bare `…` instead.
+    """
+    from adef.commands._render import fit
+
+    assert fit("Suspicious mshta child process", 0) == "…"
+    assert fit("Suspicious mshta child process", -12) == "…"
+    assert fit("abc", 3) == "abc"  # exactly fits — not cut
+    assert fit("abcdef", 4) == "abc…"
+    # Measured in terminal cells, not characters: each of these glyphs is two
+    # columns wide, so four of them already fill an 8-cell budget. Counting
+    # characters would call six of them a fit and print a row twice its budget.
+    # (The space is Rich padding a 7-cell budget that only takes 3 glyphs — the
+    # point is the total, which is 8 cells either way.)
+    assert fit("ロググロググ", 8) == "ロググ …"
+    assert fit("ロググ", 6) == "ロググ"  # exactly fits — not cut
+    # Line breaks collapse to spaces before measuring, so `fit`'s result is
+    # always one line — and the collapsed space is part of the budget, which is
+    # why 30 cells (not 29, the `cell_len` of the raw string) is the exact fit.
+    # `set_cell_size` would otherwise leave the newline mid-string and return a
+    # "trimmed" row that still breaks. U+000B and U+2028 are line boundaries
+    # too, which is why this goes through `splitlines` rather than `\n`.
+    assert fit("Suspicious mshta\nchild process", 30) == "Suspicious mshta child process"
+    assert fit("Suspicious mshta\r\nchild process", 12) == "Suspicious …"
+    assert fit("a\x0bb c", 10) == "a b c"
 
 
 def test_show_renders_record_and_journal(ws, catalogued):
@@ -265,7 +583,7 @@ def test_show_flags_recognized_unsupported(ws):
 def test_detection_new_uses_shared_id_space(ws, catalogued):
     """`detection new` must allocate from catalog+journals, not journals alone —
     else a catalog record whose journal is gone gets clobbered by a reused ID
-    (ISA 2026-07-22 guardrail audit)."""
+    """
     from adef.core.catalog import Catalog
 
     # Diverge: remove the highest journal so catalog index (D-0002) > journal index.
@@ -284,7 +602,7 @@ def test_detection_new_uses_shared_id_space(ws, catalogued):
 
 def test_search_finds_by_record_and_journal(ws, catalogued):
     """`detection search` matches catalog metadata (mitre/platform) AND journal
-    notes — the durable-memory search seam (ISA 2026-07-22)."""
+    notes — the durable-memory search seam."""
     # The Sigma rule carries T1218.005 in its record; its journal is a skeleton.
     # Search finds it by the record field alone (which id it got isn't the point).
     r = CliRunner().invoke(detection_cli, ["search", "T1218.005"])
@@ -303,8 +621,8 @@ def test_search_finds_by_record_and_journal(ws, catalogued):
 
 def test_stage_advance_mirrors_onto_catalog_record(tmp_path, monkeypatch):
     """Lifecycle lives in the journal, but `list --stage` and the INDEX filter
-    on the record — advancing must mirror the stage there (live finding:
-    D-1470 advanced to observe, record stuck at find)."""
+    on the record — advancing must mirror the stage there (a detection
+    advanced to observe while its record stayed at find)."""
     import yaml
     from click.testing import CliRunner
 
@@ -343,3 +661,128 @@ def test_stage_advance_mirrors_onto_catalog_record(tmp_path, monkeypatch):
         detection_cli, ["list", "--stage", "observe", "--workspace", str(ws)]
     )
     assert "D-0001" in r.output
+
+
+def test_list_renders_an_upstream_title_literally(ws, tmp_path, monkeypatch):
+    """Same markup hazard as `adef catalog --dry-run`, same escape.
+
+    `highlight=False` only stops Rich styling its *own* guesses (numbers,
+    paths); it does nothing about markup the title itself contains.
+    """
+    import adef.commands.detection as det
+
+    repo = tmp_path / "rules"
+    (repo / "windows").mkdir(parents=True)
+    (repo / "windows" / "markup.yml").write_text(
+        textwrap.dedent(
+            """\
+            title: Dump [bold red]LSASS[/] memory
+            id: 4f1d9b2e-8c7a-4e55-9f31-0a2b6c8d4e71
+            logsource:
+                product: windows
+            detection:
+                condition: selection
+            tags: [attack.t1003.001]
+            """
+        ),
+        encoding="utf-8",
+    )
+    assert CliRunner().invoke(catalog_cli, [str(repo)]).exit_code == 0
+
+    monkeypatch.setattr(det.console, "width", 120)
+    result = CliRunner().invoke(detection_cli, ["list"])
+    assert result.exit_code == 0, result.output
+    row = next(ln for ln in result.output.splitlines() if "D-0001" in ln)
+    assert "[bold red]LSASS[/]" in row, f"markup was consumed, not printed: {row!r}"
+
+
+def test_list_resolves_tactics_from_the_workspace_it_was_pointed_at(tmp_path, monkeypatch):
+    """`--tactic` *omits* rows, so the wrong snapshot loses detections silently.
+
+    `attack_reference()` read `$ADEF_WORKSPACE` alone, so with `--workspace`
+    pointing somewhere else the tactic filter resolved against the *shipped*
+    technique universe: a detection mapped to a technique added in the release
+    the user had just refreshed into their workspace simply did not appear, and
+    the unknown-tactic error cited the shipped snapshot's version. The two
+    paths disagreeing is the whole point of the fixture — every other test in
+    this file sets both to the same directory, which is why none of them could
+    reach this.
+    """
+    from adef.core.catalog import Catalog, CatalogRecord
+
+    real = tmp_path / "real"
+    (real / "journals").mkdir(parents=True)
+    (real / "attack").mkdir(parents=True)
+    (real / "attack" / "enterprise.json").write_text(
+        json.dumps(
+            {
+                "attack_version": "99.9-test",
+                "tactics": {"zzz-tactic": "Zzz Tactic"},
+                "techniques": {"T9999": {"name": "Planted", "tactics": ["zzz-tactic"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    cat = Catalog(real)
+    cat.write(
+        CatalogRecord(
+            id="D-0001", title="Planted technique rule", rule_ref="r/d1.yml",
+            original_path="/tmp/d1.yml", platform="windows", kind="atomic",
+            engine="sigma", format="sigma", mitre=["T9999"],
+        )
+    )
+    cat.rebuild_index()
+
+    decoy = tmp_path / "decoy"
+    (decoy / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(decoy))
+
+    result = CliRunner().invoke(
+        detection_cli, ["list", "--tactic", "Zzz Tactic", "--workspace", str(real)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "1 detection(s)" in result.output, result.output
+
+
+def test_show_resolves_tactics_from_the_workspace_it_was_pointed_at(tmp_path, monkeypatch):
+    """`show`'s derived tactics, the display-only half of the same defect.
+
+    Added because a mutation proved there was no test that could reach it:
+    reverting `attack_reference(ws)` to `attack_reference()` here left every
+    existing `show` test green, since they all set `$ADEF_WORKSPACE` to the
+    same directory they pass to `--workspace`.
+    """
+    from adef.core.catalog import Catalog, CatalogRecord
+
+    real = tmp_path / "real"
+    (real / "journals").mkdir(parents=True)
+    (real / "attack").mkdir(parents=True)
+    (real / "attack" / "enterprise.json").write_text(
+        json.dumps(
+            {
+                "attack_version": "99.9-test",
+                "tactics": {"zzz-tactic": "Zzz Tactic"},
+                "techniques": {"T9999": {"name": "Planted", "tactics": ["zzz-tactic"]}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    Catalog(real).write(
+        CatalogRecord(
+            id="D-0001", title="Planted technique rule", rule_ref="r/d1.yml",
+            original_path="/tmp/d1.yml", platform="windows", kind="atomic",
+            engine="sigma", format="sigma", mitre=["T9999"],
+        )
+    )
+
+    decoy = tmp_path / "decoy"
+    (decoy / "journals").mkdir(parents=True)
+    monkeypatch.setenv("ADEF_WORKSPACE", str(decoy))
+
+    result = CliRunner().invoke(
+        detection_cli, ["show", "D-0001", "--workspace", str(real)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Zzz Tactic" in result.output, result.output

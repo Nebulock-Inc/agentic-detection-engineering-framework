@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from adef.core.attack import attack_reference
+from adef.core.corpus_text import record_mitre
 from adef.core.catalog import Catalog, _now_iso
 from adef.core.rule_discovery import (
     REVIEW_INVALID_MITRE,
@@ -43,7 +44,12 @@ def tag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) -> T
     Revoked-but-real IDs are accepted and reported (the caller decides whether
     to swap in the replacement).
     """
-    ref = attack_reference()
+    # `workspace`, not the bare resolver, which sees `$ADEF_WORKSPACE` only.
+    # This is the harshest place to get it wrong: an ID the reference doesn't
+    # know is a *refusal* that writes nothing, so `adef detection tag-mitre
+    # D-0007 T<new> --workspace /srv/ws` raised `InvalidTechniqueError` for a
+    # technique the user's own refreshed snapshot contains.
+    ref = attack_reference(workspace)
     cat = Catalog(workspace)
 
     found = cat.find_record(detection_id)
@@ -60,7 +66,7 @@ def tag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) -> T
         )
 
     result = TagResult(detection_id=detection_id)
-    existing = list(data.get("mitre") or [])
+    existing = record_mitre(data)
     existing_set = {t.upper() for t in existing}
 
     for t in normalised:
@@ -103,7 +109,7 @@ def untag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) ->
     """Remove MITRE technique IDs from a catalog record.
 
     The retag seam: Observe-stage findings legitimately invalidate mappings
-    (live case: D-1470's hypothesis pivot, T1071/T1571 → T1046) and hand-edits
+    (e.g. a hypothesis pivot, T1071/T1571 → T1046) and hand-edits
     skip INDEX rebuilds and review-reason bookkeeping. If the removal empties
     the mapping, the record rejoins the ``no_mitre`` enrichment queue.
     """
@@ -116,7 +122,7 @@ def untag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) ->
     targets = {t.strip().upper() for t in technique_ids if t.strip()}
     result = UntagResult(detection_id=detection_id)
     remaining = []
-    for t in data.get("mitre") or []:
+    for t in record_mitre(data):
         if str(t).upper() in targets:
             result.removed.append(str(t).upper())
             targets.discard(str(t).upper())
@@ -126,6 +132,39 @@ def untag_mitre(workspace: Path, detection_id: str, technique_ids: list[str]) ->
 
     if not result.removed:
         return result  # nothing changed — don't touch disk
+
+    # Pre-flight the index build *before* the write. Untagging validates
+    # nothing — you can always remove an ID — but `rebuild_index()` on the last
+    # line can fail, and then the record has been written while `INDEX.yml`
+    # still maps the removed technique to this detection. `adef coverage` and
+    # `adef detection list --tactic` read the stored INDEX, so they keep
+    # claiming coverage the record has disclaimed; nothing surfaces it until
+    # someone happens to run `adef reindex`.
+    #
+    # `build_index()`, not `attack_reference(workspace)`, which was the first
+    # version of this guard: it covered only one of the two reachable causes. A
+    # corrupt `attack/enterprise.json` is the obvious one (`by_tactic` resolves
+    # through it), but `build_index` also groups by `engine`, `status` and
+    # `data_source` — so a *second, unrelated* record hand-edited to
+    # `engine: [sigma]` raises an unhashable-key `TypeError` and half-applies
+    # exactly the same way. Pre-flighting the operation that will actually run
+    # covers both, and any third cause, for the same one line. It re-reads the
+    # ATT&CK snapshot through the same `lru_cache` entry the rebuild will use,
+    # so the only cost is a second walk of the records.
+    #
+    # Deliberately *not* done in `tag_mitre`, which has the same hole: its
+    # failure direction is an omission (the record gains a technique the INDEX
+    # lacks — a coverage gap, which `adef doctor`'s index check reports), not a
+    # false claim. And the `mitre-tagger` skill drains the whole `no_mitre`
+    # queue a record at a time, so a second walk per call is O(n²) over the
+    # catalog to defend against the milder direction. Untagging is the one-off
+    # retag seam; one extra walk there is free.
+    #
+    # ponytail: this closes the pre-write causes, which are the reachable ones.
+    # A failure *inside* `rebuild_index` after it has built successfully (the
+    # atomic write itself) still strands a stale INDEX needing `adef reindex`.
+    # Make write+rebuild genuinely atomic only if that stops being enough.
+    cat.build_index()
 
     data["mitre"] = remaining
     reasons = list(data.get("review_reasons") or [])

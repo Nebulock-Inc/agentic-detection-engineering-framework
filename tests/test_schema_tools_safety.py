@@ -1,6 +1,6 @@
 """The MCP schema tools are a trust boundary — client-supplied `source` names
 are joined into a filesystem path, so they must not escape the schema dir
-(CodeRabbit #21)."""
+(CodeRabbit)."""
 
 from __future__ import annotations
 

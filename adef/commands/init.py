@@ -10,8 +10,7 @@ Creates the directory structure ADEF expects:
         AGENTS.md
         templates/DETECTION_FORGE.md
 
-The default workspace location (when no path is given) is ``~/work/adef-workspace/``,
-per the project decision logged in ``ISA.md``.
+The default workspace location (when no path is given) is ``~/work/adef-workspace/``.
 """
 
 from __future__ import annotations
@@ -24,6 +23,12 @@ from pathlib import Path
 import click
 import yaml
 from rich.console import Console
+from rich.markup import escape
+
+# One home for the capability probe, shared with `adef doctor` — two commands
+# reporting the same fact must not be able to disagree about it.
+from adef.core.doctor import mcp_install_hint as _mcp_install_hint
+from adef.core.doctor import mcp_installed as _mcp_installed
 
 console = Console()
 
@@ -51,23 +56,13 @@ templates_dir: templates
 # hunt_root: ~/path/to/hunts
 """
 
-def _mcp_installed() -> bool:
-    """Is the optional FastMCP dependency importable (the `.[mcp]` extra)?"""
-    try:
-        import fastmcp  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
 def _print_capabilities(workspace: Path) -> None:
     """Honest detection of the optional layers CLI-first users miss."""
     console.print("\n[bold]Optional capabilities[/bold]")
     if _mcp_installed():
         console.print("  [green]✓[/green] MCP server available — run [bold]adef-mcp[/bold] for Claude Code / Cursor / Copilot integration")
     else:
-        console.print('  [yellow]✗[/yellow] MCP server not installed — [bold]pip install -e ".\\[mcp]"[/bold] enables agent integration (adef-mcp)')
+        console.print(f"  [yellow]✗[/yellow] MCP server not installed — [bold]{escape(_mcp_install_hint())}[/bold] enables agent integration (adef-mcp)")
     console.print(
         "  [yellow]![/yellow] AI-assistant skills are [bold]inactive until installed[/bold]:\n"
         "      teams / any assistant:  [bold]adef install-skills[/bold]\n"
@@ -99,11 +94,13 @@ _JOURNEY_STEPS = {
 def _print_next_steps(journey: str, platform: str, workspace: Path) -> None:
     console.print("\n[bold]Next steps:[/bold]")
     for i, step in enumerate(_JOURNEY_STEPS[journey], 1):
-        console.print(f"  {i}. {step.format(platform=platform)}")
+        # Escape what the user typed, not the step — the steps carry their own
+        # `[bold]` on purpose, so escaping the formatted result prints the tags.
+        console.print(f"  {i}. {step.format(platform=escape(platform))}")
     if journey in ("2", "3"):
         # ADEF is the system of record here — durability is not optional.
         # Printed, never executed: the `init --git` flag was deliberately
-        # retired in favor of docs (ISA 2026-07-22, detection-home step 2).
+        # retired in favor of docs (see docs/detection-home.md).
         console.print(
             "\n[bold]Make the workspace durable[/bold] — your records here are the only copy:"
         )
@@ -220,7 +217,7 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
         config_data["platform"] = platform
         config_data["query_languages"] = query_langs
 
-        console.print(f"\n[green]✓[/green] Configured for {platform} with {', '.join(query_langs)}")
+        console.print(f"\n[green]✓[/green] Configured for {escape(str(platform))} with {escape(', '.join(query_langs))}")
 
     # Config is USER SETTINGS, not scaffolding: written when missing, or when
     # the user answered interactive prompts (their answers must persist —
@@ -255,13 +252,13 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
 
     template_path = _copy_template(templates_dir)
 
-    console.print(f"\n[green]ADEF workspace initialized at[/green] {workspace}")
-    console.print(f"  journals/    → {journals}")
-    console.print(f"  catalog/     → {catalog}")
-    console.print(f"  config/      → {config_file}")
-    console.print(f"  templates/   → {template_path}")
-    console.print(f"  schema/      → {schema_dir}")
-    console.print(f"  AGENTS.md    → {agents_md}")
+    console.print(f"\n[green]ADEF workspace initialized at[/green] {escape(str(workspace))}")
+    console.print(f"  journals/    → {escape(str(journals))}")
+    console.print(f"  catalog/     → {escape(str(catalog))}")
+    console.print(f"  config/      → {escape(str(config_file))}")
+    console.print(f"  templates/   → {escape(str(template_path))}")
+    console.print(f"  schema/      → {escape(str(schema_dir))}")
+    console.print(f"  AGENTS.md    → {escape(str(agents_md))}")
     console.print()
 
     if interactive:
@@ -277,7 +274,7 @@ def init(path: Path | None, force: bool, interactive: bool) -> None:
                 )
             except click.ClickException as exc:
                 # Never let a skills hiccup fail an already-scaffolded init.
-                console.print(f"  [yellow]![/yellow] skills install skipped: {exc.message}")
+                console.print(f"  [yellow]![/yellow] skills install skipped: {escape(str(exc.message))}")
                 console.print("  Re-run later with: [bold]adef install-skills[/bold]")
 
         _print_next_steps(journey, str(config_data.get("platform", "")), workspace)

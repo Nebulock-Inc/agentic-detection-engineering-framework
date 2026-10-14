@@ -39,7 +39,7 @@ def register(server: Any) -> None:
         """Create a new D-XXXX journal at the Find stage."""
         journal = _journal(workspace)
         # Shared ID space: clear catalog records too, not just journals
-        # (same clobber class fixed in `detection new`, ISA 2026-07-22).
+        # (same clobber class fixed in `detection new`).
         detection_id = Catalog(journal.directory.parent).next_id()
         entry = journal.create(
             detection_id=detection_id,
@@ -60,12 +60,17 @@ def register(server: Any) -> None:
         stage: str,
         note: str = "",
         workspace: Optional[str] = None,
+        allow_backward: bool = False,
     ) -> dict[str, Any]:
-        """Advance ``detection_id`` to ``stage`` (one of FORGE_STAGES). Idempotent."""
+        """Advance ``detection_id`` to ``stage`` (one of FORGE_STAGES). Idempotent.
+
+        A move to an earlier stage returns an error unless ``allow_backward``."""
         if stage not in FORGE_STAGES:
             return {"error": f"Unknown stage {stage!r}. Expected one of {list(FORGE_STAGES)}."}
         try:
-            result = _journal(workspace).advance_stage(detection_id, stage, note=note)
+            result = _journal(workspace).advance_stage(
+                detection_id, stage, note=note, allow_backward=allow_backward
+            )
         except JournalError as exc:
             return {"error": str(exc)}
         return {

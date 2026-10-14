@@ -1,0 +1,18 @@
+id: D-1002
+title: "EDR - Windows - Execution - mshta.exe child of Word (near-duplicate)"
+rule_ref: fixtures/D-1002.yml
+original_path: /fixtures/D-1002.yml
+platform: windows
+kind: atomic
+engine: sigma
+format: sigma
+query: >-
+  (
+    tenant_id = %(tenant_id)s
+    AND `process.file.path` ILIKE '%/mshta.exe'
+    AND `parent.process.name` = 'winword.exe'
+  )
+mitre: [T1218.005]
+data_source: edr
+status: draft
+stage: refine

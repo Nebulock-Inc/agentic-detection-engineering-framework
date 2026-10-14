@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentic-detection-engineering-framework"
-version = "1.0.0"
+version = "2.0.0"
 description = "Agentic Detection Engineering Framework — FORGE lifecycle, journal memory, and agent orchestration for detection engineers."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
@@ -25,7 +25,7 @@ keywords = [
     "forge",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Information Technology",
     "Intended Audience :: System Administrators",
     "Topic :: Security",
@@ -54,9 +54,16 @@ dev = [
     # (not regressions). Bump deliberately with a formatting pass, not by accident.
     "ruff>=0.15,<0.16",
     "pre-commit>=3.5.0",
+    # Imported directly by tests/test_skills_are_packaged.py on 3.10 (no
+    # stdlib tomllib). pytest declares it there too, so this is only so the
+    # test doesn't depend on another package's transitive dep.
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 mcp = [
-    "mcp[cli]>=1.0.0",
+    "mcp[cli]>=1.0.0,<2",  # 2.x renamed FastMCP → MCPServer and changed its API
+]
+llm = [
+    "anthropic>=0.40.0",
 ]
 
 [project.urls]
@@ -81,7 +88,10 @@ profile = "adef.commands.profile:profile"
 attack = "adef.commands.attack:attack"
 coverage = "adef.commands.coverage:coverage"
 sync = "adef.commands.sync:sync"
+ingest = "adef.commands.ingest:ingest"
+health = "adef.commands.health:health"
 reindex = "adef.commands.reindex:reindex"
+doctor = "adef.commands.doctor:doctor"
 install-skills = "adef.commands.install_skills:install_skills"
 
 [project.entry-points."adef.mcp_tools"]
@@ -105,6 +115,10 @@ packages = [
 "adef.data" = [
     "templates/*.md",
     "prompts/*.md",
+    # The bundled skills/agent — without these the wheel has none, silently.
+    "claude-plugin/.claude-plugin/plugin.json",
+    "claude-plugin/agents/*.md",
+    "claude-plugin/skills/*/*.md",
 ]
 "adef.data.attack" = [
     "enterprise.json",

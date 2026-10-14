@@ -48,3 +48,30 @@ def test_engine_lists_are_closed_set():
         "ADEF v0.1.0 introduces no new engine types beyond "
         f"{sorted(ALLOWED_ENGINES)}. Offending lines: {offenders}"
     )
+
+
+_CANONICAL_COPY = ADEF_PKG / "core" / "engines.py"
+
+
+@pytest.mark.unit
+def test_only_engines_py_spells_the_set_out():
+    """One canonical copy — a re-typed *identical* set passed the check above.
+
+    `engines.py`'s own docstring claims this test catches "any other place a
+    4-element literal list like this appears", and it didn't: the guard only flags a
+    line that *adds* an engine, so `gates.py` carried a byte-identical duplicate for
+    the whole of this branch. Identical today is the problem — the two copies drift
+    on the next rename, and the boundary that rejects a GATES document's `engine`
+    keeps accepting the old spelling with nothing failing.
+    """
+    duplicates = [
+        f"{py.relative_to(REPO_ROOT)}:{line_no}"
+        for py in ADEF_PKG.rglob("*.py")
+        if py != _CANONICAL_COPY
+        for line_no, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1)
+        if _ENGINE_LIST_RE.search(line)
+    ]
+    assert not duplicates, (
+        "The engine set is spelled out only in adef/core/engines.py — import "
+        f"ALLOWED_ENGINES instead of re-typing it. Found: {duplicates}"
+    )

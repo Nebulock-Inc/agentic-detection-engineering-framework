@@ -24,8 +24,10 @@ from __future__ import annotations
 import collections
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Iterable
 
+from adef.core.corpus_text import record_mitre
 from adef.core.attack import attack_reference
 
 
@@ -45,7 +47,7 @@ class Tier(Enum):
 # disqualify it from anchoring solid coverage. Metadata gaps (no_platform,
 # no_mitre) do NOT: a rule ADEF can't place on an OS still detects — treating
 # it as untrusted made mass-flagged corpora read as 0% solid (live finding,
-# ESCU endpoint: 1,468 × no_platform → 0/308 solid; ISA 2026-07-23).
+# Splunk's public ESCU corpus: 1,468 × no_platform → 0/308 solid).
 _INTEGRITY_REASONS = frozenset({"malformed", "external_logic", "invalid_mitre"})
 
 
@@ -132,16 +134,23 @@ class Coverage:
         return rows
 
 
-def build_coverage(records: Iterable[dict]) -> Coverage:
-    """Compute the coverage model from catalog record dicts."""
-    ref = attack_reference()
+def build_coverage(records: Iterable[dict], workspace: Path | None = None) -> Coverage:
+    """Compute the coverage model from catalog record dicts.
+
+    ``workspace`` picks the ATT&CK snapshot. Pass the one the records came
+    from: zero-arg resolves from ``$ADEF_WORKSPACE`` or the shipped copy, so
+    `adef coverage --workspace X` scored a refreshed snapshot under `X` against
+    the *shipped* technique universe — wrong "N of M techniques", wrong gap
+    list, and techniques `X` knows about reported as fictional coverage.
+    """
+    ref = attack_reference(workspace)
     cov = Coverage()
     source_counter: collections.Counter[str] = collections.Counter()
 
     for rec in records:
         # An orphaned record's source rule is gone (sync marks it) — it must not
         # count as coverage, else a deleted detection inflates the report
-        # (fictional coverage by tombstone). ISA 2026-07-22 guardrail audit.
+        # (fictional coverage by tombstone).
         if rec.get("orphaned"):
             continue
         det_id = rec.get("id", "?")
@@ -152,7 +161,7 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
         else:
             # Legacy record: boolean flag only, reason unknown → stay conservative.
             doubted = bool(rec.get("needs_review"))
-        for raw in rec.get("mitre") or []:
+        for raw in record_mitre(rec):
             tid = str(raw).strip().upper()
             entry = ref.technique(tid)
             if entry is None:
@@ -190,12 +199,17 @@ def build_coverage(records: Iterable[dict]) -> Coverage:
     return cov
 
 
-def uncovered_by_tactic(cov: Coverage) -> dict[str, list[tuple[str, str]]]:
+def uncovered_by_tactic(
+    cov: Coverage, workspace: Path | None = None
+) -> dict[str, list[tuple[str, str]]]:
     """Live techniques with no detection, grouped by tactic display name.
 
     Each value is a sorted list of ``(technique_id, name)``. Revoked/deprecated
-    techniques and anything already covered are excluded."""
-    ref = attack_reference()
+    techniques and anything already covered are excluded. ``workspace`` must be
+    the same one ``build_coverage`` was given — this enumerates the *universe*
+    of techniques, so a mismatch invents gaps or hides them.
+    """
+    ref = attack_reference(workspace)
     out: dict[str, list[tuple[str, str]]] = collections.defaultdict(list)
     for tid, entry in ref.techniques.items():
         if entry.get("revoked") or entry.get("deprecated"):

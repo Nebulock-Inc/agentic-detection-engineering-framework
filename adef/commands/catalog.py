@@ -1,7 +1,7 @@
 """``adef catalog`` — turn an existing detection repo into ADEF's catalog.
 
 Point ADEF at a directory of detection rules (Sigma YAML, Splunk ESCU /
-``savedsearches.conf``, Panther, Nebulock JSON exports, ``.kql``, ``.sql``,
+``savedsearches.conf``, Panther, ``.kql``, ``.sql``,
 ``.cql``, plus any format taught via an extraction profile). ADEF walks the repo
 read-only (it never pulls from any API — export the rules, then point at them),
 catalogs each
@@ -12,7 +12,7 @@ Infer-and-flag: cataloging never prompts. Rules whose platform/MITRE can't be
 inferred are catalogued with ``needs_review: true`` for later correction. The
 user's repo is never modified.
 
-Profile seams (ISA 2026-07-20):
+Profile seams:
 
 - User profiles under ``<workspace>/config/profiles/`` are loaded automatically
   and checked before built-in recognizers.
@@ -30,10 +30,11 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.markup import escape as _escape_markup
 
-from adef.core.workspace import resolve_workspace as _resolve_workspace
-
-from adef.core.catalog import Catalog, record_from_discovered
+from adef.commands._render import cell_width as _cell_width
+from adef.commands._render import fit as _fit
+from adef.core.catalog import Catalog, CatalogError, record_from_discovered, record_path
 from adef.core.journal import Journal
 from adef.core.profiles import Profile, ProfileError, load_profile, load_user_profiles
 from adef.core.rule_discovery import (
@@ -41,10 +42,12 @@ from adef.core.rule_discovery import (
     UNCLAIMED,
     FileOutcome,
     finalize_review,
+    safe_platform,
     shape_literals,
     structural_reasons,
     walk_outcomes,
 )
+from adef.core.workspace import resolve_workspace as _resolve_workspace
 
 console = Console()
 
@@ -53,7 +56,7 @@ _RATE_FIELDS = ("title", "query", "mitre", "uuid", "data_source", "platform")
 
 
 def _inherit_platforms(discovered: list, ws: Path) -> int:
-    """Inherit platform from scoped declarations (ISA 2026-07-21).
+    """Inherit platform from scoped declarations.
 
     A rule with no platform whose literals (data_source + shape literals)
     match declared sources inherits their platform when it's unambiguous —
@@ -94,8 +97,21 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
         best = max(counts.values())
         candidates = {platforms[s] for s, n in counts.items() if n == best} - {""}
         if len(candidates) == 1:  # unambiguous only — never guess
-            disc.platform = candidates.pop()
-            finalize_review(disc, malformed="malformed" in disc.review_reasons)
+            # Through `safe_platform` because this becomes a directory name and
+            # the declaration's `platform` is free text the user wrote: `Windows`
+            # or `Windows Server` reached `record_path` verbatim and refused the
+            # *entire* repo — `--dry-run` included, since the path pre-flight runs
+            # before the report. Unusable means the inheritance simply didn't
+            # happen: `disc.platform` stays empty, `no_platform` stands, and the
+            # record goes to the `multi-platform` bucket for a human to resolve,
+            # which is where it was before this pass ran.
+            inherited = safe_platform(candidates.pop())
+            if inherited is None:
+                continue
+            disc.platform = inherited
+            finalize_review(
+                disc, malformed="malformed" in disc.review_reasons, workspace=ws
+            )
             resolved += 1
     return resolved
 
@@ -103,7 +119,7 @@ def _inherit_platforms(discovered: list, ws: Path) -> int:
 # Top-level keys that mark an unclaimed YAML doc as *rule-shaped* — it carries
 # detection logic, so "teach ADEF your format" is the right advice. CI workflows
 # (jobs/permissions/env), policies, and schema docs have none of these, so the
-# nudge shouldn't count them as in-house detections (E2E 2026-07-27).
+# nudge shouldn't count them as detections.
 _RULE_SHAPE_KEYS = frozenset({"detection", "query", "search", "rule", "logic"})
 
 
@@ -112,7 +128,8 @@ def _rule_shaped_unclaimed(outcomes: list[FileOutcome]) -> int:
     return sum(
         1
         for oc in outcomes
-        if oc.outcome == UNCLAIMED and _RULE_SHAPE_KEYS.intersection(oc.top_level_keys)
+        if oc.outcome == UNCLAIMED
+        and _RULE_SHAPE_KEYS.intersection((*oc.top_level_keys, *oc.record_keys))
     )
 
 
@@ -122,14 +139,16 @@ def _print_unclaimed_nudge(unclaimed: int, claimed: int = 0) -> None:
     ``unclaimed`` is the *rule-shaped* unclaimed count (see
     ``_rule_shaped_unclaimed``) — CI/policy/schema YAML is excluded so the
     ratio names in-house detections, not scaffolding. Escalates when those
-    files are the *majority* of the rule-relevant repo — the case where a bare
-    catalog silently captures a fraction of the rules and "N rules would be
-    catalogued" reads like success (E2E 2026-07-27: a real in-house repo
-    catalogued 10, with 123 rule-shaped files unclaimed). A quiet trailing line
-    loses that; a loud one names the proportion.
+    files are at least half the rule-relevant repo — ``unclaimed >= claimed``,
+    so an all-unclaimed repo qualifies and an empty one is rejected by the
+    ``total`` guard, not the ratio. At parity or above is where a bare catalog
+    silently captures a fraction of the rules and "N rules would be catalogued"
+    still reads like success. A repo in a format ADEF ships no recognizer for
+    hits this on the first run. A quiet trailing line loses that; a loud one
+    names the proportion.
     """
     total = unclaimed + claimed
-    dominant = claimed == 0 or unclaimed >= claimed
+    dominant = unclaimed >= claimed
     if dominant and total:
         console.print(
             f"  [bold yellow]⚠ Most of this repo was not recognized[/bold yellow] — "
@@ -194,6 +213,9 @@ def _build_report(
             entry["format"] = oc.format
         if oc.outcome == UNCLAIMED:
             entry["top_level_keys"] = list(oc.top_level_keys)
+            if oc.records_path:
+                entry["records_path"] = oc.records_path
+                entry["record_keys"] = list(oc.record_keys)
         if oc.rules:
             entry["needs_review"] = any(r.needs_review for r in oc.rules)
             reasons = sorted({reason for r in oc.rules for reason in r.review_reasons})
@@ -305,10 +327,10 @@ def catalog(
             raise click.ClickException(f"invalid profile: {exc}") from exc
     user_profiles, profile_errors = load_user_profiles(ws)
     for err in profile_errors:
-        console.print(f"[yellow]Skipping broken profile:[/yellow] {err}", highlight=False)
+        console.print(f"[yellow]Skipping broken profile:[/yellow] {_escape_markup(str(err))}", highlight=False)
     active_profiles = ([candidate] if candidate else []) + user_profiles
 
-    outcomes = list(walk_outcomes(rule_root, active_profiles))
+    outcomes = list(walk_outcomes(rule_root, active_profiles, ws))
     discovered = [rule for oc in outcomes for rule in oc.rules]
     inherited = _inherit_platforms(discovered, ws)
 
@@ -334,14 +356,14 @@ def catalog(
 
     unclaimed = _rule_shaped_unclaimed(outcomes)
     if not discovered:
-        console.print(f"[yellow]No detection rules found under[/yellow] {rule_root}")
+        console.print(f"[yellow]No detection rules found under[/yellow] {_escape_markup(str(rule_root))}")
         if unclaimed:
             _print_unclaimed_nudge(unclaimed, claimed=0)
         return
 
     cat = Catalog(ws)
 
-    # Re-catalog guard (ISA 2026-07-22): if some of these rules are ALREADY in
+    # Re-catalog guard: if some of these rules are ALREADY in
     # the workspace, minting fresh D-XXXX records would silently duplicate them.
     # That's what `adef sync` is for. A genuinely new repo (no overlap) still
     # appends cleanly. --force overrides; --dry-run always previews.
@@ -364,8 +386,8 @@ def catalog(
             console.print(
                 f"[yellow]--force:[/yellow] {already} rule(s) already catalogued — "
                 f"minting duplicate records with fresh IDs.\n"
-                f"  A later `adef sync {rule_root}` will flag the prior copies as "
-                f"orphaned; run `adef sync {rule_root}` instead to update in place."
+                f"  A later `adef sync {_escape_markup(str(rule_root))}` will flag the prior copies as "
+                f"orphaned; run `adef sync {_escape_markup(str(rule_root))}` instead to update in place."
             )
 
     journal = Journal(ws / "journals")
@@ -389,9 +411,24 @@ def catalog(
         next_idx += 1
 
     # Headline count = structural reasons only; MITRE gaps are the enrichment
-    # queue, reported separately (ISA 2026-07-21).
+    # queue, reported separately.
     needs_review = sum(1 for r in planned if structural_reasons(r.review_reasons))
     mitre_gaps = sum(1 for r in planned if "no_mitre" in r.review_reasons)
+
+    # Every planned path checked before the first write — and before the dry-run
+    # report, so a dry run can't say "N rules would be catalogued" for a plan the
+    # real run then refuses. `record_path` is pure, so vetting the whole plan up
+    # front is free: a platform lifted out of a rule by a user profile's
+    # `platform_path` is arbitrary text, so a refusal on rule 400 would otherwise
+    # leave 399 records on disk with `rebuild_index` never reached. A stale INDEX
+    # over a half-written tree is the failure the guard exists to prevent, not a
+    # smaller version of it. Same shape as `gates.import_gates`, whose dry run
+    # validates paths too.
+    try:
+        for rec in planned:
+            record_path(cat.directory, rec)
+    except CatalogError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if dry_run:
         console.print("[bold]Dry run[/bold] — nothing will be written.\n")
@@ -405,7 +442,30 @@ def catalog(
             flag = f" [yellow]({', '.join(reasons)})[/yellow]" if reasons else ""
             collapse = len(recs) > 2 * sample
             for rec in recs[:sample] if collapse else recs:
-                console.print(f"  {rec.id}  {rec.platform:<14} {rec.format:<6} {rec.title}{flag}")
+                # One line per rule, with the flag kept and everything else cut
+                # to fit around it. Upstream titles run well past 80 chars, and
+                # left to Rich two things went wrong: the row soft-wrapped (so a
+                # preview of a 111-rule corpus read as twice as many rules as it
+                # planned to write), and the trailing `(no_platform)` was the
+                # first thing trimmed — turning the rules that need attention
+                # into the ones that look fine. Same fitting rule as
+                # `detection list`, which is why it lives in `_render`.
+                head = f"  {rec.id}  {rec.platform:<14} {rec.format:<6} "
+                plain_flag = f" ({', '.join(reasons)})" if reasons else ""
+                row = _fit(head + rec.title, console.width - _cell_width(plain_flag))
+                # Escape AFTER fitting, not before: a `[` costs one display cell
+                # either way, so the raw string is the right thing to measure,
+                # and escaping only inserts backslashes Rich doesn't render. The
+                # title is upstream free text — a rule literally titled
+                # "[bold red]LSASS[/]" otherwise styled the row and ate 14 cells
+                # of budget that never appeared on screen, and one ending in
+                # `[/yellow]` would close the review flag's own styling.
+                console.print(
+                    f"{_escape_markup(row)}{flag}",
+                    highlight=False,
+                    no_wrap=True,
+                    overflow="ellipsis",
+                )
             if collapse:
                 label = ", ".join(reasons) if reasons else "no flags"
                 console.print(
@@ -415,7 +475,7 @@ def catalog(
         unclaimed = _rule_shaped_unclaimed(outcomes)
         # Ratio on the headline so the proportion can't be skimmed past — "N
         # would be catalogued" alone reads as success even when most of the
-        # repo went unrecognized (E2E 2026-07-27).
+        # repo went unrecognized.
         unrecognized = (
             f"; [yellow]{unclaimed} file(s) unrecognized[/yellow]" if unclaimed else ""
         )
@@ -428,7 +488,8 @@ def catalog(
             claimed = [r for r in discovered if r.format == candidate.name]
             rates = _field_rates(claimed)
             console.print(
-                f"  Profile [bold]{candidate.name}[/bold] claimed {len(claimed)} rules; "
+                f"  Profile [bold]{_escape_markup(str(candidate.name))}[/bold] claimed "
+                f"{len(claimed)} rules; "
                 + ", ".join(f"{f} {rates[f]:.0%}" for f in _RATE_FIELDS)
             )
         if unclaimed:
@@ -445,14 +506,15 @@ def catalog(
                 owner=rec.owner,
                 rule_uuid="",
                 note=f"Catalogued from {rec.rule_ref} by `adef catalog`.",
+                generated=True,
             )
 
     index_path = cat.rebuild_index()
 
     console.print(
-        f"[green]Catalogued[/green] {len(planned)} rules into {cat.directory}"
+        f"[green]Catalogued[/green] {len(planned)} rules into {_escape_markup(str(cat.directory))}"
     )
-    console.print(f"  INDEX     → {index_path}")
+    console.print(f"  INDEX     → {_escape_markup(str(index_path))}")
     if unclaimed:
         _print_unclaimed_nudge(unclaimed, claimed=len(planned))
     if inherited:

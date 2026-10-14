@@ -67,8 +67,14 @@ class AttackReference:
 
     def resolve(self, tid: str) -> Resolution:
         """Classify ``tid``: valid? revoked/deprecated? replacement?"""
+        # One fold for the lookup, via `technique`. This had its own copy of
+        # `.strip().upper()` and its own `self.techniques.get(...)`, which made
+        # case-insensitivity two implementations tested once: deleting the
+        # `.upper()` here left all 1073 tests green, because every test that
+        # touches `resolve` passes an already-upper-case ID. `key` stays, but
+        # only for the ID echoed back in the result.
         key = tid.strip().upper()
-        entry = self.techniques.get(key)
+        entry = self.technique(tid)
         if entry is None:
             return Resolution(id=key, valid=False)
         return Resolution(
@@ -80,20 +86,59 @@ class AttackReference:
         )
 
 
-def _workspace_snapshot() -> Optional[Path]:
-    ws = os.getenv("ADEF_WORKSPACE")
+def _workspace_snapshot(workspace: Optional[Path] = None) -> Optional[Path]:
+    """The named workspace's snapshot, or ``None`` to mean "use the shipped one".
+
+    An explicit ``workspace`` **replaces** ``$ADEF_WORKSPACE``; it does not take
+    priority over it with the env var as a second rung. So
+    `adef catalog ./rules --workspace /scratch`, where `/scratch` has no
+    `attack/enterprise.json`, judges against the shipped snapshot even when
+    ``$ADEF_WORKSPACE`` holds a `refresh`-ed newer one — a rule mapped to a
+    technique newer than the shipped copy comes out `invalid_mitre`.
+
+    That is the intended reading of `--workspace X`: X's snapshot or the shipped
+    baseline, never a *third* workspace's. Falling back to the env var would mean
+    records written into X carry a verdict reached against a snapshot X has never
+    seen, which is the cross-workspace bleed the threading exists to stop. The
+    fix for the narrow case is `adef attack refresh --workspace X`.
+    `adef doctor --workspace X` is where you see you need it: its `att&ck` line
+    labels the reference `(shipped)` or `(workspace snapshot)` for X
+    specifically. It deliberately offers no `fix` command — the shipped snapshot
+    is a supported state, not a deficiency — so the label is the whole signal.
+    """
+    ws = str(workspace) if workspace is not None else os.getenv("ADEF_WORKSPACE")
     if not ws:
         return None
     candidate = Path(ws).expanduser() / "attack" / SNAPSHOT_NAME
     return candidate if candidate.is_file() else None
 
 
-@lru_cache(maxsize=1)
-def attack_reference() -> AttackReference:
+@lru_cache(maxsize=4)
+def attack_reference(workspace: Optional[Path] = None) -> AttackReference:
     """The active reference: a ``refresh``-ed workspace snapshot if present,
     else the one shipped as package data. Cached (the snapshot is immutable
-    for a process; `refresh` runs in a separate invocation)."""
-    ws_snapshot = _workspace_snapshot()
+    for a process; `refresh` runs in a separate invocation).
+
+    ``workspace`` overrides ``$ADEF_WORKSPACE`` for callers that resolved a
+    workspace from a ``--workspace`` flag. Without it this resolver could only
+    ever see the environment variable, so `adef doctor --workspace /srv/ws`
+    reported the *shipped* snapshot's version and counts while labelling them
+    the workspace's — and the cache meant the answer also depended on whether
+    something earlier in the process had already warmed it. Keyed on the
+    argument, so the zero-arg behaviour every other caller relies on is
+    unchanged.
+
+    "Immutable for a process" is a CLI assumption and the cache has no
+    invalidation, so a snapshot written *after* a read in the same process is
+    not seen. Two places that matters, neither of them a rule any code here
+    follows today: a long-running ``adef-mcp`` that has already served one
+    request keeps the snapshot it first read for its whole lifetime, so an
+    out-of-band ``adef attack refresh`` takes effect on restart and not before
+    (cross-process, so a ``cache_clear()`` in ``refresh`` would not help it);
+    and the suite's own fixtures, which plant a snapshot into a workspace an
+    earlier command already read and so have to clear it themselves.
+    """
+    ws_snapshot = _workspace_snapshot(workspace)
     if ws_snapshot is not None:
         return AttackReference.from_path(ws_snapshot)
     with resources.as_file(

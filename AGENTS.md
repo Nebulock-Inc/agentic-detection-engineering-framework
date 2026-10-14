@@ -9,10 +9,14 @@ adef/                    # importable Python package
   cli.py                 # Click root group, registers entry-point commands
   plugin_system.py       # entry-point discovery (defensive load, never kills CLI)
   __version__ via __init__.py
-  agents/                # ADEF-native agents (Hypothesis, Tune, Deprecation, HuntPromotion)
-    wrappers/            # Thin wrappers around the 4 upstream rule-engineering agents
+  agents/                # ADEF-native agents (7): Hypothesis, Tune, Deprecation,
+                         #   HuntPromotion, RuleSimilarity, RuleOverlap, Verification
+    wrappers/            # Dispatchers for the 4 orchestrated rule agents. Similarity/
+                         #   Overlap/Verification are native by default and only delegate
+                         #   upstream when ADEF_WRAPPER_<KEY> is explicitly set;
+                         #   PerformanceMetrics is the one true upstream-only wrapper.
   commands/              # Click subgroups: detection, init, hunt-promote, catalog, sync, schema
-  core/                  # Journal, MemoryIndex, Catalog
+  core/                  # Journal, MemoryIndex, Catalog, corpus_text, engines (ALLOWED_ENGINES)
   data/                  # Package data — templates/, prompts/
   mcp/                   # FastMCP server + tool modules
   orchestration/         # Refine chain (Similarity → Overlap → Verification)
@@ -29,6 +33,21 @@ These are CI-enforced. Do not work around them:
 3. **Never add vendor-specific API connectors** (CrowdStrike, Splunk, SentinelOne, etc.). ADEF is a framework; connectors live in adapter packages. Parity test: `tests/test_no_vendor_connectors.py`.
 4. **Never add web-UI dependencies** (`flask`, `fastapi`, `starlette`, `django`, `next`, `react`). v0.1.0 is CLI + MCP only. Parity test: `tests/test_no_web_ui_deps.py`.
 
+## Hard Rule — Not CI-Enforceable
+
+5. **ADEF is built standalone first; adopters integrate it later, never the reverse.**
+   Any private or in-house codebase — including the maintainers' own — is a *future
+   adopter*, not a design input. Concretely: a private codebase is never a reference
+   corpus (don't measure against it or query its production data to settle an ADEF
+   design question), never a justification ("our pipeline does X" is not a reason for
+   ADEF to support X), and never an interface shape (don't fit a public format to one
+   in-house implementation's quirks). Justify from language semantics, published
+   practitioner standards, or a demonstrated user need instead. If a capability is only
+   explicable by pointing at in-house tooling, it doesn't belong in ADEF yet.
+
+   No test catches this one. Rule 3 blocks vendor SDK *imports*; this governs **design
+   inputs**, which is upstream of any import and invisible to CI. It is on you.
+
 ## Methodology and Maturity
 
 - [FORGE methodology](docs/methodology.md) — the lifecycle the framework gates around
@@ -43,7 +62,7 @@ ADEF never hardcodes upstream package names. Integration is configured via envir
 - `ADEF_HUNT_RULE_GENERATOR=module.path:ClassName` — bind `adef hunt-promote` to a hunt-rule generator that exposes `run(hunt_id=...)`.
 - `ADEF_HUNT_ROOT=/path/to/hunts` (or `--hunt-root`) — directory of upstream hunt artifacts.
 
-If a binding is missing or the import fails, the wrapper raises `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
+For Similarity/Overlap/Verification, a missing binding runs the native agent instead of raising `WrapperUnavailable`. PerformanceMetrics (which has no native implementation) and any explicitly set binding whose import fails still raise `WrapperUnavailable` (or `HuntPromotionError`) — orchestration captures the error in the journal and continues with the rest of the chain.
 
 ## Cataloging
 
@@ -72,7 +91,7 @@ formats). Do NOT stop at diagnosis; walk the user through authoring:
   `walk_outcomes`, `sniff_format`). User extraction profiles are checked
   before built-in recognizers.
 - `adef/core/profiles.py` — declarative extraction profiles (teach ADEF a rule
-  format with YAML, not code; see 2026-07-20 plugin design doc).
+  format with YAML, not code).
 - `adef/core/catalog.py` — `CatalogRecord`, `Catalog`, INDEX generation.
 - `adef/commands/catalog.py` — the `adef catalog` command
   (`--report json`, `--profile` validation scoreboard).
@@ -87,7 +106,7 @@ Users provide a **data-source declaration** (`adef-sources.yml`: sources +
 fields, produced from `| fieldsummary` / `| getschema` / index mappings).
 Schemas live at `<workspace>/schema/<source>.yml` (`schema_version: 2`) with
 `declared | corrected` field provenance. Rules are a schema *consumer*, never
-a *source* — the rules-derived model was removed pre-release (ISA 2026-07-20).
+a *source* — the rules-derived model was removed pre-release.
 
 **Commands:**
 - `adef schema ingest <declaration.yml>` — build schemas; re-ingest preserves
@@ -102,6 +121,11 @@ a *source* — the rules-derived model was removed pre-release (ISA 2026-07-20).
 - `adef/core/rule_parser.py` — SQL (sqlglot AST), SPL/CQL/KQL (regex) field
   extractors (consumed by `schema check`)
 
-## ISA Discipline
+## Recording decisions
 
-The project's system of record is `ISA.md` (Algorithm v6.3.0) — kept out of this public repo as internal engineering reference. Every meaningful decision lands in its `## Decisions`; every conjecture/refutation goes in `## Changelog`; every ISC verification goes in `## Verification`.
+A design decision that outlives its PR belongs in the artifact it governs — a
+detection's journal for a detection, `CHANGELOG.md` for a user-visible change,
+and a comment at the line for a constraint a future reader could plausibly
+undo. `.claude/rules/verify-tests-fail.md` covers the one case where a comment
+is not enough: a declared numeric constraint needs a test, or it is
+indistinguishable from an undeclared one.

@@ -6,7 +6,7 @@ points at, figure out what each rule file *is*, and pull out its query text plus
 whatever metadata can be inferred without asking. This module is that single
 walk — built once so the two callers can never drift.
 
-Design commitments (see ISA.md 2026-07-15 catalog decision):
+Design commitments:
 
 - **Read-only.** Discovery never writes anywhere. It only reads the user's repo.
 - **Infer-and-flag, never block.** Ambiguous files are catalogued with null
@@ -24,7 +24,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Iterator, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, Iterator, Optional, Sequence, Union
 
 import yaml
 
@@ -34,7 +34,7 @@ from adef.core.profiles import Profile
 # Query languages we recognise. This is the *source-format* axis, NOT the
 # four-value engine taxonomy — keep the two separate on purpose.
 # User extraction profiles add their own format names (the profile ``name``).
-Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther", "nebulock"
+Format = str  # one of: "sigma", "spl", "kql", "cql", "sql", "splunk-escu", "panther"
 
 # Support outcome: how well ADEF can handle a recognized file.
 SUPPORTED = "supported"                            # recognized AND metadata/query extractable
@@ -42,10 +42,10 @@ RECOGNIZED_UNSUPPORTED = "recognized_unsupported"  # format known, extractor pen
 NOT_A_RULE = "not_a_rule"                          # config, docs, pack, story, data model…
 # Reporting-only outcome (never on DiscoveredRule): a structured file no
 # profile or recognizer claimed. This is the clustering input for the
-# catalog-onboarding skill (ISA 2026-07-20).
+# catalog-onboarding skill.
 UNCLAIMED = "unclaimed"
 
-# Review reasons (ISA 2026-07-21): needs_review with a *why*. Structural
+# Review reasons: needs_review with a *why*. Structural
 # reasons drive the ⚠ marker and headline counts; NO_MITRE is enrichment
 # work (the mitre-tagger queue), visible but quiet.
 REVIEW_MALFORMED = "malformed"          # extraction threw; catalogued raw
@@ -53,8 +53,28 @@ REVIEW_EXTERNAL_LOGIC = "external_logic"  # logic in a sibling file we don't par
 REVIEW_NO_PLATFORM = "no_platform"      # platform could not be inferred/inherited
 REVIEW_NO_MITRE = "no_mitre"            # no ATT&CK mapping found anywhere
 REVIEW_INVALID_MITRE = "invalid_mitre"  # a mapped ID isn't in the ATT&CK reference
+# Set by the GATES import, not by discovery, but they live here so the
+# headline-warning set below can name them without importing `gates` (which
+# imports *this* module). A deployable-but-unfinished verdict: CONDITIONAL means
+# prerequisites are outstanding, TIME_BOX means the rule has an expiry.
+REVIEW_GATES_CONDITIONAL = "gates_conditional"
+REVIEW_GATES_TIME_BOX = "gates_time_box"
+# The reasons that trip the ⚠ marker and the headline count — i.e. what a bare
+# `--needs-review` surfaces. Named "structural" for the discovery cases that
+# defined it (ADEF couldn't parse or infer something), but the membership test
+# is behavioural: is this worth putting in front of someone unprompted? A
+# CONDITIONAL rule whose prerequisite is unmet and a TIME_BOX rule past its
+# expiry both are — they are deployed, or about to be, on an unfinished
+# decision. `no_mitre` stays out: it's a queue to drain, not a warning.
 STRUCTURAL_REVIEW_REASONS = frozenset(
-    {REVIEW_MALFORMED, REVIEW_EXTERNAL_LOGIC, REVIEW_NO_PLATFORM, REVIEW_INVALID_MITRE}
+    {
+        REVIEW_MALFORMED,
+        REVIEW_EXTERNAL_LOGIC,
+        REVIEW_NO_PLATFORM,
+        REVIEW_INVALID_MITRE,
+        REVIEW_GATES_CONDITIONAL,
+        REVIEW_GATES_TIME_BOX,
+    }
 )
 
 
@@ -73,7 +93,6 @@ _FORMAT_TO_ENGINE = {
     "cql": "sql",
     "splunk-escu": "sql",  # SPL query engine
     "panther": "sql",      # Python-defined detection; folds to sql internally
-    "nebulock": "sql",     # atomic_sql / scheduled_sql; sigma sub-type also folds to sql
 }
 
 # Map a source format to the query language its ``query_text`` is written in, for
@@ -113,11 +132,6 @@ def _sql_from_table(query: str) -> str:
             return candidate
     return ""
 _SPL_INDEX_RE = re.compile(r"\bindex\s*=\s*\"?([A-Za-z_][\w.-]*)\"?", re.IGNORECASE)
-# Nebulock's table-equivalent: the intermediate-model source its query reads
-# from, e.g. `nebulock_im_source = 'im-process_create'`.
-_NEBULOCK_IM_SOURCE_RE = re.compile(
-    r"""nebulock_im_source\s*=\s*['"]([^'"]+)['"]""", re.IGNORECASE
-)
 _KQL_LEAD_TABLE_RE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)")
 
 # KQL table name → platform. Best-effort; unknowns leave platform unset.
@@ -153,7 +167,7 @@ class DiscoveredRule:
     rule_uuid: str = ""
     # The raw table/index/logsource literal the rule queries, verbatim (no
     # normalisation). Empty when unresolvable. Keys schema prioritization and
-    # `adef schema check`; see ISA.md 2026-07-16 + 2026-07-20.
+    # `adef schema check`.
     data_source: str = ""
     # SHA-256 of the source file's raw bytes at discovery time. Stamped by
     # ``walk_outcomes`` (one place, all extraction paths). The `adef sync`
@@ -252,42 +266,6 @@ def _recognize_panther(name: str, text: str, doc: Optional[dict]) -> Optional[Re
     return None
 
 
-def _nebulock_rules(text: str) -> Optional[list[dict]]:
-    """Parse a Nebulock JSON export into its list of rule objects, or None.
-
-    Accepts the API envelope (``{"data": [...]}``), a bare array, or a single
-    rule object. A Nebulock rule is identified by ``rule_id`` + ``rule_type`` +
-    ``content`` — the shape the ``/public/v1/rules`` export emits. Returns None
-    for anything that isn't Nebulock-shaped (so other recognizers get a turn).
-    """
-    text = text.lstrip()
-    if not text or text[0] not in "[{":  # cheap gate: JSON only
-        return None
-    try:
-        data = json.loads(text)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    if isinstance(data, dict) and isinstance(data.get("data"), list):
-        rules = data["data"]  # API export envelope
-    elif isinstance(data, list):
-        rules = data
-    elif isinstance(data, dict):
-        rules = [data]  # single rule object
-    else:
-        return None
-    shaped = [
-        r
-        for r in rules
-        if isinstance(r, dict) and "rule_id" in r and "rule_type" in r and "content" in r
-    ]
-    return shaped or None
-
-
-def _recognize_nebulock(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
-    """Nebulock rule export (JSON): ``rule_id`` + ``rule_type`` + ``content``."""
-    return Recognition("nebulock", SUPPORTED) if _nebulock_rules(text) else None
-
-
 def _recognize_raw_query(name: str, text: str, doc: Optional[dict]) -> Optional[Recognition]:
     """Raw single-query files, gated by extension (they carry no metadata block)."""
     lower = name.lower()
@@ -316,7 +294,6 @@ def _recognize_spl_conf(name: str, text: str, doc: Optional[dict]) -> Optional[R
 
 
 _RECOGNIZERS = (
-    _recognize_nebulock,
     _recognize_sigma,
     _recognize_splunk_escu,
     _recognize_panther,
@@ -376,15 +353,23 @@ def _sigma_platform(logsource: dict) -> Optional[str]:
     return None
 
 
-def _has_invalid_mitre(ids: Iterable[str]) -> bool:
+def _has_invalid_mitre(ids: Iterable[str], workspace: Path | None = None) -> bool:
     """True if any mapped ID isn't a real ATT&CK technique.
 
     Imported lazily so discovery never hard-depends on the snapshot at import
     time; the reference itself is cached after first load.
+
+    ``workspace`` picks the snapshot. "Is this a real technique" is only
+    answerable against *some* ATT&CK version, and zero-arg answers against
+    ``$ADEF_WORKSPACE`` or the shipped copy — so `adef catalog --workspace X`,
+    after `adef attack refresh` wrote a newer snapshot into X, flagged every
+    rule mapped to a technique newer than the shipped copy as
+    ``invalid_mitre``. Unlike a bad report, that one *persists*: it is written
+    into the record and into the `needs_review` queue a human then triages.
     """
     from adef.core.attack import attack_reference
 
-    ref = attack_reference()
+    ref = attack_reference(workspace)
     return any(not ref.is_valid(tid) for tid in ids)
 
 
@@ -496,6 +481,44 @@ def _extract_generic(text: str, fmt: Format) -> DiscoveredRule:
     )
 
 
+# ESCU's public data_source vocabulary, mapped to an ADEF platform. First
+# prefix match wins; of this table, only one ordering is load-bearing —
+# `Sysmon for Linux` before `Sysmon` — since "Sysmon for Linux..." also
+# starts with "sysmon" and would otherwise resolve to windows. No other pair
+# here shares a prefix relationship, so their relative order is arbitrary.
+_ESCU_DATA_SOURCE_PLATFORMS: tuple[tuple[str, str], ...] = (
+    ("sysmon for linux", "linux"),
+    ("linux", "linux"),
+    ("sysmon", "windows"),
+    ("windows", "windows"),
+    ("powershell", "windows"),
+    ("asl aws", "cloud-aws"),
+    ("aws", "cloud-aws"),
+    ("azure", "cloud-azure"),
+    ("o365", "cloud-azure"),
+)
+
+
+def _escu_platform(sources: Iterable[str]) -> Optional[str]:
+    """Infer an ADEF platform from ESCU ``data_source`` entries.
+
+    Each entry is matched (case-insensitive prefix, first match wins) against
+    Splunk's public data-source vocabulary; entries with no opinion (e.g.
+    ``CrowdStrike``, ``Osquery``) are ignored. Returns the platform only if
+    every opinionated entry agrees — ``None`` on no opinions or disagreement.
+    """
+    platforms: set[str] = set()
+    for source in sources:
+        text = str(source).strip().lower()
+        for prefix, platform in _ESCU_DATA_SOURCE_PLATFORMS:
+            if text.startswith(prefix):
+                platforms.add(platform)
+                break
+    if len(platforms) == 1:
+        return next(iter(platforms))
+    return None
+
+
 def _extract_splunk_escu(text: str) -> DiscoveredRule:
     """Full extraction for a Splunk ESCU detection YAML.
 
@@ -506,22 +529,29 @@ def _extract_splunk_escu(text: str) -> DiscoveredRule:
     query = str(doc.get("search") or "").strip()
     title = str(doc.get("name") or "").strip()
 
-    mitre_raw = doc.get("mitre_attack_id") or []
+    # Top-level first; upstream ESCU nests it under `tags:`.
+    tags = doc.get("tags")
+    mitre_raw = doc.get("mitre_attack_id") or (
+        tags.get("mitre_attack_id") if isinstance(tags, dict) else None
+    ) or []
     mitre = _normalise_mitre(str(t) for t in mitre_raw) if isinstance(mitre_raw, list) else ()
 
-    # data_source may be a list (ESCU) — take the first, verbatim.
+    # data_source may be a list (ESCU) — take the first, verbatim, for the
+    # recorded data_source; the platform inference below considers all of them.
     ds_raw = doc.get("data_source") or doc.get("datamodel") or ""
     if isinstance(ds_raw, list):
         data_source = str(ds_raw[0]).strip() if ds_raw else ""
+        ds_list = [str(v) for v in ds_raw]
     else:
         data_source = str(ds_raw).strip()
+        ds_list = [data_source] if data_source else []
 
     return DiscoveredRule(
         path=Path("."),
         format="splunk-escu",
         query_text=query,
         title=title,
-        platform=None,  # ESCU doesn't carry a clean OS platform; inferred later
+        platform=_escu_platform(ds_list),  # from data_source, Splunk's public vocabulary
         mitre=mitre,
         kind="atomic",
         rule_uuid=str(doc.get("id") or "").strip(),  # ESCU carries a stable UUID
@@ -557,7 +587,7 @@ def _extract_panther(text: str) -> DiscoveredRule:
     return DiscoveredRule(
         path=Path("."),
         format="panther",
-        query_text="",  # logic is in the sibling .py — deferred (ISA 2026-07-17)
+        query_text="",  # logic is in the sibling .py — deferred
         title=title,
         platform=None,
         mitre=mitre,
@@ -569,69 +599,6 @@ def _extract_panther(text: str) -> DiscoveredRule:
     )
 
 
-# Nebulock's rule_type → the content field that holds the query. atomic_sql and
-# scheduled_sql are the real workload; sigma exists but is rare. All fold to the
-# `sql` engine (the query is Nebulock's SQL dialect regardless of sub-type).
-_NEBULOCK_QUERY_FIELD = {
-    "atomic_sql": "sql_query",
-    "scheduled_sql": "query",
-    "sigma": "sql_query",  # Nebulock compiles sigma → sql_query; original_yaml is a draft
-}
-
-
-def _nebulock_platform(tags: list) -> Optional[str]:
-    """Platform from Nebulock's ``os.<name>`` tag (e.g. ``os.windows``)."""
-    for tag in tags:
-        low = str(tag).lower()
-        if low.startswith("os."):
-            os_name = low.split(".", 1)[1]
-            if os_name in {"windows", "linux"}:
-                return os_name
-            if os_name in {"macos", "osx"}:
-                return "macos"
-    return None
-
-
-def _extract_one_nebulock(rule: dict) -> DiscoveredRule:
-    """Build a DiscoveredRule from one Nebulock rule object (envelope-driven).
-
-    Metadata lives at the envelope level (title/tags/rule_id), consistently
-    across rule_types; ``content`` holds only the query. MITRE comes from the
-    ``attack.id.T1053.005`` tag form (handled by ``_normalise_mitre``); platform
-    from the ``os.<name>`` tag; data_source from the ``nebulock_im_source``
-    literal in the query.
-    """
-    content = rule.get("content")
-    if not isinstance(content, dict):  # null/str/list — one bad rule must not sink the envelope
-        content = {}
-    rule_type = str(rule.get("rule_type") or "")
-    query = str(content.get(_NEBULOCK_QUERY_FIELD.get(rule_type, "sql_query")) or "").strip()
-    tags = rule.get("tags") or []
-    mitre = _normalise_mitre(str(t) for t in tags) if isinstance(tags, list) else ()
-    platform = _nebulock_platform(tags if isinstance(tags, list) else [])
-    title = str(rule.get("title") or content.get("title") or "").strip()
-    im = _NEBULOCK_IM_SOURCE_RE.search(query)
-    data_source = im.group(1) if im else ""
-    return DiscoveredRule(
-        path=Path("."),  # filled by caller
-        format="nebulock",
-        query_text=query,
-        title=title,
-        platform=platform,
-        mitre=mitre,
-        kind="atomic",
-        rule_uuid=str(rule.get("rule_id") or "").strip(),  # Nebulock's stable key
-        data_source=data_source,
-        support=SUPPORTED,
-        needs_review=not (platform and mitre),
-    )
-
-
-def _extract_nebulock(text: str) -> list[DiscoveredRule]:
-    """Extract every rule from a Nebulock JSON export (envelope may hold many)."""
-    return [_extract_one_nebulock(r) for r in (_nebulock_rules(text) or [])]
-
-
 # An extractor returns one rule or many (a JSON export can carry several).
 _EXTRACTORS: dict[str, Callable[[str], Union[DiscoveredRule, list[DiscoveredRule]]]] = {
     "sigma": lambda text: _extract_sigma(text),
@@ -641,7 +608,6 @@ _EXTRACTORS: dict[str, Callable[[str], Union[DiscoveredRule, list[DiscoveredRule
     "cql": lambda text: _extract_generic(text, "cql"),
     "splunk-escu": lambda text: _extract_splunk_escu(text),
     "panther": lambda text: _extract_panther(text),
-    "nebulock": lambda text: _extract_nebulock(text),
 }
 
 
@@ -649,7 +615,7 @@ _EXTRACTORS: dict[str, Callable[[str], Union[DiscoveredRule, list[DiscoveredRule
 # Profile-based extraction (user profiles claim files before built-ins)
 # --------------------------------------------------------------------------- #
 def shape_literals(query: str, query_language: str) -> tuple[str, ...]:
-    """Shape-axis literals a query pins beyond its container (ISA 2026-07-21).
+    """Shape-axis literals a query pins beyond its container.
 
     Today: SPL ``sourcetype=`` values. Each language we teach here upgrades
     ``schema check`` from union-matching to exact-matching on that platform —
@@ -687,17 +653,47 @@ def _infer_data_source(query: str, query_language: str) -> str:
     return ""
 
 
+# `platform` becomes a directory name (catalog/<platform>/), and a profile can
+# take it from rule content — so it must be exactly one plain path segment.
+# Charset only: `record_path` reuses this to refuse a bad platform *by reason*,
+# and folding the length bound in here made its charset message answer an
+# overlong value with "not a single plain path segment (lowercase letters,
+# digits, '-' or '_')" — false, and unactionable. Length is a separate gate.
+_PLATFORM_SEGMENT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+# The longest platform `record_path` will write as a directory name. Lives here
+# rather than in `catalog` because `catalog` imports this module and not the
+# reverse, and both ends have to agree: `safe_platform` admitting a value the
+# writer then refuses is the whole bug this constant closes.
+PLATFORM_MAX_BYTES = 255
+
+
+def safe_platform(value: object) -> Optional[str]:
+    """``value`` lowercased if it is one safe path segment, else ``None``."""
+    text = str(value or "").strip().lower()
+    if not _PLATFORM_SEGMENT_RE.match(text):
+        return None
+    # Length too, not just charset: an overlong value passed every check here,
+    # became the bucket with nothing flagged for review, and then killed the run
+    # at write time on `record_path`'s refusal — the exact failure the callers
+    # route through this helper to avoid. The charset above admits only ASCII,
+    # so this is a byte count despite measuring characters.
+    return text if len(text) <= PLATFORM_MAX_BYTES else None
+
+
 def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
     """Build a ``DiscoveredRule`` from one profile-claimed document."""
     fields = profiles_mod.extract_fields(profile, doc)
     mitre = _normalise_mitre(fields.get("mitre") or [])
     if not mitre:
-        # Tier-2 parity with the conf extractor (ISA 2026-07-21): sweep the
+        # Tier-2 parity with the conf extractor: sweep the
         # rule's prose for technique-ID tokens when the map yields nothing.
         mitre = _normalise_mitre(
             [fields.get("title", ""), fields.get("description", ""), fields.get("query", "")]
         )
-    platform = fields.get("platform") or None
+    # Profile platform comes from rule content: keep it only if it is one plain
+    # path segment (it becomes catalog/<platform>/); anything else is unknown.
+    platform = safe_platform(fields.get("platform"))
     data_source = fields.get("data_source", "") or _infer_data_source(
         fields.get("query", ""), profile.query_language
     )
@@ -719,17 +715,78 @@ def _extract_via_profile(profile: Profile, doc: dict) -> DiscoveredRule:
     )
 
 
+def _record_hash(doc: dict) -> str:
+    """Content hash of one record, stable across key order and file position."""
+    canonical = json.dumps(_str_keys(doc), sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _str_keys(node: Any) -> Any:
+    """YAML allows int/date keys; json.dumps(sort_keys=True) can't order them."""
+    if isinstance(node, dict):
+        return {str(k): _str_keys(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_str_keys(v) for v in node]
+    return node
+
+
+def _common_keys(records: list[dict]) -> tuple[str, ...]:
+    keys = set(map(str, records[0]))
+    for r in records[1:]:
+        keys &= set(map(str, r))
+    return tuple(sorted(keys))
+
+
+def _unclaimed_shape(
+    filename: str, text: str
+) -> Optional[tuple[tuple[str, ...], str, tuple[str, ...]]]:
+    """(top-level keys, records path, record keys) for a structured file nothing
+    claimed, or None if it holds no mapping. JSON counts as structured too: a
+    bulk export is usually a JSON envelope or array, and a file the onboarding
+    report never lists can never get a profile."""
+    stripped = text.lstrip()
+    parsed: Any = None
+    if filename.lower().endswith(".json") or stripped[:1] in ("{", "["):
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = None
+    if parsed is None and (_looks_like_yaml(filename, text) or stripped.startswith("- ")):
+        try:  # not _load_yaml: that keeps mappings only, and a bare list is a shape we report
+            parsed = yaml.safe_load(text)
+        except yaml.YAMLError:
+            parsed = None
+    if isinstance(parsed, list):
+        records = [r for r in parsed if isinstance(r, dict)]
+        return ((), "[]", _common_keys(records)) if records else None
+    if not (isinstance(parsed, dict) and parsed):
+        return None
+    top = tuple(sorted(str(k) for k in parsed))
+    for key, value in parsed.items():  # an envelope: the first list of mappings
+        records = [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
+        if records:
+            return top, f"{key}[]", _common_keys(records)
+    return top, "", ()
+
+
 def _profile_claim(
     profiles: Sequence[Profile], filename: str, text: str
-) -> Optional[tuple[Profile, list[dict]]]:
-    """First profile whose signature claims the file, with its documents."""
-    parsed: dict[str, list[dict]] = {}
+) -> Optional[tuple[Profile, list[dict], bool]]:
+    """First profile whose signature claims the file: its records, and whether
+    the file is a multi-record container (so each record needs its own hash)."""
+    parsed: dict[str, tuple[list[dict], bool]] = {}
     for profile in profiles:
         if profile.container not in parsed:
-            parsed[profile.container] = profiles_mod.parse_container(profile.container, text)
-        docs = [d for d in parsed[profile.container] if profiles_mod.matches(profile, filename, d)]
+            parsed[profile.container] = profiles_mod.parse_container_shaped(profile.container, text)
+        documents, is_array = parsed[profile.container]
+        docs = [
+            rec
+            for d in documents
+            for rec in profiles_mod.records_of(profile, d)
+            if profiles_mod.matches(profile, filename, rec)
+        ]
         if docs:
-            return profile, docs
+            return profile, docs, bool(profile.records) or is_array
     return None
 
 
@@ -751,14 +808,47 @@ class FileOutcome:
     format: Optional[Format] = None
     rules: tuple[DiscoveredRule, ...] = ()
     top_level_keys: tuple[str, ...] = ()
+    # For an unclaimed file holding many records: where they are (`[]` for a
+    # top-level array, `data[]` for an envelope) and the keys every record
+    # shares — what a profile's `signature.records` and `all_keys` need.
+    records_path: str = ""
+    record_keys: tuple[str, ...] = ()
 
 
-def finalize_review(rule: DiscoveredRule, malformed: bool = False) -> DiscoveredRule:
-    """Compute ``review_reasons`` + ``needs_review`` centrally (ISA 2026-07-21).
+def mitre_review_reasons(
+    mitre: Sequence[str], workspace: Path | None = None
+) -> list[str]:
+    """The review reasons for one MITRE mapping: unmapped, or mapped to fiction.
+
+    Split out of ``finalize_review`` because ``mitre`` is *enrichment*: every path
+    that restores a human's mapping onto a record whose ``review_reasons`` were
+    already computed (``adef sync``, a GATES re-import) has to recompute these
+    two reasons, and only these two. See ``catalog.refresh_mitre_review``.
+
+    ``no_mitre`` needs no workspace — it's a test for emptiness. ``invalid_mitre``
+    does: see ``_has_invalid_mitre``.
+    """
+    if not mitre:
+        return [REVIEW_NO_MITRE]
+    if _has_invalid_mitre(mitre, workspace):
+        return [REVIEW_INVALID_MITRE]
+    return []
+
+
+def finalize_review(
+    rule: DiscoveredRule, malformed: bool = False, workspace: Path | None = None
+) -> DiscoveredRule:
+    """Compute ``review_reasons`` + ``needs_review`` centrally.
 
     One place, all discovery paths — so the semantics can't drift between
     built-in extractors and profile extraction. Also re-run by the catalog
     after declaration-based platform inheritance.
+
+    ``workspace`` is a pass-through for the one reason of the five that depends
+    on an ATT&CK snapshot (``invalid_mitre``). The other four — ``malformed``,
+    ``external_logic``, ``no_platform`` and ``no_mitre`` — are properties of the
+    file in front of it; ``no_mitre`` in particular is just a test for
+    emptiness, which is why it needs no snapshot either.
     """
     reasons: list[str] = []
     if malformed:
@@ -767,22 +857,21 @@ def finalize_review(rule: DiscoveredRule, malformed: bool = False) -> Discovered
         reasons.append(REVIEW_EXTERNAL_LOGIC)
     if not rule.platform:
         reasons.append(REVIEW_NO_PLATFORM)
-    if not rule.mitre:
-        reasons.append(REVIEW_NO_MITRE)
-    elif _has_invalid_mitre(rule.mitre):
-        reasons.append(REVIEW_INVALID_MITRE)
+    reasons += mitre_review_reasons(rule.mitre, workspace)
     rule.review_reasons = tuple(reasons)
     rule.needs_review = bool(reasons)
     return rule
 
 
 def walk_outcomes(
-    rule_root: Path, profiles: Sequence[Profile] = ()
+    rule_root: Path,
+    profiles: Sequence[Profile] = (),
+    workspace: Path | None = None,
 ) -> Iterator[FileOutcome]:
     """Classify every file under ``rule_root``; yield one ``FileOutcome`` each.
 
     Read-only. User ``profiles`` are checked **before** built-in recognizers
-    (ISA 2026-07-20: an org can override how its own format is read). A profile
+    (an org can override how its own format is read). A profile
     may claim multiple documents per file (multi-doc contract; v1 containers
     yield one). Unreadable files are skipped entirely.
     """
@@ -794,7 +883,7 @@ def walk_outcomes(
             continue
         # Never descend into VCS internals: .git holds packed refs, hook
         # samples, and object blobs — never rules, and parsing them is pure
-        # noise (E2E 2026-07-27: .git objects surfaced as "unrecognized").
+        # noise (.git objects surfaced as "unrecognized").
         if ".git" in path.parts:
             continue
         try:
@@ -809,13 +898,19 @@ def walk_outcomes(
         # 1. User profiles first.
         claim = _profile_claim(profiles, path.name, text)
         if claim is not None:
-            profile, docs = claim
+            profile, docs, per_record = claim
             rules = []
             for doc in docs:
                 rule = _extract_via_profile(profile, doc)
                 rule.path = path
-                rule.source_hash = source_hash
-                rules.append(finalize_review(rule))
+                # In a multi-record container (the profile declares `records`,
+                # or the file is a top-level array) every record shares the
+                # file's bytes, so each is hashed on its own content. Decided by
+                # the file's SHAPE, never by how many records it holds today —
+                # a count-based choice re-keys every record when one is added.
+                # Single-document formats keep the file hash (no churn).
+                rule.source_hash = _record_hash(doc) if per_record else source_hash
+                rules.append(finalize_review(rule, workspace=workspace))
             yield FileOutcome(
                 path=path, outcome=SUPPORTED, format=profile.name, rules=tuple(rules)
             )
@@ -824,12 +919,15 @@ def walk_outcomes(
         # 2. Built-in recognizers.
         rec = recognize(path.name, text)
         if rec.support == NOT_A_RULE or rec.format is None:
-            parsed = _load_yaml(text) if _looks_like_yaml(path.name, text) else None
-            if isinstance(parsed, dict) and parsed:
+            shape = _unclaimed_shape(path.name, text)
+            if shape is not None:
+                top, records_path, record_keys = shape
                 yield FileOutcome(
                     path=path,
                     outcome=UNCLAIMED,
-                    top_level_keys=tuple(sorted(str(k) for k in parsed)),
+                    top_level_keys=top,
+                    records_path=records_path,
+                    record_keys=record_keys,
                 )
             else:
                 yield FileOutcome(path=path, outcome=NOT_A_RULE)
@@ -867,7 +965,7 @@ def walk_outcomes(
         for rule in extracted:
             rule.path = path
             rule.source_hash = source_hash
-            finalize_review(rule, malformed=malformed)
+            finalize_review(rule, malformed=malformed, workspace=workspace)
         # A supported multi-rule file with no rules (empty envelope) still
         # reports as its format, not a silent drop.
         outcome = extracted[0].support if extracted else rec.support
@@ -877,7 +975,9 @@ def walk_outcomes(
 
 
 def discover_rules(
-    rule_root: Path, profiles: Sequence[Profile] = ()
+    rule_root: Path,
+    profiles: Sequence[Profile] = (),
+    workspace: Path | None = None,
 ) -> Iterator[DiscoveredRule]:
     """Yield a ``DiscoveredRule`` for every *rule* file under ``rule_root``.
 
@@ -887,7 +987,7 @@ def discover_rules(
     logic is external) so the catalog reports honest coverage instead of
     silently dropping them.
     """
-    for outcome in walk_outcomes(rule_root, profiles):
+    for outcome in walk_outcomes(rule_root, profiles, workspace):
         yield from outcome.rules
 
 
@@ -903,9 +1003,12 @@ __all__ = [
     "REVIEW_EXTERNAL_LOGIC",
     "REVIEW_NO_PLATFORM",
     "REVIEW_NO_MITRE",
+    "REVIEW_GATES_CONDITIONAL",
+    "REVIEW_GATES_TIME_BOX",
     "STRUCTURAL_REVIEW_REASONS",
     "discover_rules",
     "finalize_review",
+    "mitre_review_reasons",
     "recognize",
     "shape_literals",
     "sniff_format",
